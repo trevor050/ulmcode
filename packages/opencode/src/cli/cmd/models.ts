@@ -35,12 +35,14 @@ export const ModelsCommand = cmd({
       directory: process.cwd(),
       async fn() {
         const providers = await Provider.list()
+        const displayProviderID = (providerID: string) =>
+          providerID.startsWith("opencode") ? providerID.replace(/^opencode/, "ulmcode") : providerID
 
         function printModels(providerID: string, verbose?: boolean) {
           const provider = providers[providerID]
           const sortedModels = Object.entries(provider.models).sort(([a], [b]) => a.localeCompare(b))
           for (const [modelID, model] of sortedModels) {
-            process.stdout.write(`${providerID}/${modelID}`)
+            process.stdout.write(`${displayProviderID(providerID)}/${modelID}`)
             process.stdout.write(EOL)
             if (verbose) {
               process.stdout.write(JSON.stringify(model, null, 2))
