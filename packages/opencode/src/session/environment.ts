@@ -11,6 +11,8 @@ export namespace CyberEnvironment {
   export const REPORT_WRITER_SKILL_MARKER = "[REPORT_WRITER_SKILL_REQUIRED_V1]"
 
   const CYBER_AGENTS = new Set([
+    "action",
+    "build",
     "pentest",
     "AutoPentest",
     "pentest_flow",
