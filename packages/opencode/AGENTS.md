@@ -1,6 +1,6 @@
 # ULMCode Agent Notes (packages/opencode)
 
-Last updated: 2026-02-07 (quality-gate rollout)
+Last updated: 2026-02-07 (plan-flow fallback + quality-gate rollout)
 
 ## Project Snapshot
 - ULMCode is an OpenCode fork focused on internal, authorized penetration testing workflows.
@@ -99,6 +99,10 @@ Last updated: 2026-02-07 (quality-gate rollout)
   - `[CYBER_SKILL_REMINDER_V1]`
   - `[CYBER_REPORT_WRITER_REQUIRED_V1]`
   - `[REPORT_WRITER_SKILL_REQUIRED_V1]`
+- Plan-mode resilience note:
+  - If a plan-mode cyber assistant prints literal `plan_exit` text instead of calling the `plan_exit` tool, runtime now catches that and triggers the same approval question UI automatically.
+  - On approval, runtime enqueues a synthetic user message and maps `pentest_flow`/`pentest_auto` back to `pentest` execution mode.
+  - On rejection, runtime keeps the session in `plan` and requests plan refinement instead of dead-ending.
 
 ## Path + Shell Gotcha
 - Host paths include spaces (`Mobile Documents/...`).
