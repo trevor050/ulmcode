@@ -18,6 +18,7 @@ test("returns default native agents when no config", async () => {
     fn: async () => {
       const agents = await Agent.list()
       const names = agents.map((a) => a.name)
+      expect(names).toContain("action")
       expect(names).toContain("build")
       expect(names).toContain("plan")
       expect(names).toContain("pentest")
@@ -587,13 +588,13 @@ description: Permission skill.
   }
 })
 
-test("defaultAgent returns build when no default_agent config", async () => {
+test("defaultAgent returns AutoPentest when no default_agent config", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
       const agent = await Agent.defaultAgent()
-      expect(agent).toBe("build")
+      expect(agent).toBe("AutoPentest")
     },
   })
 })
@@ -675,11 +676,11 @@ test("defaultAgent throws when default_agent points to non-existent agent", asyn
   })
 })
 
-test("defaultAgent returns plan when build is disabled and default_agent not set", async () => {
+test("defaultAgent falls back to action when AutoPentest is disabled and default_agent not set", async () => {
   await using tmp = await tmpdir({
     config: {
       agent: {
-        build: { disable: true },
+        AutoPentest: { disable: true },
       },
     },
   })
@@ -687,8 +688,7 @@ test("defaultAgent returns plan when build is disabled and default_agent not set
     directory: tmp.path,
     fn: async () => {
       const agent = await Agent.defaultAgent()
-      // build is disabled, so it should return plan (next primary agent)
-      expect(agent).toBe("plan")
+      expect(agent).toBe("action")
     },
   })
 })
@@ -698,6 +698,7 @@ test("defaultAgent throws when all primary agents are disabled", async () => {
     config: {
       agent: {
         build: { disable: true },
+        action: { disable: true },
         plan: { disable: true },
         pentest: { disable: true },
         AutoPentest: { disable: true },
@@ -709,7 +710,7 @@ test("defaultAgent throws when all primary agents are disabled", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      // build, plan, pentest, AutoPentest, pentest_flow, and pentest_auto are disabled
+      // action, build, plan, pentest, AutoPentest, pentest_flow, and pentest_auto are disabled
       await expect(Agent.defaultAgent()).rejects.toThrow("no primary visible agent found")
     },
   })

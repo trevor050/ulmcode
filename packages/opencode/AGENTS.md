@@ -1,6 +1,6 @@
 # ULMCode Agent Notes (packages/opencode)
 
-Last updated: 2026-02-07 (plan-flow fallback + quality-gate rollout)
+Last updated: 2026-02-07 (AutoPentest default + action mode + conversational plan flow)
 
 ## Project Snapshot
 - ULMCode is an OpenCode fork focused on internal, authorized penetration testing workflows.
@@ -16,7 +16,9 @@ Last updated: 2026-02-07 (plan-flow fallback + quality-gate rollout)
 
 ## Cyber Harness Architecture
 - Core cyber agent definitions live in `/Users/trevorrosato/Library/Mobile Documents/com~apple~CloudDocs/slatt/codeprojects/ULMcode/opencode/packages/opencode/src/agent/agent.ts`.
-- Primary orchestration agents: `pentest` and guided `AutoPentest`.
+- Primary orchestration agents: `AutoPentest` (default guided mode) and `pentest`.
+- One-off execution agent: `action` (focused targeted tasks/questions).
+- `build` remains as a hidden compatibility alias for `action`.
 - Specialized subagents: `recon`, `assess`, `report`, `network_mapper`, `host_auditor`, `vuln_researcher`, `evidence_scribe`, `report_writer`.
 - Compatibility alias: `analyst` maps to assess behavior.
 
@@ -104,6 +106,12 @@ Last updated: 2026-02-07 (plan-flow fallback + quality-gate rollout)
   - This fallback now applies in generic plan sessions too, not only cyber-tagged sessions.
   - On approval, runtime enqueues a synthetic user message and maps `AutoPentest`/`pentest_flow`/`pentest_auto` back to `pentest` execution mode.
   - On rejection, runtime keeps the session in `plan` and requests plan refinement instead of dead-ending.
+- Conversational plan flow:
+  - AutoPentest intake is now conversational (direct chat questions) rather than question-tool-gated.
+  - Model should keep clarifying until safe/complete, then call `plan_exit` only after explicit user confirmation to proceed.
+  - plan_exit approval UI now uses:
+    - `Continue with plan`
+    - `Make changes` (custom input allowed for amendments)
 
 ## Path + Shell Gotcha
 - Host paths include spaces (`Mobile Documents/...`).

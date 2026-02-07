@@ -10,6 +10,7 @@ import { ProviderTransform } from "../provider/transform"
 
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_ASSESS from "./prompt/assess.txt"
+import PROMPT_ACTION from "./prompt/action.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EVIDENCE_SCRIBE from "./prompt/evidence-scribe.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
@@ -86,18 +87,46 @@ export namespace Agent {
     const user = PermissionNext.fromConfig(cfg.permission ?? {})
 
     const result: Record<string, Info> = {
-      build: {
-        name: "build",
-        description: "The default agent. Executes tools based on configured permissions.",
+      action: {
+        name: "action",
+        description: "Focused one-off execution mode for targeted tasks and questions.",
+        prompt: PROMPT_ACTION,
         options: {},
         permission: PermissionNext.merge(
           defaults,
           PermissionNext.fromConfig({
             question: "allow",
             plan_enter: "allow",
+            task: "allow",
+            finding: "allow",
+            webfetch: "allow",
+            websearch: "allow",
           }),
           user,
         ),
+        color: "info",
+        mode: "primary",
+        native: true,
+      },
+      build: {
+        name: "build",
+        description: "Deprecated alias for action.",
+        prompt: PROMPT_ACTION,
+        hidden: true,
+        options: {},
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            question: "allow",
+            plan_enter: "allow",
+            task: "allow",
+            finding: "allow",
+            webfetch: "allow",
+            websearch: "allow",
+          }),
+          user,
+        ),
+        color: "info",
         mode: "primary",
         native: true,
       },
@@ -163,6 +192,7 @@ export namespace Agent {
           user,
         ),
         options: {},
+        color: "error",
         mode: "primary",
         native: true,
       },
@@ -577,7 +607,7 @@ export namespace Agent {
     return pipe(
       await state(),
       values(),
-      sortBy([(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "build"), "desc"]),
+      sortBy([(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "AutoPentest"), "desc"]),
     )
   }
 
@@ -591,6 +621,11 @@ export namespace Agent {
       if (agent.mode === "subagent") throw new Error(`default agent "${cfg.default_agent}" is a subagent`)
       if (agent.hidden === true) throw new Error(`default agent "${cfg.default_agent}" is hidden`)
       return agent.name
+    }
+
+    const preferredDefault = agents.AutoPentest
+    if (preferredDefault && preferredDefault.mode !== "subagent" && preferredDefault.hidden !== true) {
+      return preferredDefault.name
     }
 
     const primaryVisible = Object.values(agents).find((a) => a.mode !== "subagent" && a.hidden !== true)
