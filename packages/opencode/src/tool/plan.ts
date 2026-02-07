@@ -41,13 +41,18 @@ async function getPrePlanAgent(sessionID: string) {
   return "build"
 }
 
+function executionAgent(agent: string) {
+  if (agent === "pentest_auto") return "pentest"
+  return agent
+}
+
 export const PlanExitTool = Tool.define("plan_exit", {
   description: EXIT_DESCRIPTION,
   parameters: z.object({}),
   async execute(_params, ctx) {
     const session = await Session.get(ctx.sessionID)
     const plan = path.relative(Instance.worktree, Session.plan(session))
-    const previousAgent = await getPrePlanAgent(ctx.sessionID)
+    const previousAgent = executionAgent(await getPrePlanAgent(ctx.sessionID))
     const answers = await Question.ask({
       sessionID: ctx.sessionID,
       questions: [

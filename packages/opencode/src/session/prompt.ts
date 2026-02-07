@@ -305,6 +305,10 @@ export namespace SessionPrompt {
       }
 
       if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
+      if (shouldAutoKickoffPentestPlan({ messages: msgs, lastUser })) {
+        await queuePentestAutoPlanKickoff({ session, lastUser })
+        continue
+      }
       if (
         lastAssistant?.finish &&
         !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
@@ -1427,6 +1431,8 @@ Goal: Briefly explore the network/asset surface before proposing work.
 ### Phase 2: Clarify Critical Unknowns
 Goal: Ask only what is necessary to execute safely and correctly.
 Use question tool for missing authorization/scope constraints, high-impact assumptions, or unclear objectives.
+If confusion remains, continue asking focused follow-up questions until confidence is high enough to execute.
+Do not ask low-value or generic questions.
 
 ### Phase 3: Build Delegation Plan
 Goal: Write an actionable plan that starts execution cleanly.
@@ -2038,6 +2044,8 @@ Your turn should end by either asking a targeted question or calling plan_exit.
           "3) Allowed test depth (safe recon only, standard validation, or controlled exploitation).",
           "4) Primary objectives and critical assets.",
           "5) Success criteria and reporting priorities.",
+          "If any high-impact ambiguity remains, ask focused follow-up questions until you are confident.",
+          "Do not ask benign or unnecessary questions that do not change decisions.",
           "After collecting answers, summarize assumptions and continue with planning.",
           "</system-reminder>",
         ].join("\n"),
@@ -2154,6 +2162,42 @@ Your turn should end by either asking a targeted question or calling plan_exit.
         return part.state.status === "completed"
       }),
     )
+  }
+
+  function shouldAutoKickoffPentestPlan(input: { messages: MessageV2.WithParts[]; lastUser: MessageV2.User }) {
+    if (input.lastUser.agent !== "pentest_auto") return false
+    const hasAssistant = input.messages.some((message) => message.info.role === "assistant")
+    if (hasAssistant) return false
+    const hasPlanUser = input.messages.some(
+      (message) => message.info.role === "user" && message.info.agent === "plan",
+    )
+    if (hasPlanUser) return false
+    return true
+  }
+
+  async function queuePentestAutoPlanKickoff(input: { session: Session.Info; lastUser: MessageV2.User }) {
+    const user = await Session.updateMessage({
+      id: Identifier.ascending("message"),
+      role: "user",
+      sessionID: input.session.id,
+      time: { created: Date.now() },
+      agent: "plan",
+      model: input.lastUser.model,
+    })
+    await Session.updatePart({
+      id: Identifier.ascending("part"),
+      messageID: user.id,
+      sessionID: user.sessionID,
+      type: "text",
+      synthetic: true,
+      text: [
+        "Auto mode kickoff: enter plan mode for this pentest.",
+        "First, do a brief safe network exploration snapshot.",
+        "Then ask only critical intake questions and focused follow-up questions until confidence is high.",
+        "Avoid benign/unnecessary questions.",
+        "Produce a full actionable plan and call plan_exit for user approval before active pentest execution.",
+      ].join("\n"),
+    })
   }
 
   async function queueReportWriterSubtask(input: {

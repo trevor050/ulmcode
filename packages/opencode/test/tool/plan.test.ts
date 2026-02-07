@@ -101,4 +101,45 @@ describe("tool.plan", () => {
       },
     })
   })
+
+  test("plan_exit maps pentest_auto execution to pentest", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+
+        await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: session.id,
+          agent: "pentest_auto",
+          model: { providerID: "openai", modelID: "gpt-5" },
+          time: { created: Date.now() - 10 },
+        })
+
+        await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: session.id,
+          agent: "plan",
+          model: { providerID: "openai", modelID: "gpt-5" },
+          time: { created: Date.now() },
+        })
+
+        askSpy.mockResolvedValueOnce([["Yes"]])
+
+        const tool = await PlanExitTool.init()
+        await tool.execute({}, { ...ctx, sessionID: session.id })
+
+        const request = askSpy.mock.calls[0]?.[0]
+        expect(request?.questions?.[0]?.question).toContain("switch to the pentest agent")
+        expect(
+          (
+            await Session.messages({ sessionID: session.id })
+          ).some((msg) => msg.info.role === "user" && msg.info.agent === "pentest"),
+        ).toBe(true)
+      },
+    })
+  })
 })

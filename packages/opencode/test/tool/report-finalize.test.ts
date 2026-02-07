@@ -60,7 +60,7 @@ describe("tool.report_finalize", () => {
           { ...baseCtx, sessionID: session.id },
         )
 
-        expect(result.metadata.reportPath || result.metadata.report_md_path || result.metadata.reportPath).toBeDefined()
+        expect(result.metadata.reportPath).toBeDefined()
         expect(await Bun.file(path.join(env.root, "reports", "report.md")).exists()).toBe(true)
         expect(await Bun.file(path.join(env.root, "reports", "results.md")).exists()).toBe(true)
         expect(await Bun.file(path.join(env.root, "reports", "remediation-plan.md")).exists()).toBe(true)

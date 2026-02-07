@@ -426,6 +426,7 @@ export namespace ReportBundle {
     for (const msg of input.messages) {
       for (const part of msg.parts) {
         if (part.type !== "tool" || part.tool !== "task" || part.state.status !== "completed") continue
+        if (!("time" in part.state) || !("metadata" in part.state)) continue
         const sessionID = part.state.metadata?.sessionId
         const agent = part.state.input?.subagent_type
         if (typeof sessionID !== "string" || typeof agent !== "string") continue
@@ -490,6 +491,7 @@ export namespace ReportBundle {
     for (const msg of input.messages) {
       for (const part of msg.parts) {
         if (part.type !== "tool" || part.tool !== "task" || part.state.status !== "completed") continue
+        if (!("time" in part.state) || !("metadata" in part.state)) continue
         const agent = part.state.input?.subagent_type
         if (typeof agent !== "string") continue
         result.push({
@@ -524,6 +526,7 @@ export namespace ReportBundle {
     for (const msg of input.messages) {
       for (const part of msg.parts) {
         if (part.type !== "tool" || part.tool !== "task") continue
+        if (!("time" in part.state) || !("metadata" in part.state)) continue
         const agent = part.state.input?.subagent_type
         if (typeof agent !== "string") continue
         if (part.state.time?.start) {

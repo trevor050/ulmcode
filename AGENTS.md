@@ -120,3 +120,5 @@ const table = sqliteTable("session", {
   - pre-delegation planning reminder marker: `[CYBER_PLAN_KICKOFF_REQUIRED_V1]`
 - Plan mode now has a cyber-specific reminder workflow (quick recon snapshot -> critical clarifications -> delegation plan -> `plan_exit`) when the session has a cyber environment.
 - `plan_exit` no longer hardcodes return to `build`; it now routes back to the pre-plan primary agent (important for `pentest`/`pentest_auto` flows).
+- `pentest_auto` now auto-kicks into plan mode on first turn (synthetic plan kickoff message), requiring plan approval (`plan_exit`) before active execution; post-approval execution target is normalized to `pentest`.
+- Intake and cyber plan prompts now explicitly require targeted follow-up questions until confidence is high, while forbidding low-value/benign questioning.
