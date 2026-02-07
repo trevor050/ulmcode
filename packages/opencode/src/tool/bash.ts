@@ -13,6 +13,7 @@ import { Filesystem } from "@/util/filesystem"
 import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag.ts"
 import { Shell } from "@/shell/shell"
+import { BashRisk } from "@/tool/bash-risk"
 
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncation"
@@ -155,6 +156,20 @@ export const BashTool = Tool.define("bash", async () => {
       }
 
       if (patterns.size > 0) {
+        const risk = BashRisk.classify(params.command)
+        if (risk.level === "sensitive") {
+          const approvalPatterns = Array.from(patterns)
+          await ctx.ask({
+            permission: "bash_sensitive",
+            patterns: approvalPatterns,
+            always: Array.from(always.size > 0 ? always : new Set(approvalPatterns)),
+            metadata: {
+              description: params.description,
+              reason: risk.reason,
+              matched: risk.matched,
+            },
+          })
+        }
         await ctx.ask({
           permission: "bash",
           patterns: Array.from(patterns),

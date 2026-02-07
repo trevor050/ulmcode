@@ -307,6 +307,7 @@ export namespace SessionPrompt {
           providerID: lastUser.model.providerID,
           history: msgs,
         })
+      if (step === 1) await ensureFindingLog(session, lastUser)
 
       const model = await Provider.getModel(lastUser.model.providerID, lastUser.model.modelID)
       const task = tasks.pop()
@@ -1835,5 +1836,33 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         },
         { touch: false },
       )
+  }
+
+  const FINDING_LOG_AGENTS = new Set(["pentest", "recon", "analyst"])
+
+  async function ensureFindingLog(session: Session.Info, user: MessageV2.User) {
+    if (!FINDING_LOG_AGENTS.has(user.agent)) return
+    const file = path.join(session.directory, "finding.md")
+    const now = new Date().toISOString()
+    const header = [
+      "# Engagement Findings",
+      "",
+      `- Session: ${session.id}`,
+      `- Agent: ${user.agent}`,
+      `- Started: ${now}`,
+      "",
+      "## Findings",
+      "",
+      "_Append each validated finding below with timestamp, asset, severity, confidence, evidence, impact, and remediation._",
+      "",
+    ].join("\n")
+    try {
+      await fs.access(file)
+      return
+    } catch {}
+    await fs.writeFile(file, header, { flag: "wx" }).catch((error) => {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") return
+      throw error
+    })
   }
 }
