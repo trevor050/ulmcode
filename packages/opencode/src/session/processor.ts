@@ -30,12 +30,40 @@ export namespace SessionProcessor {
       }
       if (sawPlan) return agent
     }
-    return "build"
+    return "pentest"
   }
 
   function executionAgent(agent: string) {
     if (agent === "pentest_auto" || agent === "pentest_flow" || agent === "AutoPentest") return "pentest"
     return agent
+  }
+
+  function executionKickoff(input: { planPath: string; agent: string }) {
+    if (input.agent !== "pentest") {
+      return `The plan at ${input.planPath} has been approved. You are now back in ${input.agent} mode. Execute the plan.`
+    }
+    return [
+      `The plan at ${input.planPath} has been approved. You are now in pentest mode.`,
+      "Create or update your todo list now with concrete execution tasks and priorities.",
+      "Begin executing the approved plan immediately and capture evidence as you go.",
+      "Delegate specialized work early using the task tool with subagents (recon, assess, report, network_mapper, host_auditor, vuln_researcher, evidence_scribe).",
+    ].join("\n")
+  }
+
+  async function resolveExecutionAgent(sessionID: string) {
+    const session = await Session.get(sessionID)
+    const preferred = executionAgent(await getPrePlanAgent(sessionID))
+    if (session.environment?.type === "cyber" && preferred === "build") {
+      const pentest = await Agent.get("pentest")
+      if (pentest && pentest.mode !== "subagent") return "pentest"
+    }
+    const preferredAgent = await Agent.get(preferred)
+    if (preferredAgent && preferredAgent.mode !== "subagent") return preferred
+
+    const pentest = await Agent.get("pentest")
+    if (pentest && pentest.mode !== "subagent") return "pentest"
+
+    return Agent.defaultAgent()
   }
 
   export async function fallbackPlanExitIfNeeded(input: {
@@ -59,7 +87,7 @@ export namespace SessionProcessor {
       .toLowerCase()
     if (!/\bplan_exit\b/.test(text)) return false
 
-    const previousAgent = executionAgent(await getPrePlanAgent(input.sessionID))
+    const previousAgent = await resolveExecutionAgent(input.sessionID)
     const plan = Session.plan(session)
     const planPath = plan.startsWith(Instance.worktree)
       ? plan.slice(Instance.worktree.length + (plan[Instance.worktree.length] === "/" ? 1 : 0))
@@ -104,7 +132,7 @@ export namespace SessionProcessor {
       type: "text",
       synthetic: true,
       text: approved
-        ? `The plan at ${planPath} has been approved. You are now back in ${previousAgent} mode. Execute the plan.`
+        ? executionKickoff({ planPath, agent: previousAgent })
         : "The plan was not approved yet. Stay in plan mode and continue refining the plan.",
     })
 

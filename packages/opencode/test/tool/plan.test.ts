@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test"
+import path from "path"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { Session } from "../../src/session"
@@ -52,8 +53,6 @@ describe("tool.plan", () => {
           time: { created: Date.now() },
         })
 
-        askSpy.mockResolvedValueOnce([["Continue with plan"]])
-
         const tool = await PlanExitTool.init()
         await tool.execute({}, { ...ctx, sessionID: session.id })
 
@@ -66,10 +65,15 @@ describe("tool.plan", () => {
               msg.info.role === "user" &&
               msg.info.agent === "pentest" &&
               msg.parts.some(
-                (part) => part.type === "text" && part.synthetic && part.text.includes("back in pentest mode"),
+                (part) =>
+                  part.type === "text" &&
+                  part.synthetic &&
+                  part.text.includes("You are now in pentest mode") &&
+                  part.text.includes("Create or update your todo list now"),
               ),
           ),
         ).toBe(true)
+        expect(askSpy).toHaveBeenCalledTimes(0)
       },
     })
   })
@@ -127,18 +131,29 @@ describe("tool.plan", () => {
           time: { created: Date.now() },
         })
 
-        askSpy.mockResolvedValueOnce([["Continue with plan"]])
-
         const tool = await PlanExitTool.init()
         await tool.execute({}, { ...ctx, sessionID: session.id })
-
-        const request = askSpy.mock.calls[0]?.[0]
-        expect(request?.questions?.[0]?.question).toContain("Continue with this plan")
         expect(
           (
             await Session.messages({ sessionID: session.id })
           ).some((msg) => msg.info.role === "user" && msg.info.agent === "pentest"),
         ).toBe(true)
+        expect(
+          (
+            await Session.messages({ sessionID: session.id })
+          ).some(
+            (msg) =>
+              msg.info.role === "user" &&
+              msg.info.agent === "pentest" &&
+              msg.parts.some(
+                (part) =>
+                  part.type === "text" &&
+                  part.text.includes("Create or update your todo list now") &&
+                  part.text.includes("Delegate specialized work early using the task tool"),
+              ),
+          ),
+        ).toBe(true)
+        expect(askSpy).toHaveBeenCalledTimes(0)
       },
     })
   })
@@ -168,8 +183,6 @@ describe("tool.plan", () => {
           time: { created: Date.now() },
         })
 
-        askSpy.mockResolvedValueOnce([["Continue with plan"]])
-
         const tool = await PlanExitTool.init()
         await tool.execute({}, { ...ctx, sessionID: session.id })
 
@@ -178,6 +191,7 @@ describe("tool.plan", () => {
             await Session.messages({ sessionID: session.id })
           ).some((msg) => msg.info.role === "user" && msg.info.agent === "pentest"),
         ).toBe(true)
+        expect(askSpy).toHaveBeenCalledTimes(0)
       },
     })
   })
@@ -207,7 +221,55 @@ describe("tool.plan", () => {
           time: { created: Date.now() },
         })
 
-        askSpy.mockResolvedValueOnce([["Continue with plan"]])
+        const tool = await PlanExitTool.init()
+        await tool.execute({}, { ...ctx, sessionID: session.id })
+
+        expect(
+          (
+            await Session.messages({ sessionID: session.id })
+          ).some((msg) => msg.info.role === "user" && msg.info.agent === "pentest"),
+        ).toBe(true)
+        expect(askSpy).toHaveBeenCalledTimes(0)
+      },
+    })
+  })
+
+  test("plan_exit falls back to pentest when pre-plan build agent is not executable", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Bun.write(
+      path.join(tmp.path, "opencode.json"),
+      JSON.stringify({
+        default_agent: "pentest",
+        agent: {
+          build: {
+            mode: "subagent",
+          },
+        },
+      }),
+    )
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+
+        await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: session.id,
+          agent: "build",
+          model: { providerID: "openai", modelID: "gpt-5" },
+          time: { created: Date.now() - 10 },
+        })
+
+        await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: session.id,
+          agent: "plan",
+          model: { providerID: "openai", modelID: "gpt-5" },
+          time: { created: Date.now() },
+        })
 
         const tool = await PlanExitTool.init()
         await tool.execute({}, { ...ctx, sessionID: session.id })
@@ -217,6 +279,50 @@ describe("tool.plan", () => {
             await Session.messages({ sessionID: session.id })
           ).some((msg) => msg.info.role === "user" && msg.info.agent === "pentest"),
         ).toBe(true)
+      },
+    })
+  })
+
+  test("plan_exit routes build to pentest for cyber sessions", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        await Session.update(session.id, (draft) => {
+          draft.environment = {
+            type: "cyber",
+            root: `${tmp.path}/engagements/fixture`,
+            engagementID: "fixture",
+            created: Date.now(),
+            rootSessionID: session.id,
+            scaffoldVersion: "v1",
+          }
+        })
+
+        await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: session.id,
+          agent: "build",
+          model: { providerID: "openai", modelID: "gpt-5" },
+          time: { created: Date.now() - 10 },
+        })
+
+        await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: session.id,
+          agent: "plan",
+          model: { providerID: "openai", modelID: "gpt-5" },
+          time: { created: Date.now() },
+        })
+
+        const tool = await PlanExitTool.init()
+        await tool.execute({}, { ...ctx, sessionID: session.id })
+
+        const latestUser = (await Session.messages({ sessionID: session.id })).findLast((msg) => msg.info.role === "user")
+        expect(latestUser?.info.agent).toBe("pentest")
       },
     })
   })

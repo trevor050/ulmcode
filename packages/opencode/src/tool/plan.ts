@@ -2,6 +2,7 @@ import z from "zod"
 import path from "path"
 import { Tool } from "./tool"
 import { Question } from "../question"
+import { Agent } from "../agent/agent"
 import { Session } from "../session"
 import { MessageV2 } from "../session/message-v2"
 import { Identifier } from "../id/id"
@@ -23,7 +24,7 @@ async function getLastUserAgent(sessionID: string) {
     if (!item.info.agent) continue
     return item.info.agent
   }
-  return "build"
+  return "pentest"
 }
 
 async function getPrePlanAgent(sessionID: string) {
@@ -38,12 +39,40 @@ async function getPrePlanAgent(sessionID: string) {
     }
     if (sawPlan) return agent
   }
-  return "build"
+  return "pentest"
 }
 
 function executionAgent(agent: string) {
   if (agent === "pentest_auto" || agent === "pentest_flow" || agent === "AutoPentest") return "pentest"
   return agent
+}
+
+function executionKickoff(input: { planPath: string; agent: string }) {
+  if (input.agent !== "pentest") {
+    return `The plan at ${input.planPath} has been approved. You are now back in ${input.agent} mode. Execute the plan.`
+  }
+  return [
+    `The plan at ${input.planPath} has been approved. You are now in pentest mode.`,
+    "Create or update your todo list now with concrete execution tasks and priorities.",
+    "Begin executing the approved plan immediately and capture evidence as you go.",
+    "Delegate specialized work early using the task tool with subagents (recon, assess, report, network_mapper, host_auditor, vuln_researcher, evidence_scribe).",
+  ].join("\n")
+}
+
+async function resolveExecutionAgent(sessionID: string) {
+  const session = await Session.get(sessionID)
+  const preferred = executionAgent(await getPrePlanAgent(sessionID))
+  if (session.environment?.type === "cyber" && preferred === "build") {
+    const pentest = await Agent.get("pentest")
+    if (pentest && pentest.mode !== "subagent") return "pentest"
+  }
+  const preferredAgent = await Agent.get(preferred)
+  if (preferredAgent && preferredAgent.mode !== "subagent") return preferred
+
+  const pentest = await Agent.get("pentest")
+  if (pentest && pentest.mode !== "subagent") return "pentest"
+
+  return Agent.defaultAgent()
 }
 
 export const PlanExitTool = Tool.define("plan_exit", {
@@ -52,26 +81,7 @@ export const PlanExitTool = Tool.define("plan_exit", {
   async execute(_params, ctx) {
     const session = await Session.get(ctx.sessionID)
     const plan = path.relative(Instance.worktree, Session.plan(session))
-    const previousAgent = executionAgent(await getPrePlanAgent(ctx.sessionID))
-    const answers = await Question.ask({
-      sessionID: ctx.sessionID,
-      questions: [
-        {
-          question: `Plan at ${plan} is ready. Continue with this plan, or make changes first?`,
-          header: "Execution Agent",
-          custom: true,
-          options: [
-            { label: "Continue with plan", description: `Switch to ${previousAgent} and start implementing` },
-            { label: "Make changes", description: "Stay in plan mode and refine the plan before execution" },
-          ],
-        },
-      ],
-      tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
-    })
-
-    const answer = (answers[0]?.[0] ?? "").toLowerCase()
-    if (answer !== "continue with plan") throw new Question.RejectedError()
-
+    const previousAgent = await resolveExecutionAgent(ctx.sessionID)
     const model = await getLastModel(ctx.sessionID)
 
     const userMsg: MessageV2.User = {
@@ -90,13 +100,13 @@ export const PlanExitTool = Tool.define("plan_exit", {
       messageID: userMsg.id,
       sessionID: ctx.sessionID,
       type: "text",
-      text: `The plan at ${plan} has been approved. You are now back in ${previousAgent} mode. Execute the plan.`,
+      text: executionKickoff({ planPath: plan, agent: previousAgent }),
       synthetic: true,
     } satisfies MessageV2.TextPart)
 
     return {
       title: `Switching to ${previousAgent} agent`,
-      output: `User approved switching to ${previousAgent}. Continue execution immediately.`,
+      output: `Switched to ${previousAgent}. Continue execution immediately.`,
       metadata: {},
     }
   },

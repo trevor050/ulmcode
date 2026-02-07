@@ -122,3 +122,12 @@ const table = sqliteTable("session", {
 - `plan_exit` no longer hardcodes return to `build`; it now routes back to the pre-plan primary agent (important for `pentest`/`pentest_auto` flows).
 - `pentest_auto` now auto-kicks into plan mode on first turn (synthetic plan kickoff message), requiring plan approval (`plan_exit`) before active execution; post-approval execution target is normalized to `pentest`.
 - Intake and cyber plan prompts now explicitly require targeted follow-up questions until confidence is high, while forbidding low-value/benign questioning.
+- Plan-mode reminders now explicitly require using the `question` tool for clarification and follow-ups; plan approval itself is requested in normal chat text.
+- `plan_exit` no longer asks a tool-driven approval question; it is now a pure mode-switch tool that should be called only after explicit user chat approval.
+- Removed stale docs-site references to a built-in "Docs agent" from `packages/web/src/content/docs/agents.mdx` to match current runtime agent set.
+- Tool registration now always includes `question`, `plan_enter`, and `plan_exit` regardless of `OPENCODE_CLIENT`, preventing plan sessions from failing to call `plan_exit` in nonstandard client contexts.
+- Removed workspace custom docs delegate agent at `.opencode/agent/docs.md` per current workflow preference.
+- Plan-exit handoff now validates the computed execution agent before switching. If prior agent resolves to an invalid/non-runnable target (for example `build` removed/overridden), handoff falls back to `pentest`, then to configured default primary agent.
+- Cyber plan-exit handoff now explicitly remaps `build` -> `pentest` to avoid transient `Agent not found: build` toasts in pentest workflows.
+- Plan exit now injects a pentest execution kickoff when switching to `pentest`: immediately create/update todo list, start executing plan, and delegate specialized tasks via `task` subagents.
+- Default pre-plan fallback agent in plan handoff paths changed from `build` to `pentest` to avoid legacy-agent leakage in cyber workflows.

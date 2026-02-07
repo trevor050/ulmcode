@@ -1361,7 +1361,7 @@ Goal: Gain a comprehensive understanding of the user's request by reading throug
    - Quality over quantity - 3 agents maximum, but you should try to use the minimum number of agents necessary (usually just 1)
    - If using multiple agents: Provide each agent with a specific search focus or area to explore. Example: One agent searches for existing implementations, another explores related components, a third investigates testing patterns
 
-3. After exploring the code, ask direct clarifying questions in chat to resolve ambiguities up front.
+3. After exploring the code, use the question tool to resolve ambiguities up front.
 
 ### Phase 2: Design
 Goal: Design an implementation approach.
@@ -1394,7 +1394,7 @@ In the agent prompt:
 Goal: Review the plan(s) from Phase 2 and ensure alignment with the user's intentions.
 1. Read the critical files identified by agents to deepen your understanding
 2. Ensure that the plans align with the user's original request
-3. Ask direct follow-up questions to clarify any remaining ambiguity with the user
+3. Use question tool to clarify any remaining ambiguity with the user
 
 ### Phase 4: Final Plan
 Goal: Write your final plan to the plan file (the only file you can edit).
@@ -1407,7 +1407,7 @@ Goal: Write your final plan to the plan file (the only file you can edit).
 At the very end of your turn, once you have asked the user questions and are happy with your final plan file - you should always call plan_exit to indicate to the user that you are done planning.
 This is critical - your turn should only end with either asking the user a question or calling plan_exit. Do not stop unless it's for these 2 reasons.
 
-**Important:** Clarify requirements and approach through normal chat messages. Use plan_exit only when the user explicitly confirms they are ready to proceed.
+**Important:** Use question tool to clarify requirements/approach, and ask for plan approval in normal chat with a short prompt like "Does this plan sound good? If not, tell me what to change." Once the user confirms it is good, call plan_exit to begin execution.
 
 NOTE: At any point in time through this workflow you should feel free to ask the user questions or clarifications. Don't make large assumptions about user intent. The goal is to present a well researched plan to the user, and tie any loose ends before implementation begins.
 </system-reminder>`
@@ -1430,9 +1430,10 @@ Goal: Briefly explore the network/asset surface before proposing work.
 
 ### Phase 2: Clarify Critical Unknowns
 Goal: Ask only what is necessary to execute safely and correctly.
-Ask direct chat questions for missing authorization/scope constraints, high-impact assumptions, or unclear objectives.
+Use question tool for missing authorization/scope constraints, high-impact assumptions, or unclear objectives.
 If confusion remains, continue asking focused follow-up questions until confidence is high enough to execute.
 Do not ask low-value or generic questions.
+After the plan is ready, ask for approval in normal chat: "Does this plan sound good? If not, tell me what to change."
 When the user confirms readiness, use plan_exit to switch to execution mode.
 
 ### Phase 3: Build Delegation Plan
@@ -2038,7 +2039,7 @@ Your turn should end by either asking a targeted question or calling plan_exit.
           "<system-reminder>",
           CYBER_AUTO_INTAKE_MARKER,
           "AUTO INTAKE MODE IS ACTIVE.",
-          "Before scanning/delegation, ask concise clarifying questions directly in chat and collect only essential engagement details:",
+          "Before scanning/delegation, use question tool and collect only essential engagement details:",
           "1) Scope boundaries (CIDRs/hosts/apps) and explicit out-of-scope assets.",
           "2) Authorization and test window constraints.",
           "3) Allowed test depth (safe recon only, standard validation, or controlled exploitation).",
@@ -2046,7 +2047,9 @@ Your turn should end by either asking a targeted question or calling plan_exit.
           "5) Success criteria and reporting priorities.",
           "If any high-impact ambiguity remains, keep asking focused follow-up questions until you are confident.",
           "Do not ask benign or unnecessary questions that do not change decisions.",
-          "After collecting answers, summarize assumptions, build a detailed plan, and use plan_exit only after the user confirms they want to proceed.",
+          "After collecting answers, summarize assumptions and build a detailed plan.",
+          "Then ask in normal chat: 'Does this plan sound good? If not, tell me what to change.'",
+          "Use plan_exit only after the user confirms they want to proceed.",
           "</system-reminder>",
         ].join("\n"),
       })
@@ -2187,8 +2190,9 @@ Your turn should end by either asking a targeted question or calling plan_exit.
       text: [
         "Guided pentest kickoff: enter plan mode before execution.",
         "First, do a brief safe network exploration snapshot.",
-        "Then ask only critical intake questions directly in chat and continue focused follow-up questions until confidence is high.",
+        "Then use question tool for critical intake questions and continue focused follow-up questions until confidence is high.",
         "Avoid benign/unnecessary questions.",
+        "When the plan is ready, ask in normal chat: 'Does this plan sound good? If not, tell me what to change.'",
         "When the user confirms they are ready, call plan_exit to switch into execution mode.",
         "Produce a full actionable plan before active pentest execution.",
       ].join("\n"),

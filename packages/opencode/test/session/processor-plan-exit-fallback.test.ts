@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test"
+import path from "path"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { Session } from "../../src/session"
@@ -100,6 +101,14 @@ describe("session.processor plan_exit fallback", () => {
         const messages = await Session.messages({ sessionID: session.id })
         const latestUser = messages.findLast((msg) => msg.info.role === "user")
         expect(latestUser?.info.agent).toBe("pentest")
+        expect(
+          latestUser?.parts.some(
+            (part) =>
+              part.type === "text" &&
+              part.text.includes("Create or update your todo list now") &&
+              part.text.includes("Delegate specialized work early using the task tool"),
+          ),
+        ).toBe(true)
       },
     })
   })
@@ -250,6 +259,109 @@ describe("session.processor plan_exit fallback", () => {
         const messages = await Session.messages({ sessionID: session.id })
         const latestUser = messages.findLast((msg) => msg.info.role === "user")
         expect(latestUser?.info.agent).toBe("build")
+      },
+    })
+  })
+
+  test("falls back to pentest when build is no longer a runnable primary agent", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Bun.write(
+      path.join(tmp.path, "opencode.json"),
+      JSON.stringify({
+        default_agent: "pentest",
+        agent: {
+          build: {
+            mode: "subagent",
+          },
+        },
+      }),
+    )
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+
+        await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: session.id,
+          agent: "build",
+          model: { providerID: "openai", modelID: "gpt-5" },
+          time: { created: Date.now() - 10 },
+        })
+        await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: session.id,
+          agent: "plan",
+          model: { providerID: "openai", modelID: "gpt-5" },
+          time: { created: Date.now() },
+        })
+
+        const assistant = await seedPlanAssistant({ sessionID: session.id, text: "plan_exit" })
+        askSpy.mockResolvedValueOnce([["Continue with plan"]])
+
+        const handled = await SessionProcessor.fallbackPlanExitIfNeeded({
+          sessionID: session.id,
+          assistantMessage: assistant,
+          model: await Provider.defaultModel(),
+        })
+
+        expect(handled).toBe(true)
+        const messages = await Session.messages({ sessionID: session.id })
+        const latestUser = messages.findLast((msg) => msg.info.role === "user")
+        expect(latestUser?.info.agent).toBe("pentest")
+      },
+    })
+  })
+
+  test("routes to pentest instead of build for cyber sessions", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        await Session.update(session.id, (draft) => {
+          draft.environment = {
+            type: "cyber",
+            root: `${tmp.path}/engagements/fixture`,
+            engagementID: "fixture",
+            created: Date.now(),
+            rootSessionID: session.id,
+            scaffoldVersion: "v1",
+          }
+        })
+
+        await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: session.id,
+          agent: "build",
+          model: { providerID: "openai", modelID: "gpt-5" },
+          time: { created: Date.now() - 10 },
+        })
+        await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: session.id,
+          agent: "plan",
+          model: { providerID: "openai", modelID: "gpt-5" },
+          time: { created: Date.now() },
+        })
+
+        const assistant = await seedPlanAssistant({ sessionID: session.id, text: "plan_exit" })
+        askSpy.mockResolvedValueOnce([["Continue with plan"]])
+
+        const handled = await SessionProcessor.fallbackPlanExitIfNeeded({
+          sessionID: session.id,
+          assistantMessage: assistant,
+          model: await Provider.defaultModel(),
+        })
+
+        expect(handled).toBe(true)
+        const latestUser = (await Session.messages({ sessionID: session.id })).findLast((msg) => msg.info.role === "user")
+        expect(latestUser?.info.agent).toBe("pentest")
       },
     })
   })
