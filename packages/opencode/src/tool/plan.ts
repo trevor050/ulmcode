@@ -42,7 +42,7 @@ async function getPrePlanAgent(sessionID: string) {
 }
 
 function executionAgent(agent: string) {
-  if (agent === "pentest_auto") return "pentest"
+  if (agent === "pentest_auto" || agent === "pentest_flow") return "pentest"
   return agent
 }
 
@@ -96,7 +96,7 @@ export const PlanExitTool = Tool.define("plan_exit", {
 
     return {
       title: `Switching to ${previousAgent} agent`,
-      output: `User approved switching to ${previousAgent}. Wait for further instructions.`,
+      output: `User approved switching to ${previousAgent}. Continue execution immediately.`,
       metadata: {},
     }
   },

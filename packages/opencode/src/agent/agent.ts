@@ -145,11 +145,32 @@ export namespace Agent {
         mode: "primary",
         native: true,
       },
-      pentest_auto: {
-        name: "pentest_auto",
+      pentest_flow: {
+        name: "pentest_flow",
         description:
           "Primary cyber orchestrator with guided intake. Starts with essential pentest questions, then plans and delegates.",
         prompt: PROMPT_PENTEST_AUTO,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            question: "allow",
+            plan_enter: "allow",
+            task: "allow",
+            finding: "allow",
+            webfetch: "allow",
+            websearch: "allow",
+          }),
+          user,
+        ),
+        options: {},
+        mode: "primary",
+        native: true,
+      },
+      pentest_auto: {
+        name: "pentest_auto",
+        description: "Deprecated alias for pentest_flow.",
+        prompt: PROMPT_PENTEST_AUTO,
+        hidden: true,
         permission: PermissionNext.merge(
           defaults,
           PermissionNext.fromConfig({

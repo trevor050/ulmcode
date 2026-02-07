@@ -21,6 +21,7 @@ test("returns default native agents when no config", async () => {
       expect(names).toContain("build")
       expect(names).toContain("plan")
       expect(names).toContain("pentest")
+      expect(names).toContain("pentest_flow")
       expect(names).toContain("pentest_auto")
       expect(names).toContain("general")
       expect(names).toContain("explore")
@@ -698,6 +699,7 @@ test("defaultAgent throws when all primary agents are disabled", async () => {
         build: { disable: true },
         plan: { disable: true },
         pentest: { disable: true },
+        pentest_flow: { disable: true },
         pentest_auto: { disable: true },
       },
     },
@@ -705,7 +707,7 @@ test("defaultAgent throws when all primary agents are disabled", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      // build, plan, pentest, and pentest_auto are disabled, no primary-capable agents remain
+      // build, plan, pentest, pentest_flow, and pentest_auto are disabled, no primary-capable agents remain
       await expect(Agent.defaultAgent()).rejects.toThrow("no primary visible agent found")
     },
   })

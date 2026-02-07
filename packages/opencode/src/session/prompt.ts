@@ -1433,6 +1433,7 @@ Goal: Ask only what is necessary to execute safely and correctly.
 Use question tool for missing authorization/scope constraints, high-impact assumptions, or unclear objectives.
 If confusion remains, continue asking focused follow-up questions until confidence is high enough to execute.
 Do not ask low-value or generic questions.
+Do not ask plain-text confirmation questions. If a confirmation is needed, use question tool.
 
 ### Phase 3: Build Delegation Plan
 Goal: Write an actionable plan that starts execution cleanly.
@@ -2024,7 +2025,7 @@ Your turn should end by either asking a targeted question or calling plan_exit.
     }
 
     if (
-      input.agent.name === "pentest_auto" &&
+      (input.agent.name === "pentest_auto" || input.agent.name === "pentest_flow") &&
       !hasQuestionToolRun(input.messages) &&
       !CyberEnvironment.hasReminderMarker(input.messages, CYBER_AUTO_INTAKE_MARKER)
     ) {
@@ -2054,7 +2055,7 @@ Your turn should end by either asking a targeted question or calling plan_exit.
     }
 
     if (
-      (input.agent.name === "pentest" || input.agent.name === "pentest_auto") &&
+      (input.agent.name === "pentest" || input.agent.name === "pentest_auto" || input.agent.name === "pentest_flow") &&
       !CyberEnvironment.hasCompletedCyberSubtask(input.messages) &&
       !CyberEnvironment.hasReminderMarker(input.messages, CYBER_PLAN_KICKOFF_MARKER)
     ) {
@@ -2165,7 +2166,7 @@ Your turn should end by either asking a targeted question or calling plan_exit.
   }
 
   function shouldAutoKickoffPentestPlan(input: { messages: MessageV2.WithParts[]; lastUser: MessageV2.User }) {
-    if (input.lastUser.agent !== "pentest_auto") return false
+    if (input.lastUser.agent !== "pentest_auto" && input.lastUser.agent !== "pentest_flow") return false
     const hasAssistant = input.messages.some((message) => message.info.role === "assistant")
     if (hasAssistant) return false
     const hasPlanUser = input.messages.some(
@@ -2191,10 +2192,11 @@ Your turn should end by either asking a targeted question or calling plan_exit.
       type: "text",
       synthetic: true,
       text: [
-        "Auto mode kickoff: enter plan mode for this pentest.",
+        "Guided pentest kickoff: enter plan mode before execution.",
         "First, do a brief safe network exploration snapshot.",
-        "Then ask only critical intake questions and focused follow-up questions until confidence is high.",
+        "Then ask only critical intake questions using the question tool and continue focused follow-up questions until confidence is high.",
         "Avoid benign/unnecessary questions.",
+        "Any unresolved confirmation must be asked via question tool (not plain-text questions).",
         "Produce a full actionable plan and call plan_exit for user approval before active pentest execution.",
       ].join("\n"),
     })
