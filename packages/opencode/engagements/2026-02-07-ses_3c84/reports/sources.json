@@ -1,0 +1,62 @@
+[
+  {
+    "source_id": "SRC-001",
+    "type": "finding_log",
+    "agent_label": null,
+    "session_id": "ses_3c847949fffe8rPcIB601exSHq",
+    "invoked_at": "2026-02-07T10:49:18.944Z",
+    "completed_at": "2026-02-07T10:50:04.528Z",
+    "path": "/Users/trevorrosato/Library/Mobile Documents/com~apple~CloudDocs/slatt/codeprojects/ULMcode/opencode/packages/opencode/engagements/2026-02-07-ses_3c84/finding.md",
+    "note": "Canonical finding log"
+  },
+  {
+    "source_id": "SRC-002",
+    "type": "handoff",
+    "agent_label": null,
+    "session_id": "ses_3c847949fffe8rPcIB601exSHq",
+    "invoked_at": null,
+    "completed_at": null,
+    "path": "/Users/trevorrosato/Library/Mobile Documents/com~apple~CloudDocs/slatt/codeprojects/ULMcode/opencode/packages/opencode/engagements/2026-02-07-ses_3c84/handoff.md",
+    "note": "Cross-agent coordination notes"
+  },
+  {
+    "source_id": "SRC-003",
+    "type": "evidence",
+    "agent_label": null,
+    "session_id": "ses_3c847949fffe8rPcIB601exSHq",
+    "invoked_at": null,
+    "completed_at": null,
+    "path": "/Users/trevorrosato/Library/Mobile Documents/com~apple~CloudDocs/slatt/codeprojects/ULMcode/opencode/packages/opencode/engagements/2026-02-07-ses_3c84/evidence",
+    "note": "Evidence root directory"
+  },
+  {
+    "source_id": "SRC-004",
+    "type": "subagent_results",
+    "agent_label": "subagent",
+    "session_id": "ses_3c847949fffe8rPcIB601exSHq",
+    "invoked_at": null,
+    "completed_at": null,
+    "path": "/Users/trevorrosato/Library/Mobile Documents/com~apple~CloudDocs/slatt/codeprojects/ULMcode/opencode/packages/opencode/engagements/2026-02-07-ses_3c84/agents/ses_3c847949fffe8rPcIB601exSHq/results.md",
+    "note": "Subagent summarized output"
+  },
+  {
+    "source_id": "SRC-005",
+    "type": "subagent_results",
+    "agent_label": "subagent",
+    "session_id": "ses_3c848a13dffeiC1QbTWcQcF90Q",
+    "invoked_at": null,
+    "completed_at": null,
+    "path": "/Users/trevorrosato/Library/Mobile Documents/com~apple~CloudDocs/slatt/codeprojects/ULMcode/opencode/packages/opencode/engagements/2026-02-07-ses_3c84/agents/ses_3c848a13dffeiC1QbTWcQcF90Q/results.md",
+    "note": "Subagent summarized output"
+  },
+  {
+    "source_id": "SRC-006",
+    "type": "subagent_results",
+    "agent_label": "subagent",
+    "session_id": "ses_3c8489a75ffeWv3gxBSooFVLbA",
+    "invoked_at": null,
+    "completed_at": null,
+    "path": "/Users/trevorrosato/Library/Mobile Documents/com~apple~CloudDocs/slatt/codeprojects/ULMcode/opencode/packages/opencode/engagements/2026-02-07-ses_3c84/agents/ses_3c8489a75ffeWv3gxBSooFVLbA/results.md",
+    "note": "Subagent summarized output"
+  }
+]

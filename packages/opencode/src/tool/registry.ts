@@ -28,6 +28,7 @@ import { Truncate } from "./truncation"
 import { PlanExitTool, PlanEnterTool } from "./plan"
 import { ApplyPatchTool } from "./apply_patch"
 import { FindingTool } from "./finding"
+import { ReportFinalizeTool } from "./report_finalize"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -109,6 +110,7 @@ export namespace ToolRegistry {
       WebFetchTool,
       TodoWriteTool,
       FindingTool,
+      ReportFinalizeTool,
       // TodoReadTool,
       WebSearchTool,
       CodeSearchTool,

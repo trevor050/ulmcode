@@ -4,16 +4,22 @@ import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
 import { ReportBundle } from "../../src/report/report"
+import { CyberEnvironment } from "../../src/session/environment"
 
 describe("report bundle", () => {
-  test("writes markdown + findings json + run metadata", async () => {
+  test("writes markdown + findings json + run metadata without explicit outDir", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await Session.create({ title: "Cyber run" })
+        const env = CyberEnvironment.create(session)
+        await Session.update(session.id, (draft) => {
+          draft.environment = env
+        })
+        await CyberEnvironment.ensureSharedScaffold({ environment: env, session })
         await Bun.write(
-          path.join(tmp.path, "finding.md"),
+          path.join(env.root, "finding.md"),
           [
             "# Engagement Findings",
             "",
@@ -27,29 +33,57 @@ describe("report bundle", () => {
           ].join("\n"),
         )
 
-        const outDir = path.join(tmp.path, "out-report")
         const result = await ReportBundle.generate({
           sessionID: session.id,
-          outDir,
+          allowNoPdf: true,
         })
 
         expect(result.findingCount).toBe(1)
-        expect(await Bun.file(path.join(outDir, "report.md")).exists()).toBe(true)
-        expect(await Bun.file(path.join(outDir, "findings.json")).exists()).toBe(true)
-        expect(await Bun.file(path.join(outDir, "run-metadata.json")).exists()).toBe(true)
+        expect(result.outDir).toBe(path.join(env.root, "reports"))
+        expect(await Bun.file(path.join(env.root, "reports", "report.md")).exists()).toBe(true)
+        expect(await Bun.file(path.join(env.root, "reports", "findings.json")).exists()).toBe(true)
+        expect(await Bun.file(path.join(env.root, "reports", "run-metadata.json")).exists()).toBe(true)
 
-        const markdown = await Bun.file(path.join(outDir, "report.md")).text()
-        expect(markdown).toContain("Executive Security Report")
-        expect(markdown).toContain("Findings by Severity")
-        expect(markdown).toContain("Non-Destructive Approach Used")
+        const markdown = await Bun.file(path.join(env.root, "reports", "report.md")).text()
+        expect(markdown).toContain("Client Pentest Report")
+        expect(markdown).toContain("## Findings")
+        expect(markdown).toContain("## Remediation Plan")
 
-        const findings = (await Bun.file(path.join(outDir, "findings.json")).json()) as unknown[]
+        const findings = (await Bun.file(path.join(env.root, "reports", "findings.json")).json()) as unknown[]
         expect(findings.length).toBe(1)
 
-        const metadata = (await Bun.file(path.join(outDir, "run-metadata.json")).json()) as {
+        const metadata = (await Bun.file(path.join(env.root, "reports", "run-metadata.json")).json()) as {
           session_id: string
         }
         expect(metadata.session_id).toBe(session.id)
+      },
+    })
+  })
+
+  test("lazily creates environment and migrates legacy finding log", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({ title: "Legacy run" })
+        const legacyPath = path.join(tmp.path, "finding.md")
+        await Bun.write(
+          legacyPath,
+          [
+            "# Engagement Findings",
+            "",
+            "## Findings",
+            "",
+            "<!-- finding_json:{\"id\":\"FND-1\",\"title\":\"Legacy finding\",\"severity\":\"low\",\"confidence\":0.4,\"asset\":\"host\",\"evidence\":\"e\",\"impact\":\"i\",\"recommendation\":\"r\",\"safe_reproduction_steps\":[],\"non_destructive\":true} -->",
+            "",
+          ].join("\n"),
+        )
+
+        const result = await ReportBundle.generate({ sessionID: session.id, allowNoPdf: true })
+        const updated = await Session.get(session.id)
+        expect(updated.environment).toBeDefined()
+        expect(result.outDir).toBe(path.join(updated.environment!.root, "reports"))
+        expect(await Bun.file(path.join(updated.environment!.root, "finding.md")).exists()).toBe(true)
       },
     })
   })

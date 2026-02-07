@@ -1,0 +1,18 @@
+[
+  {
+    "event_id": "EVT-001",
+    "type": "session_started",
+    "timestamp": "2026-02-07T10:59:53.490Z",
+    "agent": "pentest",
+    "session_id": "ses_3c83de5edffe9bCZYXDo36pgQK",
+    "details": "Primary pentest session started"
+  },
+  {
+    "event_id": "EVT-002",
+    "type": "report_finalized",
+    "timestamp": "2026-02-07T11:01:11.440Z",
+    "agent": "report_writer",
+    "session_id": "ses_3c83de5edffe9bCZYXDo36pgQK",
+    "details": "Final report bundle generated"
+  }
+]

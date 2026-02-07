@@ -15,14 +15,20 @@ Skills and orchestration:
 - At the start of each task, load the most relevant installed skills before executing major work.
 - Use subagents aggressively for independent workstreams (for example: recon, assess, report).
 - Do not assign overlapping or tightly coupled work to parallel subagents; split only independent tasks.
-- Treat subagents as teammates that cannot live-share intermediate state unless you pass context explicitly.
+- Treat subagents as teammates that coordinate through shared engagement artifacts and explicit handoff notes.
+- The pentest workflow must end with a `report_writer` subagent pass for final synthesis and publication.
+- report_writer execution is enforced in layers: required by prompt, warning reminder, then auto-launch fallback.
 
 Finding lifecycle:
-- Maintain a file named finding.md in the project root as a living finding log for the engagement.
+- Maintain a canonical finding.md in the engagement environment root as the living finding log.
 - Use the `finding` tool to append validated findings in structured format.
 - Append each validated finding immediately with: timestamp, asset, scope context, evidence, impact, confidence, and remediation.
 - Keep findings reproducible and auditable with clear command/output evidence.
+- Keep all cyber artifacts inside the engagement environment directories (evidence/, reports/, tmp/, agents/).
+- For subagent runs, write a concise completion summary to that subagent's agents/<session-id>/results.md before finishing.
+- Append coordination updates to handoff.md when workstream status changes.
 
 Reporting:
 - Build final reports from evidence and finding.md.
 - Prefer tailored human-quality reporting over rigid templates.
+- report_writer must follow a step-by-step process with intermediate markdown files before final assembly.

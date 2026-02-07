@@ -17,20 +17,23 @@ export const ReportCommand = cmd({
       .option("out", {
         type: "string",
         describe: "output directory for report bundle artifacts",
-        demandOption: true,
       }),
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
-      const out = path.resolve(process.cwd(), args.out)
       const result = await ReportBundle.generate({
         sessionID: args.sessionID,
-        outDir: out,
+        outDir: args.out ? path.resolve(process.cwd(), args.out) : undefined,
       })
 
       process.stdout.write(`Session: ${result.sessionID}` + EOL)
       process.stdout.write(`Findings: ${result.findingCount}` + EOL)
       process.stdout.write(`Report: ${result.reportPath}` + EOL)
+      process.stdout.write(`PDF: ${result.reportPdfPath}` + EOL)
+      process.stdout.write(`Results: ${result.resultsPath}` + EOL)
+      process.stdout.write(`Remediation Plan: ${result.remediationPlanPath}` + EOL)
       process.stdout.write(`JSON: ${result.findingsPath}` + EOL)
+      process.stdout.write(`Sources: ${result.sourcesPath}` + EOL)
+      process.stdout.write(`Timeline: ${result.timelinePath}` + EOL)
       process.stdout.write(`Metadata: ${result.metadataPath}` + EOL)
     })
   },

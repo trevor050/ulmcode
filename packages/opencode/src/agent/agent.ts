@@ -18,6 +18,7 @@ import PROMPT_NETWORK_MAPPER from "./prompt/network-mapper.txt"
 import PROMPT_PENTEST from "./prompt/pentest.txt"
 import PROMPT_RECON from "./prompt/recon.txt"
 import PROMPT_REPORT from "./prompt/report.txt"
+import PROMPT_REPORT_WRITER from "./prompt/report-writer.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import PROMPT_VULN_RESEARCHER from "./prompt/vuln-researcher.txt"
@@ -323,9 +324,8 @@ export namespace Agent {
       },
       report_writer: {
         name: "report_writer",
-        description: "Compatibility alias for report agent behavior.",
-        prompt: PROMPT_REPORT,
-        hidden: true,
+        description: "Final reporting specialist for full client-grade synthesis and PDF deliverables.",
+        prompt: PROMPT_REPORT_WRITER,
         permission: PermissionNext.merge(
           defaults,
           PermissionNext.fromConfig({
@@ -334,10 +334,12 @@ export namespace Agent {
             glob: "allow",
             grep: "allow",
             bash: "allow",
-            edit: "deny",
+            edit: "allow",
+            write: "allow",
             finding: "allow",
             webfetch: "allow",
             websearch: "allow",
+            task: "deny",
           }),
           user,
         ),

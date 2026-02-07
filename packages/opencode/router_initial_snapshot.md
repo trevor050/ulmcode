@@ -1,0 +1,28 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - generic [ref=e5]:
+      - img "Verizon Logo" [ref=e6] [cursor=pointer]
+      - button "Help, opens a modal" [ref=e8] [cursor=pointer]: Help
+    - generic [ref=e10]:
+      - img "This image shows the location of default password tag sticked on the device." [ref=e12]
+      - generic [ref=e13]:
+        - generic [ref=e16]:
+          - heading "Log in to Network Settings" [level=1] [ref=e17]
+          - generic [ref=e18]: Enter the Network Settings Password located on the information sticker on your router.
+          - generic [ref=e20]:
+            - generic [ref=e21]: Network Settings Password
+            - generic [ref=e22]:
+              - textbox "Network Settings Password Show/Hide password" [ref=e23]:
+                - /placeholder: ""
+              - button "Show/Hide password" [ref=e24] [cursor=pointer]:
+                - generic [ref=e25]: 
+          - generic [ref=e26]:
+            - generic [ref=e27]:
+              - checkbox "Keep Me Signed in" [ref=e28] [cursor=pointer]
+              - generic [ref=e29]:
+                - generic [ref=e30]: 
+                - generic [ref=e31]: Keep Me Signed In
+            - img "Keep me signed in" [ref=e33] [cursor=pointer]: 
+          - button "Log In" [ref=e35] [cursor=pointer]
+        - text: Copyright © 2023 Verizon
+  - text:   

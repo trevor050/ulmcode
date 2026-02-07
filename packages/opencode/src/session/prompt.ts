@@ -46,6 +46,8 @@ import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncation"
+import { CyberEnvironment } from "./environment"
+import { Skill } from "@/skill"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -265,7 +267,7 @@ export namespace SessionPrompt {
     using _ = defer(() => cancel(sessionID))
 
     let step = 0
-    const session = await Session.get(sessionID)
+    let session = await Session.get(sessionID)
     while (true) {
       SessionStatus.set(sessionID, { type: "busy" })
       log.info("loop", { step, sessionID })
@@ -295,6 +297,10 @@ export namespace SessionPrompt {
         !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
         lastUser.id < lastAssistant.id
       ) {
+        if (await shouldAutoLaunchReportWriter({ session, lastUser, messages: msgs })) {
+          await queueReportWriterSubtask({ session, lastUser })
+          continue
+        }
         log.info("exiting loop", { sessionID })
         break
       }
@@ -307,7 +313,30 @@ export namespace SessionPrompt {
           providerID: lastUser.model.providerID,
           history: msgs,
         })
-      if (step === 1) await ensureFindingLog(session, lastUser)
+      if (step === 1) {
+        const parentEnvironment = session.parentID
+          ? (await Session.get(session.parentID).catch(() => undefined))?.environment
+          : undefined
+        const ensured = await CyberEnvironment.ensureSharedEnvironment({
+          session,
+          agentName: lastUser.agent,
+          parentEnvironment,
+        })
+        if (ensured.environment && (!session.environment || ensured.changed)) {
+          session = await Session.update(session.id, (draft) => {
+            draft.environment = ensured.environment
+          })
+        } else if (ensured.environment) {
+          session.environment = ensured.environment
+        }
+
+        if (session.environment?.type === "cyber" && session.parentID) {
+          await CyberEnvironment.ensureSubagentWorkspace({
+            environment: session.environment,
+            session,
+          })
+        }
+      }
 
       const model = await Provider.getModel(lastUser.model.providerID, lastUser.model.modelID)
       const task = tasks.pop()
@@ -514,6 +543,11 @@ export namespace SessionPrompt {
       const agent = await Agent.get(lastUser.agent)
       const maxSteps = agent.steps ?? Infinity
       const isLastStep = step >= maxSteps
+      msgs = await insertCyberReminders({
+        messages: msgs,
+        session,
+        agent,
+      })
       msgs = await insertReminders({
         messages: msgs,
         agent,
@@ -1838,31 +1872,199 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       )
   }
 
-  const FINDING_LOG_AGENTS = new Set(["pentest", "recon", "assess", "analyst", "report", "report_writer"])
+  const CYBER_ENV_CONTEXT_MARKER = "[CYBER_ENVIRONMENT_CONTEXT_V1]"
 
-  async function ensureFindingLog(session: Session.Info, user: MessageV2.User) {
-    if (!FINDING_LOG_AGENTS.has(user.agent)) return
-    const file = path.join(session.directory, "finding.md")
-    const now = new Date().toISOString()
-    const header = [
-      "# Engagement Findings",
-      "",
-      `- Session: ${session.id}`,
-      `- Agent: ${user.agent}`,
-      `- Started: ${now}`,
-      "",
-      "## Findings",
-      "",
-      "_Append each validated finding below with timestamp, asset, severity, confidence, evidence, impact, and remediation._",
-      "",
-    ].join("\n")
-    try {
-      await fs.access(file)
-      return
-    } catch {}
-    await fs.writeFile(file, header, { flag: "wx" }).catch((error) => {
-      if ((error as NodeJS.ErrnoException).code === "EEXIST") return
-      throw error
+  function hasEnvironmentContextReminder(messages: MessageV2.WithParts[]) {
+    return messages.some((message) =>
+      message.parts.some(
+        (part) =>
+          part.type === "text" &&
+          !!part.synthetic &&
+          part.text.includes(CYBER_ENV_CONTEXT_MARKER),
+      ),
+    )
+  }
+
+  async function insertCyberReminders(input: {
+    messages: MessageV2.WithParts[]
+    session: Session.Info
+    agent: Agent.Info
+  }) {
+    const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
+    if (!userMessage) return input.messages
+    if (!CyberEnvironment.isCyberAgent(input.agent.name)) return input.messages
+    if (!input.session.environment || input.session.environment.type !== "cyber") return input.messages
+
+    if (!hasEnvironmentContextReminder(input.messages)) {
+      const root = input.session.environment.root
+      const part = await Session.updatePart({
+        id: Identifier.ascending("part"),
+        messageID: userMessage.info.id,
+        sessionID: userMessage.info.sessionID,
+        type: "text",
+        synthetic: true,
+        text: [
+          "<system-reminder>",
+          CYBER_ENV_CONTEXT_MARKER,
+          "CYBER ENGAGEMENT ENVIRONMENT ACTIVE",
+          `environment.root=${root}`,
+          `finding.md=${path.join(root, "finding.md")}`,
+          `handoff.md=${path.join(root, "handoff.md")}`,
+          `reports.dir=${path.join(root, "reports")}`,
+          "Paths include spaces on this host; always quote absolute paths in shell commands.",
+          "All pentest outputs must live in this shared environment.",
+          "</system-reminder>",
+        ].join("\n"),
+      })
+      userMessage.parts.push(part)
+    }
+
+    if (
+      !CyberEnvironment.hasLoadedSkill(input.messages) &&
+      !CyberEnvironment.hasSkillReminderBeenShown(input.messages)
+    ) {
+      const part = await Session.updatePart({
+        id: Identifier.ascending("part"),
+        messageID: userMessage.info.id,
+        sessionID: userMessage.info.sessionID,
+        type: "text",
+        synthetic: true,
+        text: [
+          "<system-reminder>",
+          CyberEnvironment.SKILL_REMINDER_MARKER,
+          "WARNING: NO SKILL HAS BEEN LOADED INTO CONTEXT FOR THIS CYBER SESSION.",
+          "Load a relevant skill before major work by calling the skill tool.",
+          "Example call: skill({\"name\":\"<skill-name>\"})",
+          "This is a soft warning only, execution remains allowed.",
+          "</system-reminder>",
+        ].join("\n"),
+      })
+      userMessage.parts.push(part)
+    }
+
+    if (
+      input.agent.name === "pentest" &&
+      CyberEnvironment.hasCompletedCyberSubtask(input.messages) &&
+      !CyberEnvironment.hasReportWriterRun(input.messages) &&
+      !CyberEnvironment.hasReminderMarker(input.messages, CyberEnvironment.REPORT_WRITER_REQUIRED_MARKER)
+    ) {
+      const part = await Session.updatePart({
+        id: Identifier.ascending("part"),
+        messageID: userMessage.info.id,
+        sessionID: userMessage.info.sessionID,
+        type: "text",
+        synthetic: true,
+        text: [
+          "<system-reminder>",
+          CyberEnvironment.REPORT_WRITER_REQUIRED_MARKER,
+          "REPORT WRITER IS REQUIRED BEFORE ENDING THIS PENTEST SESSION.",
+          "You must launch task(subagent_type=\"report_writer\") for final synthesis and PDF packaging.",
+          "Do this after recon/assess work is complete.",
+          "</system-reminder>",
+        ].join("\n"),
+      })
+      userMessage.parts.push(part)
+    }
+
+    if (
+      input.agent.name === "report_writer" &&
+      !hasSpecificSkillLoaded(input.messages, "k12-risk-mapping-and-reporting") &&
+      !CyberEnvironment.hasReminderMarker(input.messages, CyberEnvironment.REPORT_WRITER_SKILL_MARKER)
+    ) {
+      const preloaded = await preloadReportingSkillBlock()
+      const part = await Session.updatePart({
+        id: Identifier.ascending("part"),
+        messageID: userMessage.info.id,
+        sessionID: userMessage.info.sessionID,
+        type: "text",
+        synthetic: true,
+        text: [
+          "<system-reminder>",
+          CyberEnvironment.REPORT_WRITER_SKILL_MARKER,
+          "FIRST ACTION REQUIRED: LOAD THE REPORTING SKILL.",
+          "Call: skill({\"name\":\"k12-risk-mapping-and-reporting\"})",
+          "Then explore finding.md, agents/*/results.md, handoff.md, and evidence directories.",
+          "Create report-plan.md, report-outline.md, report-draft.md before finalizing.",
+          "Finalize with report_finalize.",
+          ...(preloaded ? ["", preloaded] : []),
+          "</system-reminder>",
+        ].join("\n"),
+      })
+      userMessage.parts.push(part)
+    }
+
+    return input.messages
+  }
+
+  function hasSpecificSkillLoaded(messages: MessageV2.WithParts[], skillName: string) {
+    return messages.some((message) =>
+      message.parts.some((part) => {
+        if (part.type !== "tool") return false
+        if (part.tool !== "skill") return false
+        if (part.state.status !== "completed") return false
+        return part.state.input?.name === skillName
+      }),
+    )
+  }
+
+  async function shouldAutoLaunchReportWriter(input: {
+    session: Session.Info
+    lastUser: MessageV2.User
+    messages: MessageV2.WithParts[]
+  }) {
+    if (input.lastUser.agent !== "pentest") return false
+    if (!input.session.environment || input.session.environment.type !== "cyber") return false
+    if (!CyberEnvironment.hasCompletedCyberSubtask(input.messages)) return false
+    if (CyberEnvironment.hasReportWriterRun(input.messages)) return false
+    return true
+  }
+
+  async function queueReportWriterSubtask(input: {
+    session: Session.Info
+    lastUser: MessageV2.User
+  }) {
+    const reportWriter = await Agent.get("report_writer")
+    const model = reportWriter.model ?? input.lastUser.model
+    const user = await Session.updateMessage({
+      id: Identifier.ascending("message"),
+      role: "user",
+      sessionID: input.session.id,
+      time: { created: Date.now() },
+      agent: input.lastUser.agent,
+      model: input.lastUser.model,
     })
+    await Session.updatePart({
+      id: Identifier.ascending("part"),
+      messageID: user.id,
+      sessionID: user.sessionID,
+      type: "subtask",
+      agent: "report_writer",
+      description: "Finalize client report package",
+      command: "auto-report-writer-finale",
+      model: {
+        providerID: model.providerID,
+        modelID: model.modelID,
+      },
+      prompt: [
+        "Finalize this engagement with a complete client-grade report workflow.",
+        "Required: load skill k12-risk-mapping-and-reporting first.",
+        "Required inputs: canonical finding.md, all agents/*/results.md, handoff.md, evidence directories.",
+        "Required intermediate files in reports/: report-plan.md, report-outline.md, report-draft.md, results.md, remediation-plan.md.",
+        "Required final action: call report_finalize.",
+        "Do not use allow_no_pdf=true unless the user explicitly asks for degraded mode without PDF.",
+      ].join("\n"),
+    })
+  }
+
+  async function preloadReportingSkillBlock() {
+    const skill = await Skill.get("k12-risk-mapping-and-reporting").catch(() => undefined)
+    if (!skill) return ""
+    return [
+      `<skill_content name="${skill.name}">`,
+      `# Skill: ${skill.name}`,
+      "",
+      skill.content.trim(),
+      "</skill_content>",
+    ].join("\n")
   }
 }

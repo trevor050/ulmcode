@@ -5,6 +5,8 @@ import z from "zod"
 import { Tool } from "./tool"
 import DESCRIPTION from "./finding.txt"
 import { Instance } from "@/project/instance"
+import { Session } from "@/session"
+import { CyberEnvironment } from "@/session/environment"
 
 const Severity = z.enum(["critical", "high", "medium", "low", "info"])
 
@@ -97,13 +99,15 @@ export const FindingTool = Tool.define("finding", {
   parameters,
   async execute(params, ctx) {
     const now = new Date().toISOString()
-    const file = path.join(Instance.directory, "finding.md")
+    const session = await Session.get(ctx.sessionID)
+    const file = CyberEnvironment.resolveFindingPath(session)
+    const relative = path.relative(Instance.directory, file)
     const id = "FND-" + ulid().slice(-10)
 
     await ctx.ask({
       permission: "finding",
-      patterns: ["finding.md"],
-      always: ["finding.md"],
+      patterns: [relative, file],
+      always: [relative, file],
       metadata: {
         title: params.title,
         severity: params.severity,
