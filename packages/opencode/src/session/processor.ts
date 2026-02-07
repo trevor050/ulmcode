@@ -34,7 +34,7 @@ export namespace SessionProcessor {
   }
 
   function executionAgent(agent: string) {
-    if (agent === "pentest_auto" || agent === "pentest_flow") return "pentest"
+    if (agent === "pentest_auto" || agent === "pentest_flow" || agent === "AutoPentest") return "pentest"
     return agent
   }
 
@@ -45,7 +45,6 @@ export namespace SessionProcessor {
   }) {
     if (input.assistantMessage.agent !== "plan") return false
     const session = await Session.get(input.sessionID)
-    if (session.environment?.type !== "cyber") return false
 
     const parts = await MessageV2.parts(input.assistantMessage.id)
     const hasPlanExitTool = parts.some((part) => part.type === "tool" && part.tool === "plan_exit")
@@ -70,18 +69,19 @@ export namespace SessionProcessor {
       sessionID: input.sessionID,
       questions: [
         {
-          question: `Plan at ${planPath} is complete. Would you like to switch to the ${previousAgent} agent and start implementing?`,
+          question: `Plan at ${planPath} is ready. Continue with this plan, or make changes first?`,
           header: "Execution Agent",
-          custom: false,
+          custom: true,
           options: [
-            { label: "Yes", description: `Switch to ${previousAgent} and start implementing the plan` },
-            { label: "No", description: "Stay with plan agent to continue refining the plan" },
+            { label: "Continue with plan", description: `Switch to ${previousAgent} and start implementing` },
+            { label: "Make changes", description: "Stay in plan mode and refine the plan before execution" },
           ],
         },
       ],
     })
 
-    const approved = answers[0]?.[0] === "Yes"
+    const firstAnswer = (answers[0]?.[0] ?? "").toLowerCase()
+    const approved = firstAnswer === "continue with plan"
     const modelID = "modelID" in input.model ? input.model.modelID : input.model.id
     const nextMessage: MessageV2.User = {
       id: Identifier.ascending("message"),

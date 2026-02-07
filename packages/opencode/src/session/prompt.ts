@@ -2025,7 +2025,7 @@ Your turn should end by either asking a targeted question or calling plan_exit.
     }
 
     if (
-      (input.agent.name === "pentest_auto" || input.agent.name === "pentest_flow") &&
+      (input.agent.name === "pentest_auto" || input.agent.name === "pentest_flow" || input.agent.name === "AutoPentest") &&
       !hasQuestionToolRun(input.messages) &&
       !CyberEnvironment.hasReminderMarker(input.messages, CYBER_AUTO_INTAKE_MARKER)
     ) {
@@ -2055,7 +2055,10 @@ Your turn should end by either asking a targeted question or calling plan_exit.
     }
 
     if (
-      (input.agent.name === "pentest" || input.agent.name === "pentest_auto" || input.agent.name === "pentest_flow") &&
+      (input.agent.name === "pentest" ||
+        input.agent.name === "pentest_auto" ||
+        input.agent.name === "pentest_flow" ||
+        input.agent.name === "AutoPentest") &&
       !CyberEnvironment.hasCompletedCyberSubtask(input.messages) &&
       !CyberEnvironment.hasReminderMarker(input.messages, CYBER_PLAN_KICKOFF_MARKER)
     ) {
@@ -2166,7 +2169,12 @@ Your turn should end by either asking a targeted question or calling plan_exit.
   }
 
   function shouldAutoKickoffPentestPlan(input: { messages: MessageV2.WithParts[]; lastUser: MessageV2.User }) {
-    if (input.lastUser.agent !== "pentest_auto" && input.lastUser.agent !== "pentest_flow") return false
+    if (
+      input.lastUser.agent !== "pentest_auto" &&
+      input.lastUser.agent !== "pentest_flow" &&
+      input.lastUser.agent !== "AutoPentest"
+    )
+      return false
     const hasAssistant = input.messages.some((message) => message.info.role === "assistant")
     if (hasAssistant) return false
     const hasPlanUser = input.messages.some(

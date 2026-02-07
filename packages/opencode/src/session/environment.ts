@@ -12,6 +12,7 @@ export namespace CyberEnvironment {
 
   const CYBER_AGENTS = new Set([
     "pentest",
+    "AutoPentest",
     "pentest_flow",
     "pentest_auto",
     "recon",

@@ -42,7 +42,7 @@ async function getPrePlanAgent(sessionID: string) {
 }
 
 function executionAgent(agent: string) {
-  if (agent === "pentest_auto" || agent === "pentest_flow") return "pentest"
+  if (agent === "pentest_auto" || agent === "pentest_flow" || agent === "AutoPentest") return "pentest"
   return agent
 }
 
@@ -57,20 +57,20 @@ export const PlanExitTool = Tool.define("plan_exit", {
       sessionID: ctx.sessionID,
       questions: [
         {
-          question: `Plan at ${plan} is complete. Would you like to switch to the ${previousAgent} agent and start implementing?`,
+          question: `Plan at ${plan} is ready. Continue with this plan, or make changes first?`,
           header: "Execution Agent",
-          custom: false,
+          custom: true,
           options: [
-            { label: "Yes", description: `Switch to ${previousAgent} and start implementing the plan` },
-            { label: "No", description: "Stay with plan agent to continue refining the plan" },
+            { label: "Continue with plan", description: `Switch to ${previousAgent} and start implementing` },
+            { label: "Make changes", description: "Stay in plan mode and refine the plan before execution" },
           ],
         },
       ],
       tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
     })
 
-    const answer = answers[0]?.[0]
-    if (answer === "No") throw new Question.RejectedError()
+    const answer = (answers[0]?.[0] ?? "").toLowerCase()
+    if (answer !== "continue with plan") throw new Question.RejectedError()
 
     const model = await getLastModel(ctx.sessionID)
 
