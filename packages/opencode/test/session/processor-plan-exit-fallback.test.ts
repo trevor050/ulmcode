@@ -87,7 +87,7 @@ describe("session.processor plan_exit fallback", () => {
         })
 
         const assistant = await seedPlanAssistant({ sessionID: session.id, text: "looks good\nplan_exit" })
-        askSpy.mockResolvedValueOnce([["Yes"]])
+        askSpy.mockResolvedValueOnce([["Continue with plan"]])
         const model = await Provider.defaultModel()
 
         const handled = await SessionProcessor.fallbackPlanExitIfNeeded({
@@ -140,7 +140,7 @@ describe("session.processor plan_exit fallback", () => {
         })
 
         const assistant = await seedPlanAssistant({ sessionID: session.id, text: "plan_exit" })
-        askSpy.mockResolvedValueOnce([["No"]])
+        askSpy.mockResolvedValueOnce([["Make changes"]])
         const model = await Provider.defaultModel()
 
         const handled = await SessionProcessor.fallbackPlanExitIfNeeded({
@@ -209,6 +209,47 @@ describe("session.processor plan_exit fallback", () => {
 
         expect(handled).toBe(false)
         expect(askSpy).not.toHaveBeenCalled()
+      },
+    })
+  })
+
+  test("works even when session is not tagged as cyber environment", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+
+        await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: session.id,
+          agent: "build",
+          model: { providerID: "openai", modelID: "gpt-5" },
+          time: { created: Date.now() - 10 },
+        })
+        await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: session.id,
+          agent: "plan",
+          model: { providerID: "openai", modelID: "gpt-5" },
+          time: { created: Date.now() },
+        })
+
+        const assistant = await seedPlanAssistant({ sessionID: session.id, text: "plan_exit" })
+        askSpy.mockResolvedValueOnce([["Continue with plan"]])
+
+        const handled = await SessionProcessor.fallbackPlanExitIfNeeded({
+          sessionID: session.id,
+          assistantMessage: assistant,
+          model: await Provider.defaultModel(),
+        })
+
+        expect(handled).toBe(true)
+        const messages = await Session.messages({ sessionID: session.id })
+        const latestUser = messages.findLast((msg) => msg.info.role === "user")
+        expect(latestUser?.info.agent).toBe("build")
       },
     })
   })

@@ -16,7 +16,7 @@ Last updated: 2026-02-07 (plan-flow fallback + quality-gate rollout)
 
 ## Cyber Harness Architecture
 - Core cyber agent definitions live in `/Users/trevorrosato/Library/Mobile Documents/com~apple~CloudDocs/slatt/codeprojects/ULMcode/opencode/packages/opencode/src/agent/agent.ts`.
-- Primary orchestration agent: `pentest`.
+- Primary orchestration agents: `pentest` and guided `AutoPentest`.
 - Specialized subagents: `recon`, `assess`, `report`, `network_mapper`, `host_auditor`, `vuln_researcher`, `evidence_scribe`, `report_writer`.
 - Compatibility alias: `analyst` maps to assess behavior.
 
@@ -101,7 +101,8 @@ Last updated: 2026-02-07 (plan-flow fallback + quality-gate rollout)
   - `[REPORT_WRITER_SKILL_REQUIRED_V1]`
 - Plan-mode resilience note:
   - If a plan-mode cyber assistant prints literal `plan_exit` text instead of calling the `plan_exit` tool, runtime now catches that and triggers the same approval question UI automatically.
-  - On approval, runtime enqueues a synthetic user message and maps `pentest_flow`/`pentest_auto` back to `pentest` execution mode.
+  - This fallback now applies in generic plan sessions too, not only cyber-tagged sessions.
+  - On approval, runtime enqueues a synthetic user message and maps `AutoPentest`/`pentest_flow`/`pentest_auto` back to `pentest` execution mode.
   - On rejection, runtime keeps the session in `plan` and requests plan refinement instead of dead-ending.
 
 ## Path + Shell Gotcha

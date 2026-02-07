@@ -52,7 +52,7 @@ describe("tool.plan", () => {
           time: { created: Date.now() },
         })
 
-        askSpy.mockResolvedValueOnce([["Yes"]])
+        askSpy.mockResolvedValueOnce([["Continue with plan"]])
 
         const tool = await PlanExitTool.init()
         await tool.execute({}, { ...ctx, sessionID: session.id })
@@ -127,13 +127,13 @@ describe("tool.plan", () => {
           time: { created: Date.now() },
         })
 
-        askSpy.mockResolvedValueOnce([["Yes"]])
+        askSpy.mockResolvedValueOnce([["Continue with plan"]])
 
         const tool = await PlanExitTool.init()
         await tool.execute({}, { ...ctx, sessionID: session.id })
 
         const request = askSpy.mock.calls[0]?.[0]
-        expect(request?.questions?.[0]?.question).toContain("switch to the pentest agent")
+        expect(request?.questions?.[0]?.question).toContain("Continue with this plan")
         expect(
           (
             await Session.messages({ sessionID: session.id })
@@ -168,7 +168,46 @@ describe("tool.plan", () => {
           time: { created: Date.now() },
         })
 
-        askSpy.mockResolvedValueOnce([["Yes"]])
+        askSpy.mockResolvedValueOnce([["Continue with plan"]])
+
+        const tool = await PlanExitTool.init()
+        await tool.execute({}, { ...ctx, sessionID: session.id })
+
+        expect(
+          (
+            await Session.messages({ sessionID: session.id })
+          ).some((msg) => msg.info.role === "user" && msg.info.agent === "pentest"),
+        ).toBe(true)
+      },
+    })
+  })
+
+  test("plan_exit maps AutoPentest execution to pentest", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+
+        await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: session.id,
+          agent: "AutoPentest",
+          model: { providerID: "openai", modelID: "gpt-5" },
+          time: { created: Date.now() - 10 },
+        })
+
+        await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: session.id,
+          agent: "plan",
+          model: { providerID: "openai", modelID: "gpt-5" },
+          time: { created: Date.now() },
+        })
+
+        askSpy.mockResolvedValueOnce([["Continue with plan"]])
 
         const tool = await PlanExitTool.init()
         await tool.execute({}, { ...ctx, sessionID: session.id })
