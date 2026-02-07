@@ -15,8 +15,102 @@ import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
+import { Instance } from "@/project/instance"
 
 export namespace SessionProcessor {
+  async function getPrePlanAgent(sessionID: string) {
+    let sawPlan = false
+    for await (const item of MessageV2.stream(sessionID)) {
+      if (item.info.role !== "user") continue
+      const agent = item.info.agent
+      if (!agent) continue
+      if (agent === "plan") {
+        sawPlan = true
+        continue
+      }
+      if (sawPlan) return agent
+    }
+    return "build"
+  }
+
+  function executionAgent(agent: string) {
+    if (agent === "pentest_auto" || agent === "pentest_flow") return "pentest"
+    return agent
+  }
+
+  export async function fallbackPlanExitIfNeeded(input: {
+    sessionID: string
+    assistantMessage: MessageV2.Assistant
+    model: { providerID: string; modelID: string } | Provider.Model
+  }) {
+    if (input.assistantMessage.agent !== "plan") return false
+    const session = await Session.get(input.sessionID)
+    if (session.environment?.type !== "cyber") return false
+
+    const parts = await MessageV2.parts(input.assistantMessage.id)
+    const hasPlanExitTool = parts.some((part) => part.type === "tool" && part.tool === "plan_exit")
+    if (hasPlanExitTool) return false
+    const hasQuestionTool = parts.some((part) => part.type === "tool" && part.tool === "question")
+    if (hasQuestionTool) return false
+
+    const text = parts
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join("\n")
+      .toLowerCase()
+    if (!/\bplan_exit\b/.test(text)) return false
+
+    const previousAgent = executionAgent(await getPrePlanAgent(input.sessionID))
+    const plan = Session.plan(session)
+    const planPath = plan.startsWith(Instance.worktree)
+      ? plan.slice(Instance.worktree.length + (plan[Instance.worktree.length] === "/" ? 1 : 0))
+      : plan
+
+    const answers = await Question.ask({
+      sessionID: input.sessionID,
+      questions: [
+        {
+          question: `Plan at ${planPath} is complete. Would you like to switch to the ${previousAgent} agent and start implementing?`,
+          header: "Execution Agent",
+          custom: false,
+          options: [
+            { label: "Yes", description: `Switch to ${previousAgent} and start implementing the plan` },
+            { label: "No", description: "Stay with plan agent to continue refining the plan" },
+          ],
+        },
+      ],
+    })
+
+    const approved = answers[0]?.[0] === "Yes"
+    const modelID = "modelID" in input.model ? input.model.modelID : input.model.id
+    const nextMessage: MessageV2.User = {
+      id: Identifier.ascending("message"),
+      role: "user",
+      sessionID: input.sessionID,
+      time: {
+        created: Date.now(),
+      },
+      agent: approved ? previousAgent : "plan",
+      model: {
+        providerID: input.model.providerID,
+        modelID,
+      },
+    }
+    await Session.updateMessage(nextMessage)
+    await Session.updatePart({
+      id: Identifier.ascending("part"),
+      messageID: nextMessage.id,
+      sessionID: input.sessionID,
+      type: "text",
+      synthetic: true,
+      text: approved
+        ? `The plan at ${planPath} has been approved. You are now back in ${previousAgent} mode. Execute the plan.`
+        : "The plan was not approved yet. Stay in plan mode and continue refining the plan.",
+    })
+
+    return true
+  }
+
   const DOOM_LOOP_THRESHOLD = 3
   const log = Log.create({ service: "session.processor" })
 
@@ -398,6 +492,11 @@ export namespace SessionProcessor {
           if (needsCompaction) return "compact"
           if (blocked) return "stop"
           if (input.assistantMessage.error) return "stop"
+          await fallbackPlanExitIfNeeded({
+            sessionID: input.sessionID,
+            assistantMessage: input.assistantMessage,
+            model: input.model,
+          })
           return "continue"
         }
       },
