@@ -1,3 +1,0 @@
-Not shown: 998 closed tcp ports (conn-refused)
-5000/tcp open  upnp
-7000/tcp open  afs3-fileserver
