@@ -1,6 +1,7 @@
 import { getFilename } from "@opencode-ai/util/path"
 import { type AgentPartInput, type FilePartInput, type Part, type TextPartInput } from "@opencode-ai/sdk/v2/client"
 import type { FileSelection } from "@/context/file"
+import { encodeFilePath } from "@/context/file/path"
 import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt } from "@/context/prompt"
 import { Identifier } from "@/utils/id"
 
@@ -27,14 +28,11 @@ type BuildRequestPartsInput = {
   sessionDirectory: string
 }
 
-const absolute = (directory: string, path: string) =>
-  path.startsWith("/") ? path : (directory + "/" + path).replace("//", "/")
+const isAbsolutePath = (path: string) =>
+  path.startsWith("/") || path.startsWith("\\\\") || path.startsWith("//") || /^[A-Za-z]:[\\/]/.test(path)
 
-const encodeFilePath = (filepath: string): string =>
-  filepath
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/")
+const absolute = (directory: string, path: string) =>
+  isAbsolutePath(path) ? path : (directory + "/" + path).replace("//", "/")
 
 const fileQuery = (selection: FileSelection | undefined) =>
   selection ? `?start=${selection.startLine}&end=${selection.endLine}` : ""

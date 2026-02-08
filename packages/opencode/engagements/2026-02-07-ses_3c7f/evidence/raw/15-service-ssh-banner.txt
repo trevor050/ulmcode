@@ -1,9 +1,0 @@
-debug1: OpenSSH_10.0p2, LibreSSL 3.3.6
-debug1: Reading configuration data /etc/ssh/ssh_config
-debug1: Reading configuration data /etc/ssh/ssh_config.d/100-macos.conf
-debug1: /etc/ssh/ssh_config.d/100-macos.conf line 1: Applying options for *
-debug1: Reading configuration data /etc/ssh/crypto.conf
-Pseudo-terminal will not be allocated because stdin is not a terminal.
-debug1: Authenticator provider $SSH_SK_PROVIDER did not resolve; disabling
-debug1: Connecting to localhost port 22.
-ssh: connect to host localhost port 22: Connection refused
