@@ -50,3 +50,38 @@ Last updated: 2026-02-08
   - i18n key updates across language packs.
 - ULM custom cyber flow files in `packages/opencode/*` merged without conflicts in this sync.
 - 2026-02-08 follow-up: fully untracked `packages/opencode/engagements/**` from git and enforced ignore-only runtime handling (keep only `.gitkeep` tracked).
+
+## Daily Upstream Sync Automation Contract
+- Goal: run a daily catch-up from `upstream/dev` into fork `dev` without losing ULM cyber custom behavior.
+- Always sync in a branch named `codex/upstream-sync-<YYYYMMDD>`.
+- Required sequence:
+  1) `git checkout dev && git pull origin dev`
+  2) `git fetch upstream --prune`
+  3) create sync branch from current `dev`
+  4) `git merge --no-ff upstream/dev`
+  5) resolve conflicts using precedence rules below
+  6) run validation (`bun turbo typecheck` at minimum)
+  7) push branch and open PR into `dev`
+
+### Conflict Handling Rules
+- Treat `packages/opencode/**` as ULM-critical surface:
+  - preserve ULM-specific cyber orchestration behavior by default,
+  - adopt upstream fixes when they do not change ULM contracts.
+- For prompt and routing files, never silently drop ULM mappings:
+  - `packages/opencode/src/session/prompt/cyber-core.txt`
+  - `packages/opencode/src/agent/prompt/pentest.txt`
+  - `packages/opencode/src/agent/prompt/pentest-auto.txt`
+- For engagement runtime artifacts:
+  - keep `packages/opencode/engagements/**` ignored and untracked (except `.gitkeep`),
+  - do not reintroduce tracked engagement outputs during conflict resolution.
+- If conflict touches both security-critical behavior and upstream runtime assumptions, prefer explicit manual reconciliation and document the decision in PR notes.
+
+### Required PR Format For Syncs
+- Title: `chore(sync): merge upstream dev into fork (<YYYY-MM-DD>)`
+- Base/head: `dev <- codex/upstream-sync-<YYYYMMDD>`
+- PR body must include:
+  - upstream behind/ahead counts at sync start,
+  - high-impact areas changed upstream,
+  - files/areas where ULM logic was intentionally preserved,
+  - validation commands run + pass/fail,
+  - explicit callout of unresolved risk or follow-up tasks (if any).
