@@ -31,6 +31,8 @@ Last updated: 2026-02-10
   - `failed_commands`
 - Skill reference discovery needs all `references/*.md` files enumerated, not sampled subsets.
 - Runtime engagement artifacts under `packages/opencode/engagements/*` are local/runtime state and should stay ignored in git.
+- History rewrite caution: running `git-filter-repo` across active branch history rewrites commit SHAs and can make fork divergence metrics explode (for example, thousands "ahead" with similar content). If cleanup is required, prefer path-scoped rewrites and then rebuild `dev` on top of `upstream/dev` with a squashed delta to restore sane ahead/behind counts.
+- Branding gotcha (2026-02-10): keep external docs/service URLs on real OpenCode domains (for example `opencode.ai`, `api.opencode.ai`) unless DNS/domain ownership is confirmed. String-rebranding helpers should not rewrite domains by default.
 
 ## Maintenance Rules
 - Update this file whenever:

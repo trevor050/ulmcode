@@ -610,7 +610,7 @@ function App() {
         DialogAlert.show(
           dialog,
           "Warning",
-          "While openrouter is a convenient way to access LLMs your request will often be routed to subpar providers that do not work well in our testing.\n\nFor reliable access to models check out ULMCode Zen\nhttps://ulmcode.ai/zen",
+          "While openrouter is a convenient way to access LLMs your request will often be routed to subpar providers that do not work well in our testing.\n\nFor reliable access to models check out ULMCode Zen\nhttps://opencode.ai/zen",
         ).then(() => kv.set("openrouter_warning", true))
       })
     }
