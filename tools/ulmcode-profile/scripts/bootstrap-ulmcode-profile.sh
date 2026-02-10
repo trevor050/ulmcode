@@ -3,21 +3,33 @@ set -euo pipefail
 
 PROFILE_DIR="${1:-$HOME/.config/ulmcode}"
 WITH_PDF="${WITH_PDF:-0}"
+WITH_DEFENSIVE="${WITH_DEFENSIVE:-1}"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
-SKILLS_SRC="$ROOT_DIR/skills/pentest-compact"
-SKILLS_DST="$PROFILE_DIR/skills/pentest-compact"
+PENTEST_SKILLS_SRC="$ROOT_DIR/skills/pentest-compact"
+PENTEST_SKILLS_DST="$PROFILE_DIR/skills/pentest-compact"
+DEFENSIVE_SKILLS_SRC="$ROOT_DIR/skills/defensive-compact"
+DEFENSIVE_SKILLS_DST="$PROFILE_DIR/skills/defensive-compact"
 CONFIG_FILE="$PROFILE_DIR/opencode.json"
 LAUNCHER_FILE="$PROFILE_DIR/ulmcode-launch.sh"
 
-if [[ ! -d "$SKILLS_SRC" ]]; then
-  echo "[error] missing skills source: $SKILLS_SRC" >&2
+if [[ ! -d "$PENTEST_SKILLS_SRC" ]]; then
+  echo "[error] missing skills source: $PENTEST_SKILLS_SRC" >&2
   exit 1
 fi
 
 mkdir -p "$PROFILE_DIR/skills"
-rm -rf "$SKILLS_DST"
-cp -R "$SKILLS_SRC" "$SKILLS_DST"
+rm -rf "$PENTEST_SKILLS_DST"
+cp -R "$PENTEST_SKILLS_SRC" "$PENTEST_SKILLS_DST"
+
+if [[ "$WITH_DEFENSIVE" == "1" ]]; then
+  if [[ ! -d "$DEFENSIVE_SKILLS_SRC" ]]; then
+    echo "[error] missing defensive skills source: $DEFENSIVE_SKILLS_SRC" >&2
+    exit 1
+  fi
+  rm -rf "$DEFENSIVE_SKILLS_DST"
+  cp -R "$DEFENSIVE_SKILLS_SRC" "$DEFENSIVE_SKILLS_DST"
+fi
 
 # Optional standalone pdf skill for report-heavy workflows.
 if [[ "$WITH_PDF" == "1" ]]; then
@@ -25,29 +37,33 @@ if [[ "$WITH_PDF" == "1" ]]; then
   cp -R "$HOME/.config/opencode/skill/pdf/." "$PROFILE_DIR/skills/pdf/" 2>/dev/null || true
 fi
 
-python3 - <<'PY' "$CONFIG_FILE" "$PROFILE_DIR" "$WITH_PDF"
+python3 - <<'PY' "$CONFIG_FILE" "$PROFILE_DIR" "$WITH_PDF" "$WITH_DEFENSIVE"
 import json, pathlib, re, sys
 config_file = pathlib.Path(sys.argv[1])
 profile_dir = pathlib.Path(sys.argv[2])
 with_pdf = sys.argv[3] == '1'
-skill_root = profile_dir / 'skills' / 'pentest-compact'
+with_defensive = sys.argv[4] == '1'
+skill_roots = [profile_dir / 'skills' / 'pentest-compact']
+if with_defensive:
+    skill_roots.append(profile_dir / 'skills' / 'defensive-compact')
 
 skill_names = []
-for p in sorted(skill_root.rglob('SKILL.md')):
-    t = p.read_text(errors='ignore')
-    m = re.search(r'^name:\s*(.+)$', t, re.M)
-    if not m:
-        continue
-    n = m.group(1).strip().strip('"')
-    if n not in skill_names:
-        skill_names.append(n)
+for skill_root in skill_roots:
+    for p in sorted(skill_root.rglob('SKILL.md')):
+        t = p.read_text(errors='ignore')
+        m = re.search(r'^name:\s*(.+)$', t, re.M)
+        if not m:
+            continue
+        n = m.group(1).strip().strip('"')
+        if n not in skill_names:
+            skill_names.append(n)
 if with_pdf:
     skill_names.append('pdf')
 
 cfg = {
   "$schema": "https://opencode.ai/config.json",
   "skills": {
-    "paths": [str(skill_root)] + ([str(profile_dir / 'skills' / 'pdf')] if with_pdf else [])
+    "paths": [str(root) for root in skill_roots] + ([str(profile_dir / 'skills' / 'pdf')] if with_pdf else [])
   },
   "permission": {
     "skill": {
@@ -108,6 +124,11 @@ This profile is strict-isolation mode for district pentest operations.
   - ROE/scope/change-control -> k12-engagement-safety-and-change-control + safety reference
   - FERPA/privacy/report packaging/PDF -> k12-risk-mapping-and-reporting + reporting/compliance/pdf reference
   - multi-agent handoff/quality -> k12-agent-orchestration-and-quality + session-handoff/agent-evaluation
+  - baseline/hardening -> k12-hardening-baseline + windows/linux/mfa checklists
+  - compliance mapping -> k12-compliance-mapping + FERPA/CIS/evidence references
+  - detection engineering -> k12-detection-engineering + coverage/triage/log-source references
+  - incident response -> k12-incident-response + IR/artifacts/chain-of-custody references
+  - phishing defense -> k12-phishing-defense + campaign/email-auth/awareness references
 
 ## Operational note
 Use this profile launcher for field engagements to prevent skill leakage from shared environments.
