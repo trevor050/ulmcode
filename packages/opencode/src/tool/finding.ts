@@ -9,6 +9,20 @@ import { Session } from "@/session"
 import { CyberEnvironment } from "@/session/environment"
 
 const Severity = z.enum(["critical", "high", "medium", "low", "info"])
+const FindingType = z.enum([
+  "vulnerability",
+  "misconfiguration",
+  "compliance_gap",
+  "hardening_recommendation",
+  "positive_control",
+  "detection_gap",
+  "policy_violation",
+])
+const ControlRef = z.object({
+  framework: z.string().describe("Control framework name, e.g. CIS, NIST_CSF, FERPA"),
+  control_id: z.string().describe("Control identifier, e.g. 5.2.1"),
+  description: z.string().optional().describe("Optional human-friendly control description"),
+})
 const EvidenceRef = z.object({
   path: z.string().describe("Evidence file path (absolute or engagement-root relative)"),
   line_hint: z
@@ -25,6 +39,20 @@ const parameters = z.object({
   evidence: z.string().describe("Concrete evidence supporting the finding"),
   impact: z.string().describe("Likely impact if the issue is exploited"),
   recommendation: z.string().describe("Actionable remediation guidance"),
+  finding_type: FindingType.default("vulnerability").describe("Finding category for offensive or defensive workflows"),
+  control_refs: z.array(ControlRef).optional().describe("Optional compliance/control mappings for this finding"),
+  baseline_state: z
+    .string()
+    .optional()
+    .describe("Optional current observed baseline state (used for hardening/config drift reporting)"),
+  expected_state: z
+    .string()
+    .optional()
+    .describe("Optional expected baseline state (used for hardening/config drift reporting)"),
+  positive_finding: z
+    .boolean()
+    .default(false)
+    .describe("Set true when this finding documents a verified positive control that should be maintained"),
   evidence_refs: z
     .array(EvidenceRef)
     .optional()
@@ -66,6 +94,18 @@ function findingBlock(input: FindingInput, now: string, id: string) {
     evidence: input.evidence.trim(),
     impact: input.impact.trim(),
     recommendation: input.recommendation.trim(),
+    finding_type: input.finding_type,
+    control_refs:
+      input.control_refs
+        ?.map((ref) => ({
+          framework: ref.framework.trim(),
+          control_id: ref.control_id.trim(),
+          description: ref.description?.trim() || undefined,
+        }))
+        .filter((ref) => ref.framework.length > 0 && ref.control_id.length > 0) ?? [],
+    baseline_state: input.baseline_state?.trim() || undefined,
+    expected_state: input.expected_state?.trim() || undefined,
+    positive_finding: input.positive_finding,
     evidence_refs:
       input.evidence_refs
         ?.map((ref) => ({
@@ -89,6 +129,12 @@ function findingBlock(input: FindingInput, now: string, id: string) {
           .map((ref) => `- ${ref.path}${ref.line_hint ? ` (${ref.line_hint})` : ""}`)
           .join("\n")
       : "- N/A"
+  const controlRefs =
+    normalized.control_refs.length > 0
+      ? normalized.control_refs
+          .map((ref) => `- ${ref.framework}:${ref.control_id}${ref.description ? ` - ${ref.description}` : ""}`)
+          .join("\n")
+      : "- N/A"
 
   return {
     id,
@@ -99,7 +145,16 @@ function findingBlock(input: FindingInput, now: string, id: string) {
       `- severity: ${normalized.severity}`,
       `- confidence: ${normalized.confidence}`,
       `- asset: ${normalized.asset}`,
+      `- finding_type: ${normalized.finding_type}`,
+      `- positive_finding: ${normalized.positive_finding ? "true" : "false"}`,
       `- non_destructive: ${normalized.non_destructive ? "true" : "false"}`,
+      "",
+      "#### Control References",
+      controlRefs,
+      "",
+      "#### Baseline Delta",
+      `- current_state: ${normalized.baseline_state ?? "N/A"}`,
+      `- expected_state: ${normalized.expected_state ?? "N/A"}`,
       "",
       "#### Evidence",
       normalized.evidence,

@@ -7,6 +7,16 @@ import { CyberEnvironment } from "@/session/environment"
 import { Config } from "@/config/config"
 
 export namespace ReportBundle {
+  const FindingType = z.enum([
+    "vulnerability",
+    "misconfiguration",
+    "compliance_gap",
+    "hardening_recommendation",
+    "positive_control",
+    "detection_gap",
+    "policy_violation",
+  ])
+
   export const Finding = z.object({
     id: z.string(),
     title: z.string(),
@@ -16,6 +26,19 @@ export namespace ReportBundle {
     evidence: z.string(),
     impact: z.string(),
     recommendation: z.string(),
+    finding_type: FindingType.default("vulnerability"),
+    control_refs: z
+      .array(
+        z.object({
+          framework: z.string(),
+          control_id: z.string(),
+          description: z.string().optional(),
+        }),
+      )
+      .default([]),
+    baseline_state: z.string().optional(),
+    expected_state: z.string().optional(),
+    positive_finding: z.boolean().default(false),
     evidence_refs: z
       .array(
         z.object({
@@ -25,7 +48,7 @@ export namespace ReportBundle {
       )
       .default([]),
     safe_reproduction_steps: z.array(z.string()),
-    non_destructive: z.literal(true),
+    non_destructive: z.boolean().default(true),
   })
   export type Finding = z.infer<typeof Finding>
 
@@ -102,7 +125,10 @@ export namespace ReportBundle {
         const normalized = Finding.parse({
           ...parsed,
           safe_reproduction_steps: Array.isArray(parsed.safe_reproduction_steps) ? parsed.safe_reproduction_steps : [],
-          non_destructive: true,
+          non_destructive: typeof parsed.non_destructive === "boolean" ? parsed.non_destructive : true,
+          finding_type: typeof parsed.finding_type === "string" ? parsed.finding_type : "vulnerability",
+          control_refs: Array.isArray(parsed.control_refs) ? parsed.control_refs : [],
+          positive_finding: typeof parsed.positive_finding === "boolean" ? parsed.positive_finding : false,
         })
         findings.push(normalized)
       } catch {
@@ -226,6 +252,32 @@ export namespace ReportBundle {
           finding_id: finding.id,
         })
         localWarnings.push("No structured evidence references")
+      }
+
+      if (
+        (finding.finding_type === "compliance_gap" || finding.finding_type === "policy_violation") &&
+        finding.control_refs.length === 0
+      ) {
+        warnings.push({
+          code: "missing_control_refs",
+          level: "warning",
+          message: `${finding.id} is ${finding.finding_type} but has no control_refs mappings.`,
+          finding_id: finding.id,
+        })
+        localWarnings.push("No control mappings for compliance/policy finding")
+      }
+
+      if (
+        finding.finding_type === "hardening_recommendation" &&
+        (!finding.baseline_state || !finding.expected_state)
+      ) {
+        warnings.push({
+          code: "missing_baseline_delta",
+          level: "warning",
+          message: `${finding.id} is hardening_recommendation but baseline_state/expected_state is incomplete.`,
+          finding_id: finding.id,
+        })
+        localWarnings.push("Incomplete baseline delta metadata")
       }
 
       for (const missing of evidence.missingRefs) {
@@ -601,11 +653,19 @@ export namespace ReportBundle {
           `### ${idx + 1}. ${finding.title}`,
           `- ID: ${finding.id}`,
           `- Severity: ${finding.severity}`,
+          `- Type: ${finding.finding_type}`,
+          `- Positive control: ${finding.positive_finding ? "yes" : "no"}`,
           `- Confidence: ${finding.confidence}`,
           `- Asset: ${finding.asset}`,
           `- Adjusted confidence: ${
             input.perFindingQuality.find((entry) => entry.finding_id === finding.id)?.adjusted_confidence ?? finding.confidence
           }`,
+          ...(finding.control_refs.length > 0
+            ? [`- Control refs: ${finding.control_refs.map((ref) => `${ref.framework}:${ref.control_id}`).join(", ")}`]
+            : []),
+          ...(finding.baseline_state || finding.expected_state
+            ? [`- Baseline delta: current="${finding.baseline_state ?? "N/A"}", expected="${finding.expected_state ?? "N/A"}"`]
+            : []),
           `- Impact: ${finding.impact}`,
           `- Recommendation: ${finding.recommendation}`,
           "",
@@ -634,6 +694,7 @@ export namespace ReportBundle {
   function renderRemediationPlan(input: { findings: Finding[] }) {
     const sorted = sortBySeverity(input.findings)
     const top = sorted[0]
+    const positiveControls = sorted.filter((f) => f.positive_finding)
     return [
       "# Remediation Plan",
       "",
@@ -649,6 +710,11 @@ export namespace ReportBundle {
       ...sorted.filter((f) => f.severity === "medium").map((f) => `- ${f.id}: ${f.recommendation}`),
       "### 61-90 Days",
       ...sorted.filter((f) => ["low", "info"].includes(f.severity)).map((f) => `- ${f.id}: ${f.recommendation}`),
+      "",
+      "## Controls To Preserve",
+      ...(positiveControls.length > 0
+        ? positiveControls.map((f) => `- ${f.id}: Maintain validated control "${f.title}".`)
+        : ["- No explicit positive controls were logged in this engagement."]),
       "",
       "## Validation Gates",
       "- Re-test all critical/high findings after remediation implementation.",
@@ -731,11 +797,19 @@ export namespace ReportBundle {
         [
           `### [${finding.id}] ${finding.title}`,
           `- Severity: ${finding.severity}`,
+          `- Type: ${finding.finding_type}`,
+          `- Positive control: ${finding.positive_finding ? "yes" : "no"}`,
           `- Confidence: ${finding.confidence}`,
           `- Adjusted confidence: ${
             input.perFindingQuality.find((entry) => entry.finding_id === finding.id)?.adjusted_confidence ?? finding.confidence
           }`,
           `- Asset: ${finding.asset}`,
+          ...(finding.control_refs.length > 0
+            ? [`- Control refs: ${finding.control_refs.map((ref) => `${ref.framework}:${ref.control_id}`).join(", ")}`]
+            : []),
+          ...(finding.baseline_state || finding.expected_state
+            ? [`- Baseline delta: current="${finding.baseline_state ?? "N/A"}", expected="${finding.expected_state ?? "N/A"}"`]
+            : []),
           "- Evidence-backed statement: see source index references.",
           "",
           "#### Impact",

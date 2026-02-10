@@ -14,7 +14,7 @@ Last updated: 2026-02-10
 - `tools/ulmcode-profile`: skill profile + bootstrap sync scripts used by runtime harness.
 
 ## Current Behavior Snapshot
-- `AutoPentest` is the default guided mode when no explicit agent is set.
+- `pentest` is the default guided mode when no explicit agent is set.
 - Guided flow is plan-first and requires explicit confirmation before execution handoff (`plan_exit`).
 - Engagement scaffold must maintain required artifacts (`finding.md`, `handoff.md`, `engagement.md`, evidence folders, agent results, reports).
 - Reporting flow is enforced; `report_writer` must run before finalization.
@@ -33,6 +33,25 @@ Last updated: 2026-02-10
 - Runtime engagement artifacts under `packages/opencode/engagements/*` are local/runtime state and should stay ignored in git.
 - History rewrite caution: running `git-filter-repo` across active branch history rewrites commit SHAs and can make fork divergence metrics explode (for example, thousands "ahead" with similar content). If cleanup is required, prefer path-scoped rewrites and then rebuild `dev` on top of `upstream/dev` with a squashed delta to restore sane ahead/behind counts.
 - Branding gotcha (2026-02-10): keep external docs/service URLs on real OpenCode domains (for example `opencode.ai`, `api.opencode.ai`) unless DNS/domain ownership is confirmed. String-rebranding helpers should not rewrite domains by default.
+- Prompt/runtime gotcha (2026-02-10): cyber environment details now flow through system context, while synthetic cyber reminders are intentionally sparse and reserved for late-stage gates.
+- Opus 4.6 guardrail (2026-02-10): disable synthetic assistant reminder injection to satisfy strict Claude user-message sequencing behavior.
+
+## Parallel Agent Branching Contract
+- Multiple agents can safely run in parallel on this machine, but only with strict branch/worktree isolation.
+- All feature implementation happens in the `opencode/` git repo root.
+- Every agent session must create and stay on its own `codex/*` feature branch.
+- Direct commits to `dev`/`main` are prohibited for agent work.
+- Recommended setup: one git worktree per active agent branch (prevents shared working-tree collisions and accidental cross-agent staging).
+- Mandatory pre-edit branch check:
+  - `git rev-parse --abbrev-ref HEAD`
+  - if current branch is `dev`/`main`, branch off immediately before touching files.
+- Handoff contract per agent:
+  - provide branch name,
+  - latest commit SHA,
+  - concise change summary + known risks/tests.
+- Conflict hygiene:
+  - never revert unrelated dirty files,
+  - if unrelated changes appear, stop and report rather than "cleaning up".
 
 ## Maintenance Rules
 - Update this file whenever:
@@ -40,7 +59,8 @@ Last updated: 2026-02-10
   - scaffold contracts change,
   - reporting gates or quality modes change,
   - skill/reference discovery behavior changes,
-  - any "tricky" behavior required for reliability is introduced.
+  - any "tricky" behavior required for reliability is introduced,
+  - branch/worktree coordination rules for multi-agent development change.
 
 ## Licensing Policy
 - 2026-02-08: project license changed from MIT to `PolyForm Noncommercial 1.0.0`.
@@ -94,6 +114,15 @@ Last updated: 2026-02-10
   2) keep all engagement runtime artifacts local-only and untracked,
   3) if any of these paths appear in git history, perform history rewrite + force-push cleanup to `origin/dev` and `origin/main`.
 
+## Agent Surface Simplification (2026-02-10)
+- Primary agent UX now targets three clear roles: `plan` (read-only planning), `pentest` (guided cyber orchestrator), and `action` (general one-off operator mode).
+- `pentest` is the canonical default behavior when `default_agent` is unset.
+- Legacy IDs remain for compatibility but should be treated as aliases:
+  - `AutoPentest`, `pentest_flow`, `pentest_auto` -> `pentest`
+  - `build` -> `action`
+- Workspace custom docs agent at `.opencode/agent/docs.md` was removed to reduce selector clutter and avoid non-cyber mode confusion.
+- TUI plan handoff should return to the last active visible primary agent after `plan_exit` rather than forcing hidden aliases.
+
 ### Required PR Format For Syncs
 - Title: `chore(sync): merge upstream dev into fork (<YYYY-MM-DD>)`
 - Base/head: `dev <- codex/upstream-sync-<YYYYMMDD>`
@@ -113,3 +142,14 @@ Last updated: 2026-02-10
   - bot/human reviews/comments for the latest commit are visible.
 - Keep 8 minutes as a max wait ceiling, not a mandatory delay.
 - If checks are still pending/queued after 8 minutes, continue with a slower poll loop (every 2-3 minutes) and classify the run as `blocked` only when there is a durable external blocker (for example: stuck queue, permission issue, or unavailable runners).
+
+## Defensive Expansion Notes (2026-02-10)
+- Added defensive finding metadata support in `packages/opencode/src/tool/finding.ts` and `packages/opencode/src/report/report.ts`:
+  - `finding_type`, `control_refs`, `baseline_state`, `expected_state`, `positive_finding`
+- Added quality warning hooks for defensive report integrity:
+  - `missing_control_refs` for compliance/policy findings without mappings
+  - `missing_baseline_delta` for hardening recommendations without current/expected states
+- Added standalone defensive tools (manual + file-ingest, API-adapter-ready contracts):
+  - `baseline_check`, `compliance_mapper`, `alert_analyzer`, `detection_validator`, `ir_timeline_builder`
+- Added defensive skill pack source at `tools/ulmcode-profile/skills/defensive-compact/*` with compact SKILL.md + references model.
+- Updated profile bootstrap script to optionally include defensive skill pack by default (`WITH_DEFENSIVE=1`) while preserving strict deny-by-default skill permissions.
