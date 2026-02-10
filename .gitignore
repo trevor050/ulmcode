@@ -27,3 +27,9 @@ target
 opencode-dev
 logs/
 *.bun-build
+
+# ULM security: never commit runtime engagement artifacts/reports
+packages/opencode/finding.md
+packages/opencode/.engagements_link_backup
+packages/opencode/.opencode/engagements/**
+packages/opencode/.opencode/engagements_legacy_backup/**

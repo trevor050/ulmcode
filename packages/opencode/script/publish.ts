@@ -78,7 +78,7 @@ if (!Script.preview) {
     "pkgdesc='The AI coding agent built for the terminal.'",
     "url='https://github.com/anomalyco/opencode'",
     "arch=('aarch64' 'x86_64')",
-    "license=('MIT')",
+    "license=('PolyForm-Noncommercial-1.0.0')",
     "provides=('opencode')",
     "conflicts=('opencode')",
     "depends=('ripgrep')",

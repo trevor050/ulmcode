@@ -63,13 +63,19 @@ export namespace LLM {
       Auth.get(input.model.providerID),
     ])
     const isCodex = provider.id === "openai" && auth?.type === "oauth"
+    const includeCyber = !(input.agent.hidden === true && ["title", "summary", "compaction"].includes(input.agent.name))
+
+    const modelSystem = isCodex ? [] : SystemPrompt.provider(input.model, { includeCyber })
+    const agentSystem = input.agent.prompt
+      ? [input.agent.prompt, ...(includeCyber ? [SystemPrompt.cyberCore()] : [])]
+      : modelSystem
 
     const system = []
     system.push(
       [
         // use agent prompt otherwise provider prompt
         // For Codex sessions, skip SystemPrompt.provider() since it's sent via options.instructions
-        ...(input.agent.prompt ? [input.agent.prompt] : isCodex ? [] : SystemPrompt.provider(input.model)),
+        ...agentSystem,
         // any custom prompt passed into this call
         ...input.system,
         // any custom prompt from last user message
@@ -111,9 +117,7 @@ export namespace LLM {
       mergeDeep(input.agent.options),
       mergeDeep(variant),
     )
-    if (isCodex) {
-      options.instructions = SystemPrompt.instructions()
-    }
+    if (isCodex) options.instructions = SystemPrompt.instructions({ includeCyber })
 
     const params = await Plugin.trigger(
       "chat.params",

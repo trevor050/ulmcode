@@ -1,6 +1,8 @@
 import { Tool } from "./tool"
 import DESCRIPTION from "./task.txt"
 import z from "zod"
+import path from "path"
+import fs from "fs/promises"
 import { Session } from "../session"
 import { MessageV2 } from "../session/message-v2"
 import { Identifier } from "../id/id"
@@ -10,6 +12,7 @@ import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { PermissionNext } from "@/permission/next"
+import { CyberEnvironment } from "@/session/environment"
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
@@ -25,7 +28,7 @@ const parameters = z.object({
 })
 
 export const TaskTool = Tool.define("task", async (ctx) => {
-  const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
+  const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary" && a.hidden !== true))
 
   // Filter agents by permissions if agent provided
   const caller = ctx?.agent
@@ -100,6 +103,18 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           ],
         })
       })
+      const parent = await Session.get(ctx.sessionID)
+      const environment = session.environment ?? parent.environment
+      if (environment?.type === "cyber") {
+        await CyberEnvironment.ensureSharedScaffold({
+          environment,
+          session,
+        })
+        await CyberEnvironment.ensureSubagentWorkspace({
+          environment,
+          session,
+        })
+      }
       const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
 
@@ -123,7 +138,45 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       }
       ctx.abort.addEventListener("abort", cancel)
       using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
-      const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
+      const envBlock =
+        environment?.type === "cyber"
+          ? [
+              "<system-reminder>",
+              "CYBER SUBAGENT WORKSPACE CONTEXT",
+              `environment.root=${environment.root}`,
+              `finding.md=${CyberEnvironment.resolveFindingPath(session)}`,
+              `handoff.md=${path.join(environment.root, "handoff.md")}`,
+              `results.md=${path.join(environment.root, "agents", session.id, "results.md")}`,
+              "IMPORTANT: Paths include spaces on this host. Always wrap absolute paths in double quotes in shell commands.",
+              `Example: ls -la "${environment.root}"`,
+              "Do not overlap scope with parallel subagents.",
+              "Continuously update findings.md through the finding tool when validated.",
+              "Append handoff notes before finishing.",
+              "Write a concise completion summary to results.md before ending.",
+              "MANDATORY: End results.md with this compact section template:",
+              "## Structured Summary",
+              "- executed_commands: [list commands actually run]",
+              "- generated_files: [list artifact paths created or updated]",
+              "- unverified_claims: [list claims not validated with direct evidence, or []]",
+              "- failed_commands: [list command + reason, including permission denials/root requirements, or []]",
+              "For assess runs: classify findings as validated vs hypothesis; only validated findings should carry high confidence.",
+              "If a command partially fails (permission denied, requires root, timeout), record it explicitly in failed_commands and adjust confidence.",
+              "Use command profiles by scope: home/internal => non-destructive recon defaults first, then deeper checks only with explicit operator approval.",
+              ...(agent.name === "report_writer"
+                ? [
+                    "REPORT_WRITER STAGED WORKFLOW IS MANDATORY:",
+                    "1) Explore all available engagement artifacts first.",
+                    "2) Synthesize findings and create report-plan.md.",
+                    "3) Build report-outline.md and report-draft.md in parts.",
+                    "4) Produce results.md and remediation-plan.md.",
+                    "5) Finalize by calling report_finalize.",
+                  ]
+                : []),
+              "</system-reminder>",
+              "",
+            ].join("\n")
+          : ""
+      const promptParts = await SessionPrompt.resolvePromptParts(envBlock + params.prompt)
 
       const result = await SessionPrompt.prompt({
         messageID,
@@ -143,6 +196,28 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       })
 
       const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
+
+      if (environment?.type === "cyber") {
+        const denial = /prevents you from using this specific tool call|permission[^.\n]*deny/i.test(text)
+        if (denial) {
+          const handoffPath = path.join(environment.root, "handoff.md")
+          const resultsPath = path.join(environment.root, "agents", session.id, "results.md")
+          const warning = [
+            "",
+            "## Runtime Warning",
+            `- timestamp: ${new Date().toISOString()}`,
+            `- subagent: ${agent.name}`,
+            "- issue: Permission denial encountered during execution",
+            "- impact: Some planned artifact updates or checks may be incomplete",
+            "- action: Review failed_commands and rerun with adjusted permissions/scope if needed",
+            "",
+          ].join("\n")
+          await Promise.all([
+            fs.appendFile(handoffPath, warning).catch(() => {}),
+            fs.appendFile(resultsPath, warning).catch(() => {}),
+          ])
+        }
+      }
 
       const output = [
         `task_id: ${session.id} (for resuming to continue this task if needed)`,

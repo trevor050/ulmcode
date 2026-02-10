@@ -6,6 +6,8 @@ import { Skill } from "../skill"
 import { PermissionNext } from "../permission/next"
 import { Ripgrep } from "../file/ripgrep"
 import { iife } from "@/util/iife"
+import { ConfigMarkdown } from "../config/markdown"
+import { Filesystem } from "@/util/filesystem"
 
 export const SkillTool = Tool.define("skill", async (ctx) => {
   const skills = await Skill.all()
@@ -62,7 +64,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
       const skill = await Skill.get(params.name)
 
       if (!skill) {
-        const available = await Skill.all().then((x) => Object.keys(x).join(", "))
+        const available = await Skill.all().then((x) => x.map((s) => s.name).sort().join(", "))
         throw new Error(`Skill "${params.name}" not found. Available skills: ${available || "none"}`)
       }
 
@@ -77,7 +79,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
       const base = pathToFileURL(dir).href
 
       const limit = 10
-      const files = await iife(async () => {
+      const listedFiles = await iife(async () => {
         const arr = []
         for await (const file of Ripgrep.files({
           cwd: dir,
@@ -94,7 +96,81 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
           }
         }
         return arr
-      }).then((f) => f.map((file) => `<file>${file}</file>`).join("\n"))
+      })
+      const files = listedFiles.map((file) => `<file>${file}</file>`).join("\n")
+
+      // Build a lightweight references index from all references/*.md files, not just sampled skill_files.
+      const referencePaths = await iife(async () => {
+        const referencesDir = path.join(dir, "references")
+        if (!(await Filesystem.exists(referencesDir))) return []
+        const refs: string[] = []
+        for await (const file of Ripgrep.files({
+          cwd: referencesDir,
+          follow: false,
+          hidden: true,
+          signal: ctx.abort,
+        })) {
+          if (!file.endsWith(".md")) continue
+          refs.push(path.join("references", file))
+        }
+        return refs.sort((a, b) => a.localeCompare(b))
+      })
+
+      const referenceIndex = await iife(async () => {
+        const entries: string[] = []
+        for (const rel of referencePaths.slice(0, 30)) {
+          const abs = path.resolve(dir, rel)
+          const parsed = await ConfigMarkdown.parse(abs).catch(() => undefined)
+          const name =
+            parsed && typeof parsed.data?.name === "string" && parsed.data.name.trim().length > 0
+              ? parsed.data.name.trim()
+              : path.basename(rel, ".md")
+          const description =
+            parsed && typeof parsed.data?.description === "string" && parsed.data.description.trim().length > 0
+              ? parsed.data.description.trim()
+              : ""
+          entries.push(
+            [
+              "  <reference>",
+              `    <path>${abs}</path>`,
+              `    <name>${name}</name>`,
+              ...(description ? [`    <description>${description}</description>`] : []),
+              "  </reference>",
+            ].join("\n"),
+          )
+        }
+        return entries.join("\n")
+      })
+
+      // Check that in-content references to references/*.md resolve.
+      const mentionedReferenceRelPaths = Array.from(
+        new Set(
+          Array.from(
+            skill.content.matchAll(/(?:`|\()((?:\.\/)?references\/[^`\)\s]+\.md)/g),
+            (m) => m[1].replace(/^\.\//, ""),
+          ),
+        ),
+      )
+      const missingReferenceMentions = await iife(async () => {
+        const missing: string[] = []
+        for (const rel of mentionedReferenceRelPaths) {
+          const abs = path.resolve(dir, rel)
+          if (!(await Filesystem.exists(abs))) missing.push(rel)
+        }
+        return missing
+      })
+      const referenceDiagnostics =
+        mentionedReferenceRelPaths.length === 0
+          ? "<skill_reference_checks status=\"none\" />"
+          : [
+              `<skill_reference_checks status="${missingReferenceMentions.length ? "warn" : "ok"}">`,
+              ...mentionedReferenceRelPaths.map((rel) =>
+                missingReferenceMentions.includes(rel)
+                  ? `  <missing>${rel}</missing>`
+                  : `  <ok>${rel}</ok>`,
+              ),
+              "</skill_reference_checks>",
+            ].join("\n")
 
       return {
         title: `Loaded skill: ${skill.name}`,
@@ -105,8 +181,14 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
           skill.content.trim(),
           "",
           `Base directory for this skill: ${base}`,
-          "Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.",
+          "Relative paths in this skill (e.g., scripts/, references/) are relative to this base directory.",
+          "If this skill has references, read the best-matching one before specialized execution.",
+          referenceDiagnostics,
           "Note: file list is sampled.",
+          "",
+          "<reference_index>",
+          referenceIndex,
+          "</reference_index>",
           "",
           "<skill_files>",
           files,

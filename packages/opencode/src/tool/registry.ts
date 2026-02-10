@@ -27,6 +27,8 @@ import { LspTool } from "./lsp"
 import { Truncate } from "./truncation"
 import { PlanExitTool, PlanEnterTool } from "./plan"
 import { ApplyPatchTool } from "./apply_patch"
+import { FindingTool } from "./finding"
+import { ReportFinalizeTool } from "./report_finalize"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -97,7 +99,7 @@ export namespace ToolRegistry {
 
     return [
       InvalidTool,
-      ...(["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) ? [QuestionTool] : []),
+      QuestionTool,
       BashTool,
       ReadTool,
       GlobTool,
@@ -107,6 +109,8 @@ export namespace ToolRegistry {
       TaskTool,
       WebFetchTool,
       TodoWriteTool,
+      FindingTool,
+      ReportFinalizeTool,
       // TodoReadTool,
       WebSearchTool,
       CodeSearchTool,
@@ -114,7 +118,8 @@ export namespace ToolRegistry {
       ApplyPatchTool,
       ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
-      ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool, PlanEnterTool] : []),
+      PlanExitTool,
+      PlanEnterTool,
       ...custom,
     ]
   }

@@ -123,13 +123,9 @@ export namespace Ripgrep {
   )
 
   const state = lazy(async () => {
-    const system = Bun.which("rg")
-    if (system) {
-      const stat = await fs.stat(system).catch(() => undefined)
-      if (stat?.isFile()) return { filepath: system }
-      log.warn("bun.which returned invalid rg path", { filepath: system })
-    }
-    const filepath = path.join(Global.Path.bin, "rg" + (process.platform === "win32" ? ".exe" : ""))
+    let filepath = Bun.which("rg")
+    if (filepath) return { filepath }
+    filepath = path.join(Global.Path.bin, "rg" + (process.platform === "win32" ? ".exe" : ""))
 
     const file = Bun.file(filepath)
     if (!(await file.exists())) {

@@ -21,6 +21,7 @@ const AVAILABLE_TOOLS = [
   "list",
   "glob",
   "grep",
+  "finding",
   "webfetch",
   "task",
   "todowrite",

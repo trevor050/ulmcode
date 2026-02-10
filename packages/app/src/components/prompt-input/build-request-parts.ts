@@ -27,8 +27,11 @@ type BuildRequestPartsInput = {
   sessionDirectory: string
 }
 
+const isAbsolutePath = (path: string) =>
+  path.startsWith("/") || path.startsWith("\\\\") || path.startsWith("//") || /^[A-Za-z]:[\\/]/.test(path)
+
 const absolute = (directory: string, path: string) =>
-  path.startsWith("/") ? path : (directory + "/" + path).replace("//", "/")
+  isAbsolutePath(path) ? path : (directory + "/" + path).replace("//", "/")
 
 const encodeFilePath = (filepath: string): string => {
   // Normalize Windows paths: convert backslashes to forward slashes

@@ -630,6 +630,8 @@ export namespace Config {
           grep: PermissionRule.optional(),
           list: PermissionRule.optional(),
           bash: PermissionRule.optional(),
+          bash_sensitive: PermissionRule.optional(),
+          finding: PermissionRule.optional(),
           task: PermissionRule.optional(),
           external_directory: PermissionRule.optional(),
           todowrite: PermissionAction.optional(),
@@ -943,6 +945,18 @@ export namespace Config {
       ref: "ServerConfig",
     })
 
+  export const Cyber = z
+    .object({
+      report_quality_mode: z
+        .enum(["warn", "strict"])
+        .optional()
+        .describe("Report quality gate mode: warn surfaces issues, strict fails finalize on quality failures"),
+    })
+    .strict()
+    .meta({
+      ref: "CyberConfig",
+    })
+
   export const Layout = z.enum(["auto", "stretch"]).meta({
     ref: "LayoutConfig",
   })
@@ -1009,6 +1023,7 @@ export namespace Config {
       logLevel: Log.Level.optional().describe("Log level"),
       tui: TUI.optional().describe("TUI specific settings"),
       server: Server.optional().describe("Server configuration for opencode serve and web commands"),
+      cyber: Cyber.optional().describe("Cyber harness specific configuration"),
       command: z
         .record(z.string(), Command)
         .optional()

@@ -8,6 +8,7 @@
       "options": {},
     },
   },
+  "default_agent": "pentest",
   "mcp": {},
   "tools": {
     "github-triage": false,

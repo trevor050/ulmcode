@@ -7,6 +7,7 @@ import { useDialog } from "@tui/ui/dialog"
 import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
 import { useKeybind } from "../context/keybind"
 import * as fuzzysort from "fuzzysort"
+import { toULMCodeLabel } from "../util/branding"
 
 export function useConnected() {
   const sync = useSync()
@@ -58,8 +59,8 @@ export function DialogModel(props: { providerID?: string }) {
                 providerID: provider.id,
                 modelID: model.id,
               },
-              title: model.name ?? item.modelID,
-              description: provider.name,
+              title: toULMCodeLabel(model.name ?? item.modelID),
+              description: toULMCodeLabel(provider.name),
               category: "Favorites",
               disabled: provider.id === "opencode" && model.id.includes("-nano"),
               footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
@@ -91,8 +92,8 @@ export function DialogModel(props: { providerID?: string }) {
                 providerID: provider.id,
                 modelID: model.id,
               },
-              title: model.name ?? item.modelID,
-              description: provider.name,
+              title: toULMCodeLabel(model.name ?? item.modelID),
+              description: toULMCodeLabel(provider.name),
               category: "Recent",
               disabled: provider.id === "opencode" && model.id.includes("-nano"),
               footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
@@ -115,7 +116,7 @@ export function DialogModel(props: { providerID?: string }) {
       sync.data.provider,
       sortBy(
         (provider) => provider.id !== "opencode",
-        (provider) => provider.name,
+        (provider) => toULMCodeLabel(provider.name),
       ),
       flatMap((provider) =>
         pipe(
@@ -130,13 +131,13 @@ export function DialogModel(props: { providerID?: string }) {
             }
             return {
               value,
-              title: info.name ?? model,
+              title: toULMCodeLabel(info.name ?? model),
               description: favorites.some(
                 (item) => item.providerID === value.providerID && item.modelID === value.modelID,
               )
                 ? "(Favorite)"
                 : undefined,
-              category: connected() ? provider.name : undefined,
+              category: connected() ? toULMCodeLabel(provider.name) : undefined,
               disabled: provider.id === "opencode" && model.includes("-nano"),
               footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
               onSelect() {
@@ -200,7 +201,7 @@ export function DialogModel(props: { providerID?: string }) {
   )
 
   const title = createMemo(() => {
-    if (provider()) return provider()!.name
+    if (provider()) return toULMCodeLabel(provider()!.name)
     return "Select model"
   })
 

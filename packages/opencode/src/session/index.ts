@@ -22,6 +22,7 @@ import { Snapshot } from "@/snapshot"
 import type { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
 import { Global } from "@/global"
+import { CyberEnvironment } from "./environment"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -86,6 +87,7 @@ export namespace Session {
           diff: z.string().optional(),
         })
         .optional(),
+      environment: CyberEnvironment.Info.optional(),
     })
     .meta({
       ref: "Session",
@@ -210,6 +212,7 @@ export namespace Session {
     directory: string
     permission?: PermissionNext.Ruleset
   }) {
+    const parent = input.parentID ? await get(input.parentID).catch(() => undefined) : undefined
     const result: Info = {
       id: Identifier.descending("session", input.id),
       slug: Slug.create(),
@@ -223,6 +226,7 @@ export namespace Session {
         created: Date.now(),
         updated: Date.now(),
       },
+      environment: parent?.environment,
     }
     log.info("created", result)
     await Storage.write(["session", Instance.project.id, result.id], result)

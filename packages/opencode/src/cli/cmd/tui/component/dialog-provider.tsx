@@ -13,6 +13,7 @@ import { DialogModel } from "./dialog-model"
 import { useKeyboard } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { useToast } from "../ui/toast"
+import { toULMCodeLabel } from "../util/branding"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -34,7 +35,7 @@ export function createDialogProviderOptions() {
       map((provider) => {
         const isConnected = connected().has(provider.id)
         return {
-          title: provider.name,
+          title: toULMCodeLabel(provider.name),
           value: provider.id,
           description: {
             opencode: "(Recommended)",
@@ -240,10 +241,10 @@ function ApiMethod(props: ApiMethodProps) {
         props.providerID === "opencode" ? (
           <box gap={1}>
             <text fg={theme.textMuted}>
-              OpenCode Zen gives you access to all the best coding models at the cheapest prices with a single API key.
+              ULMCode Zen gives you access to all the best coding models at the cheapest prices with a single API key.
             </text>
             <text fg={theme.text}>
-              Go to <span style={{ fg: theme.primary }}>https://opencode.ai/zen</span> to get a key
+              Go to <span style={{ fg: theme.primary }}>https://ulmcode.ai/zen</span> to get a key
             </text>
           </box>
         ) : undefined

@@ -9,10 +9,21 @@ import { Auth } from "../auth"
 import { ProviderTransform } from "../provider/transform"
 
 import PROMPT_GENERATE from "./generate.txt"
+import PROMPT_ASSESS from "./prompt/assess.txt"
+import PROMPT_ACTION from "./prompt/action.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
+import PROMPT_EVIDENCE_SCRIBE from "./prompt/evidence-scribe.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
+import PROMPT_HOST_AUDITOR from "./prompt/host-auditor.txt"
+import PROMPT_NETWORK_MAPPER from "./prompt/network-mapper.txt"
+import PROMPT_PENTEST from "./prompt/pentest.txt"
+import PROMPT_PENTEST_AUTO from "./prompt/pentest-auto.txt"
+import PROMPT_RECON from "./prompt/recon.txt"
+import PROMPT_REPORT from "./prompt/report.txt"
+import PROMPT_REPORT_WRITER from "./prompt/report-writer.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
+import PROMPT_VULN_RESEARCHER from "./prompt/vuln-researcher.txt"
 import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
@@ -54,7 +65,9 @@ export namespace Agent {
     const skillDirs = await Skill.dirs()
     const defaults = PermissionNext.fromConfig({
       "*": "allow",
+      bash_sensitive: "ask",
       doom_loop: "ask",
+      finding: "deny",
       external_directory: {
         "*": "ask",
         [Truncate.GLOB]: "allow",
@@ -74,18 +87,46 @@ export namespace Agent {
     const user = PermissionNext.fromConfig(cfg.permission ?? {})
 
     const result: Record<string, Info> = {
-      build: {
-        name: "build",
-        description: "The default agent. Executes tools based on configured permissions.",
+      action: {
+        name: "action",
+        description: "Focused one-off execution mode for targeted tasks and questions.",
+        prompt: PROMPT_ACTION,
         options: {},
         permission: PermissionNext.merge(
           defaults,
           PermissionNext.fromConfig({
             question: "allow",
             plan_enter: "allow",
+            task: "allow",
+            finding: "allow",
+            webfetch: "allow",
+            websearch: "allow",
           }),
           user,
         ),
+        color: "info",
+        mode: "primary",
+        native: true,
+      },
+      build: {
+        name: "build",
+        description: "Deprecated alias for action.",
+        prompt: PROMPT_ACTION,
+        hidden: true,
+        options: {},
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            question: "allow",
+            plan_enter: "allow",
+            task: "allow",
+            finding: "allow",
+            webfetch: "allow",
+            websearch: "allow",
+          }),
+          user,
+        ),
+        color: "info",
         mode: "primary",
         native: true,
       },
@@ -112,6 +153,204 @@ export namespace Agent {
         mode: "primary",
         native: true,
       },
+      pentest: {
+        name: "pentest",
+        description:
+          "Primary cyber orchestrator for internal authorized engagements. Coordinates recon, validation, evidence, and reporting.",
+        prompt: PROMPT_PENTEST,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            question: "allow",
+            plan_enter: "allow",
+            task: "allow",
+            finding: "allow",
+            webfetch: "allow",
+            websearch: "allow",
+          }),
+          user,
+        ),
+        options: {},
+        mode: "primary",
+        native: true,
+      },
+      AutoPentest: {
+        name: "AutoPentest",
+        description:
+          "Primary cyber orchestrator with guided intake. Starts with essential pentest questions, then plans and delegates.",
+        prompt: PROMPT_PENTEST_AUTO,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            question: "allow",
+            plan_enter: "allow",
+            task: "allow",
+            finding: "allow",
+            webfetch: "allow",
+            websearch: "allow",
+          }),
+          user,
+        ),
+        options: {},
+        color: "error",
+        mode: "primary",
+        native: true,
+      },
+      pentest_flow: {
+        name: "pentest_flow",
+        description: "Deprecated alias for AutoPentest.",
+        prompt: PROMPT_PENTEST_AUTO,
+        hidden: true,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            question: "allow",
+            plan_enter: "allow",
+            task: "allow",
+            finding: "allow",
+            webfetch: "allow",
+            websearch: "allow",
+          }),
+          user,
+        ),
+        options: {},
+        mode: "primary",
+        native: true,
+      },
+      pentest_auto: {
+        name: "pentest_auto",
+        description: "Deprecated alias for AutoPentest.",
+        prompt: PROMPT_PENTEST_AUTO,
+        hidden: true,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            question: "allow",
+            plan_enter: "allow",
+            task: "allow",
+            finding: "allow",
+            webfetch: "allow",
+            websearch: "allow",
+          }),
+          user,
+        ),
+        options: {},
+        mode: "primary",
+        native: true,
+      },
+      recon: {
+        name: "recon",
+        description: "Subagent for safe internal attack-surface discovery and enumeration.",
+        prompt: PROMPT_RECON,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            read: "allow",
+            list: "allow",
+            glob: "allow",
+            grep: "allow",
+            bash: "allow",
+            edit: {
+              "*": "deny",
+              "*/engagements/*/handoff.md": "allow",
+              "*/engagements/*/agents/*/results.md": "allow",
+              "*/engagements/*/reports/*": "allow",
+            },
+            finding: "allow",
+            webfetch: "allow",
+            websearch: "allow",
+          }),
+          user,
+        ),
+        options: {},
+        mode: "subagent",
+        native: true,
+      },
+      assess: {
+        name: "assess",
+        description: "Subagent for validation, exploitability analysis, and impact triage.",
+        prompt: PROMPT_ASSESS,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            read: "allow",
+            list: "allow",
+            glob: "allow",
+            grep: "allow",
+            bash: "allow",
+            edit: {
+              "*": "deny",
+              "*/engagements/*/handoff.md": "allow",
+              "*/engagements/*/agents/*/results.md": "allow",
+              "*/engagements/*/reports/*": "allow",
+            },
+            finding: "allow",
+            webfetch: "allow",
+            websearch: "allow",
+          }),
+          user,
+        ),
+        options: {},
+        mode: "subagent",
+        native: true,
+      },
+      report: {
+        name: "report",
+        description: "Subagent for reporting, evidence normalization, and remediation framing.",
+        prompt: PROMPT_REPORT,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            read: "allow",
+            list: "allow",
+            glob: "allow",
+            grep: "allow",
+            bash: "allow",
+            edit: {
+              "*": "deny",
+              "*/engagements/*/handoff.md": "allow",
+              "*/engagements/*/agents/*/results.md": "allow",
+              "*/engagements/*/reports/*": "allow",
+            },
+            finding: "allow",
+            webfetch: "allow",
+            websearch: "allow",
+          }),
+          user,
+        ),
+        options: {},
+        mode: "subagent",
+        native: true,
+      },
+      analyst: {
+        name: "analyst",
+        description: "Compatibility alias for assess agent behavior.",
+        prompt: PROMPT_ASSESS,
+        hidden: true,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            read: "allow",
+            list: "allow",
+            glob: "allow",
+            grep: "allow",
+            bash: "allow",
+            edit: {
+              "*": "deny",
+              "*/engagements/*/handoff.md": "allow",
+              "*/engagements/*/agents/*/results.md": "allow",
+              "*/engagements/*/reports/*": "allow",
+            },
+            finding: "allow",
+            webfetch: "allow",
+            websearch: "allow",
+          }),
+          user,
+        ),
+        options: {},
+        mode: "subagent",
+        native: true,
+      },
       general: {
         name: "general",
         description: `General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel.`,
@@ -120,6 +359,116 @@ export namespace Agent {
           PermissionNext.fromConfig({
             todoread: "deny",
             todowrite: "deny",
+          }),
+          user,
+        ),
+        options: {},
+        mode: "subagent",
+        native: true,
+      },
+      network_mapper: {
+        name: "network_mapper",
+        description: "Subagent for network enumeration and attack-surface mapping.",
+        prompt: PROMPT_NETWORK_MAPPER,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            edit: {
+              "*": "deny",
+              "*/engagements/*/handoff.md": "allow",
+              "*/engagements/*/agents/*/results.md": "allow",
+              "*/engagements/*/reports/*": "allow",
+            },
+            webfetch: "allow",
+            websearch: "allow",
+          }),
+          user,
+        ),
+        options: {},
+        mode: "subagent",
+        native: true,
+      },
+      host_auditor: {
+        name: "host_auditor",
+        description: "Subagent for host-level posture and misconfiguration auditing.",
+        prompt: PROMPT_HOST_AUDITOR,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            edit: {
+              "*": "deny",
+              "*/engagements/*/handoff.md": "allow",
+              "*/engagements/*/agents/*/results.md": "allow",
+              "*/engagements/*/reports/*": "allow",
+            },
+            webfetch: "allow",
+            websearch: "allow",
+          }),
+          user,
+        ),
+        options: {},
+        mode: "subagent",
+        native: true,
+      },
+      vuln_researcher: {
+        name: "vuln_researcher",
+        description: "Subagent for exploitability and CVE validation research.",
+        prompt: PROMPT_VULN_RESEARCHER,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            edit: {
+              "*": "deny",
+              "*/engagements/*/handoff.md": "allow",
+              "*/engagements/*/agents/*/results.md": "allow",
+              "*/engagements/*/reports/*": "allow",
+            },
+            webfetch: "allow",
+            websearch: "allow",
+          }),
+          user,
+        ),
+        options: {},
+        mode: "subagent",
+        native: true,
+      },
+      evidence_scribe: {
+        name: "evidence_scribe",
+        description: "Subagent for evidence normalization and finding log quality.",
+        prompt: PROMPT_EVIDENCE_SCRIBE,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            read: "allow",
+            edit: "allow",
+            finding: "allow",
+            webfetch: "allow",
+            websearch: "allow",
+          }),
+          user,
+        ),
+        options: {},
+        mode: "subagent",
+        native: true,
+      },
+      report_writer: {
+        name: "report_writer",
+        description: "Final reporting specialist for full client-grade synthesis and PDF deliverables.",
+        prompt: PROMPT_REPORT_WRITER,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            read: "allow",
+            list: "allow",
+            glob: "allow",
+            grep: "allow",
+            bash: "allow",
+            edit: "allow",
+            write: "allow",
+            finding: "allow",
+            webfetch: "allow",
+            websearch: "allow",
+            task: "deny",
           }),
           user,
         ),
@@ -258,7 +607,7 @@ export namespace Agent {
     return pipe(
       await state(),
       values(),
-      sortBy([(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "build"), "desc"]),
+      sortBy([(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "AutoPentest"), "desc"]),
     )
   }
 
@@ -272,6 +621,11 @@ export namespace Agent {
       if (agent.mode === "subagent") throw new Error(`default agent "${cfg.default_agent}" is a subagent`)
       if (agent.hidden === true) throw new Error(`default agent "${cfg.default_agent}" is hidden`)
       return agent.name
+    }
+
+    const preferredDefault = agents.AutoPentest
+    if (preferredDefault && preferredDefault.mode !== "subagent" && preferredDefault.hidden !== true) {
+      return preferredDefault.name
     }
 
     const primaryVisible = Object.values(agents).find((a) => a.mode !== "subagent" && a.hidden !== true)

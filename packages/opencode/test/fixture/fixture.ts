@@ -20,6 +20,8 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
   await fs.mkdir(dirpath, { recursive: true })
   if (options?.git) {
     await $`git init`.cwd(dirpath).quiet()
+    await $`git config user.email "ci@opencode.local"`.cwd(dirpath).quiet()
+    await $`git config user.name "OpenCode CI"`.cwd(dirpath).quiet()
     await $`git commit --allow-empty -m "root commit ${dirpath}"`.cwd(dirpath).quiet()
   }
   if (options?.config) {

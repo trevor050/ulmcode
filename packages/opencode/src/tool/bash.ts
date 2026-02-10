@@ -13,6 +13,7 @@ import { Filesystem } from "@/util/filesystem"
 import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag.ts"
 import { Shell } from "@/shell/shell"
+import { BashRisk } from "@/tool/bash-risk"
 
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncation"
@@ -50,6 +51,11 @@ const parser = lazy(async () => {
   p.setLanguage(bashLanguage)
   return p
 })
+
+function commandPreview(command: string) {
+  const normalized = command.replace(/\s+/g, " ").trim()
+  return normalized.length > 240 ? normalized.slice(0, 237) + "..." : normalized
+}
 
 // TODO: we may wanna rename this tool so it works better on other shells
 export const BashTool = Tool.define("bash", async () => {
@@ -154,7 +160,27 @@ export const BashTool = Tool.define("bash", async () => {
         })
       }
 
+      const risk = BashRisk.classify(params.command)
+
       if (patterns.size > 0) {
+        if (risk.level === "sensitive") {
+          const approvalPatterns = Array.from(patterns)
+          await ctx.ask({
+            permission: "bash_sensitive",
+            patterns: approvalPatterns,
+            always: Array.from(always.size > 0 ? always : new Set(approvalPatterns)),
+            metadata: {
+              reason: risk.match.reason,
+              matched_rule: risk.match.matched_rule,
+              command_preview: commandPreview(params.command),
+              engagement_context: {
+                session_id: ctx.sessionID,
+                agent: ctx.agent,
+                cwd,
+              },
+            },
+          })
+        }
         await ctx.ask({
           permission: "bash",
           patterns: Array.from(patterns),
@@ -182,6 +208,14 @@ export const BashTool = Tool.define("bash", async () => {
         metadata: {
           output: "",
           description: params.description,
+          ...(risk.level === "sensitive"
+            ? {
+                bash_risk: {
+                  level: risk.level,
+                  ...risk.match,
+                },
+              }
+            : {}),
         },
       })
 
@@ -192,6 +226,14 @@ export const BashTool = Tool.define("bash", async () => {
             // truncate the metadata to avoid GIANT blobs of data (has nothing to do w/ what agent can access)
             output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
             description: params.description,
+            ...(risk.level === "sensitive"
+              ? {
+                  bash_risk: {
+                    level: risk.level,
+                    ...risk.match,
+                  },
+                }
+              : {}),
           },
         })
       }
@@ -261,6 +303,14 @@ export const BashTool = Tool.define("bash", async () => {
           output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
           exit: proc.exitCode,
           description: params.description,
+          ...(risk.level === "sensitive"
+            ? {
+                bash_risk: {
+                  level: risk.level,
+                  ...risk.match,
+                },
+              }
+            : {}),
         },
         output,
       }

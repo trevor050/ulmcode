@@ -120,9 +120,28 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     const plainText = event.dataTransfer?.getData("text/plain")
     const filePrefix = "file:"
     if (plainText?.startsWith(filePrefix)) {
-      const filePath = plainText.slice(filePrefix.length)
-      input.focusEditor()
-      input.addPart({ type: "file", path: filePath, content: "@" + filePath, start: 0, end: 0 })
+      let filePath: string | null = null
+
+      try {
+        const url = new URL(plainText)
+        if (url.protocol === "file:") {
+          let pathname = decodeURIComponent(url.pathname || "")
+          if (url.hostname) {
+            pathname = `//${url.hostname}${pathname}`
+          }
+          if (/^\/[A-Za-z]:/.test(pathname)) {
+            pathname = pathname.slice(1)
+          }
+          filePath = pathname
+        }
+      } catch {
+        filePath = plainText.slice(filePrefix.length)
+      }
+
+      if (filePath) {
+        input.focusEditor()
+        input.addPart({ type: "file", path: filePath, content: "@" + filePath, start: 0, end: 0 })
+      }
       return
     }
 

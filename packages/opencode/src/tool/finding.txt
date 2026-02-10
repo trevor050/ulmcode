@@ -1,0 +1,17 @@
+Append a validated security finding to the engagement finding log (`finding.md`) in the current project.
+
+Use this whenever a finding is confirmed with reproducible evidence.
+
+Required fields:
+- title
+- severity
+- confidence
+- asset
+- evidence
+- impact
+- recommendation
+
+Behavior:
+- Creates `finding.md` with a standard header if it does not already exist.
+- Appends a structured markdown entry for each finding.
+- Embeds a machine-readable JSON payload for report tooling.

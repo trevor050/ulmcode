@@ -12,6 +12,7 @@ import { Provider } from "@/provider/provider"
 import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
+import { toULMCodeLabel } from "../util/branding"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
@@ -227,8 +228,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const provider = sync.data.provider.find((x) => x.id === value.providerID)
           const info = provider?.models[value.modelID]
           return {
-            provider: provider?.name ?? value.providerID,
-            model: info?.name ?? value.modelID,
+            provider: toULMCodeLabel(provider?.name ?? value.providerID),
+            model: toULMCodeLabel(info?.name ?? value.modelID),
             reasoning: info?.capabilities?.reasoning ?? false,
           }
         }),
