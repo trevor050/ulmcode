@@ -588,13 +588,13 @@ description: Permission skill.
   }
 })
 
-test("defaultAgent returns AutoPentest when no default_agent config", async () => {
+test("defaultAgent returns pentest when no default_agent config", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
       const agent = await Agent.defaultAgent()
-      expect(agent).toBe("AutoPentest")
+      expect(agent).toBe("pentest")
     },
   })
 })
@@ -676,11 +676,11 @@ test("defaultAgent throws when default_agent points to non-existent agent", asyn
   })
 })
 
-test("defaultAgent falls back to action when AutoPentest is disabled and default_agent not set", async () => {
+test("defaultAgent falls back to action when pentest is disabled and default_agent not set", async () => {
   await using tmp = await tmpdir({
     config: {
       agent: {
-        AutoPentest: { disable: true },
+        pentest: { disable: true },
       },
     },
   })
@@ -689,6 +689,21 @@ test("defaultAgent falls back to action when AutoPentest is disabled and default
     fn: async () => {
       const agent = await Agent.defaultAgent()
       expect(agent).toBe("action")
+    },
+  })
+})
+
+test("defaultAgent normalizes legacy default_agent aliases", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      default_agent: "AutoPentest",
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agent = await Agent.defaultAgent()
+      expect(agent).toBe("pentest")
     },
   })
 })

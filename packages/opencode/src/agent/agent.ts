@@ -16,7 +16,6 @@ import PROMPT_EVIDENCE_SCRIBE from "./prompt/evidence-scribe.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_HOST_AUDITOR from "./prompt/host-auditor.txt"
 import PROMPT_NETWORK_MAPPER from "./prompt/network-mapper.txt"
-import PROMPT_PENTEST from "./prompt/pentest.txt"
 import PROMPT_PENTEST_AUTO from "./prompt/pentest-auto.txt"
 import PROMPT_RECON from "./prompt/recon.txt"
 import PROMPT_REPORT from "./prompt/report.txt"
@@ -30,6 +29,12 @@ import { Global } from "@/global"
 import path from "path"
 import { Plugin } from "@/plugin"
 import { Skill } from "../skill"
+
+function normalizePrimaryAgentName(name: string) {
+  if (name === "build") return "action"
+  if (name === "AutoPentest" || name === "pentest_flow" || name === "pentest_auto") return "pentest"
+  return name
+}
 
 export namespace Agent {
   export const Info = z
@@ -156,8 +161,8 @@ export namespace Agent {
       pentest: {
         name: "pentest",
         description:
-          "Primary cyber orchestrator for internal authorized engagements. Coordinates recon, validation, evidence, and reporting.",
-        prompt: PROMPT_PENTEST,
+          "Primary guided cyber orchestrator for authorized internal engagements. Collects critical scope/auth details, plans, then executes.",
+        prompt: PROMPT_PENTEST_AUTO,
         permission: PermissionNext.merge(
           defaults,
           PermissionNext.fromConfig({
@@ -176,9 +181,9 @@ export namespace Agent {
       },
       AutoPentest: {
         name: "AutoPentest",
-        description:
-          "Primary cyber orchestrator with guided intake. Starts with essential pentest questions, then plans and delegates.",
+        description: "Deprecated alias for pentest.",
         prompt: PROMPT_PENTEST_AUTO,
+        hidden: true,
         permission: PermissionNext.merge(
           defaults,
           PermissionNext.fromConfig({
@@ -192,7 +197,6 @@ export namespace Agent {
           user,
         ),
         options: {},
-        color: "error",
         mode: "primary",
         native: true,
       },
@@ -604,10 +608,11 @@ export namespace Agent {
 
   export async function list() {
     const cfg = await Config.get()
+    const preferred = cfg.default_agent ? normalizePrimaryAgentName(cfg.default_agent) : "pentest"
     return pipe(
       await state(),
       values(),
-      sortBy([(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "AutoPentest"), "desc"]),
+      sortBy([(x) => x.name === preferred, "desc"]),
     )
   }
 
@@ -616,14 +621,15 @@ export namespace Agent {
     const agents = await state()
 
     if (cfg.default_agent) {
-      const agent = agents[cfg.default_agent]
+      const resolved = normalizePrimaryAgentName(cfg.default_agent)
+      const agent = agents[resolved]
       if (!agent) throw new Error(`default agent "${cfg.default_agent}" not found`)
       if (agent.mode === "subagent") throw new Error(`default agent "${cfg.default_agent}" is a subagent`)
       if (agent.hidden === true) throw new Error(`default agent "${cfg.default_agent}" is hidden`)
       return agent.name
     }
 
-    const preferredDefault = agents.AutoPentest
+    const preferredDefault = agents.pentest
     if (preferredDefault && preferredDefault.mode !== "subagent" && preferredDefault.hidden !== true) {
       return preferredDefault.name
     }

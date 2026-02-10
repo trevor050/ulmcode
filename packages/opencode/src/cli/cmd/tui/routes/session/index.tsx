@@ -209,7 +209,11 @@ export function Session() {
     if (part.id === lastSwitch) return
 
     if (part.tool === "plan_exit") {
-      local.agent.set("build")
+      const messagesList = messages()
+      const lastUserPrimary = messagesList.findLast(
+        (msg) => msg.role === "user" && msg.agent && local.agent.list().some((item) => item.name === msg.agent),
+      )
+      if (lastUserPrimary?.agent) local.agent.set(lastUserPrimary.agent)
       lastSwitch = part.id
     } else if (part.tool === "plan_enter") {
       local.agent.set("plan")

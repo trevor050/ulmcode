@@ -879,7 +879,7 @@ export const GithubRunCommand = cmd({
             providerID,
             modelID,
           },
-          // agent is omitted - server will use default_agent from config or fall back to "AutoPentest"
+          // agent is omitted - server will use default_agent from config or fall back to "pentest"
           parts: [
             {
               id: Identifier.ascending("part"),
