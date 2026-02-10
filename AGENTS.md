@@ -153,3 +153,8 @@ Last updated: 2026-02-10
   - `baseline_check`, `compliance_mapper`, `alert_analyzer`, `detection_validator`, `ir_timeline_builder`
 - Added defensive skill pack source at `tools/ulmcode-profile/skills/defensive-compact/*` with compact SKILL.md + references model.
 - Updated profile bootstrap script to optionally include defensive skill pack by default (`WITH_DEFENSIVE=1`) while preserving strict deny-by-default skill permissions.
+
+## Defensive Tool Exposure Note (2026-02-10)
+- Defensive tools currently exist in source (`baseline_check`, `compliance_mapper`, `alert_analyzer`, `detection_validator`, `ir_timeline_builder`) but are intentionally not registered in `packages/opencode/src/tool/registry.ts`.
+- Rationale: keep pentest-focused model behavior clean and avoid tool-selection confusion during core offensive workflows.
+- Re-enable later by re-adding these tools to `ToolRegistry.all()` once dedicated defensive mode/routing is in place.

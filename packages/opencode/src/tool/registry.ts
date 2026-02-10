@@ -29,11 +29,6 @@ import { PlanExitTool, PlanEnterTool } from "./plan"
 import { ApplyPatchTool } from "./apply_patch"
 import { FindingTool } from "./finding"
 import { ReportFinalizeTool } from "./report_finalize"
-import { BaselineCheckTool } from "./baseline_check"
-import { ComplianceMapperTool } from "./compliance_mapper"
-import { AlertAnalyzerTool } from "./alert_analyzer"
-import { DetectionValidatorTool } from "./detection_validator"
-import { IRTimelineBuilderTool } from "./ir_timeline_builder"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -115,11 +110,6 @@ export namespace ToolRegistry {
       WebFetchTool,
       TodoWriteTool,
       FindingTool,
-      BaselineCheckTool,
-      ComplianceMapperTool,
-      AlertAnalyzerTool,
-      DetectionValidatorTool,
-      IRTimelineBuilderTool,
       ReportFinalizeTool,
       // TodoReadTool,
       WebSearchTool,
