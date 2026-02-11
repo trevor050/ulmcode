@@ -561,11 +561,6 @@ export namespace SessionPrompt {
       const agent = await Agent.get(lastUser.agent)
       const maxSteps = agent.steps ?? Infinity
       const isLastStep = step >= maxSteps
-      msgs = await insertCyberReminders({
-        messages: msgs,
-        session,
-        agent,
-      })
       msgs = await insertReminders({
         messages: msgs,
         agent,
@@ -653,7 +648,15 @@ export namespace SessionPrompt {
         agent,
         abort,
         sessionID,
-        system: [...(await SystemPrompt.environment(model)), ...(await InstructionPrompt.system())],
+        system: [
+          ...(await SystemPrompt.environment(model)),
+          ...(await InstructionPrompt.system()),
+          ...buildCyberSystemContext({
+            session,
+            agent,
+            messages: msgs,
+          }),
+        ],
         messages: [
           ...MessageV2.toModelMessages(sessionMessages, model),
           ...(isLastStep
@@ -2177,6 +2180,54 @@ Your turn should end by either asking a targeted question or calling plan_exit.
     }
 
     return input.messages
+  }
+
+  function buildCyberSystemContext(input: {
+    session: Session.Info
+    agent: Agent.Info
+    messages: MessageV2.WithParts[]
+  }) {
+    if (!CyberEnvironment.isCyberAgent(input.agent.name)) return []
+    if (!input.session.environment || input.session.environment.type !== "cyber") return []
+
+    const root = input.session.environment.root
+    const lines = [
+      "CYBER ENGAGEMENT ENVIRONMENT ACTIVE",
+      `environment.root=${root}`,
+      `finding.md=${path.join(root, "finding.md")}`,
+      `handoff.md=${path.join(root, "handoff.md")}`,
+      `reports.dir=${path.join(root, "reports")}`,
+      "Paths include spaces on this host; always quote absolute paths in shell commands.",
+      "All pentest outputs must live in this shared environment.",
+      "Subagent completion contract: results.md must end with structured fields executed_commands, generated_files, unverified_claims, failed_commands.",
+      "For assess outputs: findings must be labeled validated vs hypothesis, and high confidence is reserved for validated findings only.",
+      "If commands partially fail (permission denied/root-required/timeout), they must be recorded explicitly in failed_commands.",
+    ]
+
+    if (!CyberEnvironment.hasLoadedSkill(input.messages)) {
+      lines.push("WARNING: NO SKILL HAS BEEN LOADED INTO CONTEXT FOR THIS CYBER SESSION.")
+      lines.push("Load a relevant skill before major work by calling the skill tool.")
+      lines.push("Example call: skill({\"name\":\"<skill-name>\"})")
+    }
+
+    if (
+      input.agent.name === "pentest" &&
+      CyberEnvironment.hasCompletedCyberSubtask(input.messages) &&
+      !CyberEnvironment.hasReportWriterRun(input.messages)
+    ) {
+      lines.push("REPORT WRITER IS REQUIRED BEFORE ENDING THIS PENTEST SESSION.")
+      lines.push("Launch task(subagent_type=\"report_writer\") for final synthesis and PDF packaging.")
+    }
+
+    if (input.agent.name === "report_writer" && !hasSpecificSkillLoaded(input.messages, "k12-risk-mapping-and-reporting")) {
+      lines.push("FIRST ACTION REQUIRED: LOAD THE REPORTING SKILL.")
+      lines.push("Call: skill({\"name\":\"k12-risk-mapping-and-reporting\"})")
+      lines.push("Then explore finding.md, agents/*/results.md, handoff.md, and evidence directories.")
+      lines.push("Create report-plan.md, report-outline.md, report-draft.md before finalizing.")
+      lines.push("Finalize with report_finalize.")
+    }
+
+    return [lines.join("\n")]
   }
 
   function hasSpecificSkillLoaded(messages: MessageV2.WithParts[], skillName: string) {
