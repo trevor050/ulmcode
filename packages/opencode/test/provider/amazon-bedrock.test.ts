@@ -9,60 +9,76 @@ import { Env } from "../../src/env"
 import { Global } from "../../src/global"
 
 test("Bedrock: config region takes precedence over AWS_REGION env var", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          provider: {
-            "amazon-bedrock": {
-              options: {
-                region: "eu-west-1",
+  // Avoid a slow/fragile dependency install in this test: the region-precedence logic
+  // does not depend on the AWS credential chain when a bearer token is present.
+  const prevBearer = process.env.AWS_BEARER_TOKEN_BEDROCK
+  process.env.AWS_BEARER_TOKEN_BEDROCK = "test-bearer-token"
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              "amazon-bedrock": {
+                options: {
+                  region: "eu-west-1",
+                },
               },
             },
-          },
-        }),
-      )
-    },
-  })
-  await Instance.provide({
-    directory: tmp.path,
-    init: async () => {
-      Env.set("AWS_REGION", "us-east-1")
-      Env.set("AWS_PROFILE", "default")
-    },
-    fn: async () => {
-      const providers = await Provider.list()
-      expect(providers["amazon-bedrock"]).toBeDefined()
-      expect(providers["amazon-bedrock"].options?.region).toBe("eu-west-1")
-    },
-  })
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        Env.set("AWS_REGION", "us-east-1")
+        Env.set("AWS_PROFILE", "default")
+      },
+      fn: async () => {
+        const providers = await Provider.list()
+        expect(providers["amazon-bedrock"]).toBeDefined()
+        expect(providers["amazon-bedrock"].options?.region).toBe("eu-west-1")
+      },
+    })
+  } finally {
+    if (prevBearer === undefined) delete process.env.AWS_BEARER_TOKEN_BEDROCK
+    else process.env.AWS_BEARER_TOKEN_BEDROCK = prevBearer
+  }
 })
 
 test("Bedrock: falls back to AWS_REGION env var when no config region", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-        }),
-      )
-    },
-  })
-  await Instance.provide({
-    directory: tmp.path,
-    init: async () => {
-      Env.set("AWS_REGION", "eu-west-1")
-      Env.set("AWS_PROFILE", "default")
-    },
-    fn: async () => {
-      const providers = await Provider.list()
-      expect(providers["amazon-bedrock"]).toBeDefined()
-      expect(providers["amazon-bedrock"].options?.region).toBe("eu-west-1")
-    },
-  })
+  const prevBearer = process.env.AWS_BEARER_TOKEN_BEDROCK
+  process.env.AWS_BEARER_TOKEN_BEDROCK = "test-bearer-token"
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        Env.set("AWS_REGION", "eu-west-1")
+        Env.set("AWS_PROFILE", "default")
+      },
+      fn: async () => {
+        const providers = await Provider.list()
+        expect(providers["amazon-bedrock"]).toBeDefined()
+        expect(providers["amazon-bedrock"].options?.region).toBe("eu-west-1")
+      },
+    })
+  } finally {
+    if (prevBearer === undefined) delete process.env.AWS_BEARER_TOKEN_BEDROCK
+    else process.env.AWS_BEARER_TOKEN_BEDROCK = prevBearer
+  }
 })
 
 test("Bedrock: loads when bearer token from auth.json is present", async () => {

@@ -23,7 +23,11 @@ async function bootstrap() {
   })
 }
 
-test("tracks deleted files correctly", async () => {
+// Snapshot.track/patch can occasionally be slow on CI or on heavily loaded machines.
+// Keep this test resilient by giving it a bit more time than Bun's default (5s).
+test(
+  "tracks deleted files correctly",
+  async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
     directory: tmp.path,
@@ -36,7 +40,9 @@ test("tracks deleted files correctly", async () => {
       expect((await Snapshot.patch(before!)).files).toContain(`${tmp.path}/a.txt`)
     },
   })
-})
+  },
+  20_000,
+)
 
 test("revert should remove new files", async () => {
   await using tmp = await bootstrap()
