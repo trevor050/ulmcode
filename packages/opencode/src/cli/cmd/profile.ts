@@ -14,6 +14,16 @@ export const ProfileCommand = cmd({
   async handler() {},
 })
 
+export function defaultProfileMcp() {
+  return {
+    // Intentionally NOT shipping with Vercel MCP by default.
+    // (Keep the default profile as boring as possible: fewer auth prompts, less noise.)
+    context7: { type: "remote", url: "https://mcp.context7.com/mcp" },
+    playwright: { type: "local", command: ["npx", "@playwright/mcp@latest"] },
+    pentestMCP: { type: "local", command: ["docker", "run", "--rm", "-i", "ramgameer/pentest-mcp:latest"] },
+  } as const
+}
+
 const ProfileInitCommand = cmd({
   command: "init",
   describe: "initialize a strict ULMCode profile directory (skills, MCP, launchers, config)",
@@ -79,12 +89,7 @@ const ProfileInitCommand = cmd({
         skill: skillPolicy,
       },
       // Enabled by default (we warn if deps are missing, but don't hard-fail).
-      mcp: {
-        vercel: { type: "remote", url: "https://mcp.vercel.com" },
-        context7: { type: "remote", url: "https://mcp.context7.com/mcp" },
-        playwright: { type: "local", command: ["npx", "@playwright/mcp@latest"] },
-        pentestMCP: { type: "local", command: ["docker", "run", "--rm", "-i", "ramgameer/pentest-mcp:latest"] },
-      },
+      mcp: defaultProfileMcp(),
     } as const
 
     await Bun.write(configPath, JSON.stringify(config, null, 2) + "\n")
