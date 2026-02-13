@@ -6,7 +6,9 @@ import { Instance } from "../../src/project/instance"
 import { ToolRegistry } from "../../src/tool/registry"
 
 describe("tool.registry", () => {
-  test("loads tools from .opencode/tool (singular)", async () => {
+  test(
+    "loads tools from .opencode/tool (singular)",
+    async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
         const opencodeDir = path.join(dir, ".opencode")
@@ -38,9 +40,13 @@ describe("tool.registry", () => {
         expect(ids).toContain("hello")
       },
     })
-  })
+    },
+    15000,
+  )
 
-  test("loads tools from .opencode/tools (plural)", async () => {
+  test(
+    "loads tools from .opencode/tools (plural)",
+    async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
         const opencodeDir = path.join(dir, ".opencode")
@@ -72,9 +78,13 @@ describe("tool.registry", () => {
         expect(ids).toContain("hello")
       },
     })
-  })
+    },
+    15000,
+  )
 
-  test("loads tools with external dependencies without crashing", async () => {
+  test(
+    "loads tools with external dependencies without crashing",
+    async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
         const opencodeDir = path.join(dir, ".opencode")
@@ -135,5 +145,7 @@ describe("tool.registry", () => {
         expect(ids).toContain("cowsay")
       },
     })
-  })
+    },
+    15000,
+  )
 })

@@ -11,6 +11,7 @@ import PROMPT_CODEX from "./prompt/codex_header.txt"
 import PROMPT_TRINITY from "./prompt/trinity.txt"
 import PROMPT_CYBER_CORE from "./prompt/cyber-core.txt"
 import type { Provider } from "@/provider/provider"
+import { ToolingInventory } from "./tooling"
 
 export namespace SystemPrompt {
   type Options = {
@@ -44,6 +45,7 @@ export namespace SystemPrompt {
 
   export async function environment(model: Provider.Model) {
     const project = Instance.project
+    const tooling = await ToolingInventory.render().catch(() => "")
     return [
       [
         `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
@@ -54,6 +56,7 @@ export namespace SystemPrompt {
         `  Platform: ${process.platform}`,
         `  Today's date: ${new Date().toDateString()}`,
         `</env>`,
+        tooling ? tooling : "",
         `<directories>`,
         `  ${
           project.vcs === "git" && false

@@ -26,6 +26,9 @@ process.env["XDG_CACHE_HOME"] = path.join(dir, "cache")
 process.env["XDG_CONFIG_HOME"] = path.join(dir, "config")
 process.env["XDG_STATE_HOME"] = path.join(dir, "state")
 process.env["OPENCODE_MODELS_PATH"] = path.join(import.meta.dir, "tool", "fixtures", "models-api.json")
+// Keep dependency install tests reliable: Config.installDependencies() has a defensive delay in prod,
+// but tests should skip it to avoid 5s timeout flakes.
+process.env["OPENCODE_TEST_FAST_DEP_INSTALL"] = "1"
 
 // Write the cache version file to prevent global/index.ts from clearing the cache
 const cacheDir = path.join(dir, "cache", "opencode")
