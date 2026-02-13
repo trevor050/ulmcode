@@ -1,0 +1,93 @@
+name: ulmcode-release-cli
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g., 1.1.64)"
+        required: true
+        type: string
+      draft:
+        description: "Create/update as a draft release"
+        required: false
+        type: boolean
+        default: false
+      prerelease:
+        description: "Mark as prerelease"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  create_release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-tags: true
+
+      - name: Create GitHub release (if missing)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          VERSION: ${{ inputs.version }}
+          DRAFT: ${{ inputs.draft }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          set -euo pipefail
+          TAG="v${VERSION}"
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            echo "[ok] release exists: $TAG"
+            exit 0
+          fi
+          FLAGS=()
+          if [ "$DRAFT" = "true" ]; then FLAGS+=("--draft"); fi
+          if [ "$PRERELEASE" = "true" ]; then FLAGS+=("--prerelease"); fi
+          gh release create "$TAG" --repo "$REPO" --title "ULMCode $TAG" --notes "ULMCode CLI release $TAG." "${FLAGS[@]}"
+
+  upload_skills:
+    needs: create_release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-tags: true
+
+      - name: Build skills bundle
+        run: |
+          ./tools/ulmcode-profile/scripts/build-skills-bundle.sh ./dist
+
+      - name: Upload skills bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          gh release upload "v${VERSION}" ./dist/ulmcode-skills.tar.gz --repo "$REPO" --clobber
+
+  build_cli:
+    needs: create_release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-tags: true
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build + upload CLI assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          OPENCODE_CHANNEL: latest
+          OPENCODE_VERSION: ${{ inputs.version }}
+          OPENCODE_RELEASE: "1"
+        run: |
+          ./packages/opencode/script/build.ts
