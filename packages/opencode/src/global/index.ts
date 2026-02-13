@@ -3,7 +3,20 @@ import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
 import path from "path"
 import os from "os"
 
-const app = "opencode"
+function detectAppName() {
+  // Allow explicit override for enterprise/test harnesses.
+  const forced = process.env.OPENCODE_APP_NAME
+  if (forced) return forced
+
+  // When running the compiled CLI, prefer a stable per-app config/data root.
+  // During dev/tests, argv[0] is typically "bun", so we intentionally fall back to "opencode".
+  const exe = path.basename(process.execPath || process.argv[0] || "").toLowerCase().replace(/\\.exe$/, "")
+  if (exe === "ulmcode") return "ulmcode"
+  if (exe === "opencode") return "opencode"
+  return "opencode"
+}
+
+const app = detectAppName()
 
 const data = path.join(xdgData!, app)
 const cache = path.join(xdgCache!, app)

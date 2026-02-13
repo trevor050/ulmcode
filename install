@@ -189,7 +189,8 @@ else
 
     if [ -z "$requested_version" ]; then
         url="https://github.com/${REPO}/releases/latest/download/$filename"
-        specific_version=$(curl -s "https://api.github.com/repos/${REPO}/releases/latest" | sed -n 's/.*"tag_name": *"v\\([^"]*\\)".*/\\1/p')
+        # NOTE: use BRE capture groups (\(...\)) so this works on both GNU sed and BSD sed.
+        specific_version=$(curl -s "https://api.github.com/repos/${REPO}/releases/latest" | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
 
         if [[ $? -ne 0 || -z "$specific_version" ]]; then
             echo -e "${RED}Failed to fetch version information${NC}"

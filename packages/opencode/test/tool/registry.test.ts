@@ -83,6 +83,19 @@ describe("tool.registry", () => {
         const toolsDir = path.join(opencodeDir, "tools")
         await fs.mkdir(toolsDir, { recursive: true })
 
+        // Provide a local "cowsay" module so this test stays offline and deterministic.
+        // The production code can install deps automatically, but the test should not rely on network or registry speed.
+        const cowsayDir = path.join(opencodeDir, "node_modules", "cowsay")
+        await fs.mkdir(cowsayDir, { recursive: true })
+        await Bun.write(
+          path.join(cowsayDir, "package.json"),
+          JSON.stringify({ name: "cowsay", version: "0.0.0", main: "index.js" }),
+        )
+        await Bun.write(
+          path.join(cowsayDir, "index.js"),
+          ["export function say({ text }) {", "  return `cowsay: ${text}`", "}", ""].join("\n"),
+        )
+
         await Bun.write(
           path.join(opencodeDir, "package.json"),
           JSON.stringify({
@@ -108,6 +121,10 @@ describe("tool.registry", () => {
             "",
           ].join("\n"),
         )
+
+        // Make the directory non-writable so Config.needsInstall() short-circuits and avoids dependency installs in tests.
+        // (On some platforms this may be a no-op; the local node_modules above still prevents crashes.)
+        await fs.chmod(opencodeDir, 0o555).catch(() => {})
       },
     })
 
