@@ -18,9 +18,13 @@ function detectAppName() {
 
 const app = detectAppName()
 
+// We want a consistent, human-discoverable profile path for ULMCode across platforms.
+// This also matches what `ulmcode profile init` generates and what our installers use.
+const home = process.env.OPENCODE_TEST_HOME || os.homedir()
+
 const data = path.join(xdgData!, app)
 const cache = path.join(xdgCache!, app)
-const config = path.join(xdgConfig!, app)
+const config = app === "ulmcode" ? path.join(home, ".config", "ulmcode") : path.join(xdgConfig!, app)
 const state = path.join(xdgState!, app)
 
 export namespace Global {
