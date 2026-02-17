@@ -176,9 +176,7 @@ export namespace SessionPrompt {
     }
     if (permissions.length > 0) {
       session.permission = permissions
-      await Session.update(session.id, (draft) => {
-        draft.permission = permissions
-      })
+      await Session.setPermission({ sessionID: session.id, permission: permissions })
     }
 
     if (input.noReply === true) {
@@ -470,6 +468,12 @@ export namespace SessionPrompt {
           log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
           return undefined
         })
+        const attachments = result?.attachments?.map((attachment) => ({
+          ...attachment,
+          id: Identifier.ascending("part"),
+          sessionID,
+          messageID: assistantMessage.id,
+        }))
         await Plugin.trigger(
           "tool.execute.after",
           {
@@ -492,7 +496,7 @@ export namespace SessionPrompt {
               title: result.title,
               metadata: result.metadata,
               output: result.output,
-              attachments: result.attachments,
+              attachments,
               time: {
                 ...part.state.time,
                 end: Date.now(),
@@ -830,6 +834,15 @@ export namespace SessionPrompt {
             },
           )
           const result = await item.execute(args, ctx)
+          const output = {
+            ...result,
+            attachments: result.attachments?.map((attachment) => ({
+              ...attachment,
+              id: Identifier.ascending("part"),
+              sessionID: ctx.sessionID,
+              messageID: input.processor.message.id,
+            })),
+          }
           await Plugin.trigger(
             "tool.execute.after",
             {
@@ -838,9 +851,9 @@ export namespace SessionPrompt {
               callID: ctx.callID,
               args,
             },
-            result,
+            output,
           )
-          return result
+          return output
         },
       })
     }
@@ -888,16 +901,13 @@ export namespace SessionPrompt {
         )
 
         const textParts: string[] = []
-        const attachments: MessageV2.FilePart[] = []
+        const attachments: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[] = []
 
         for (const contentItem of result.content) {
           if (contentItem.type === "text") {
             textParts.push(contentItem.text)
           } else if (contentItem.type === "image") {
             attachments.push({
-              id: Identifier.ascending("part"),
-              sessionID: input.session.id,
-              messageID: input.processor.message.id,
               type: "file",
               mime: contentItem.mimeType,
               url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
@@ -909,9 +919,6 @@ export namespace SessionPrompt {
             }
             if (resource.blob) {
               attachments.push({
-                id: Identifier.ascending("part"),
-                sessionID: input.session.id,
-                messageID: input.processor.message.id,
                 type: "file",
                 mime: resource.mimeType ?? "application/octet-stream",
                 url: `data:${resource.mimeType ?? "application/octet-stream"};base64,${resource.blob}`,
@@ -1193,6 +1200,7 @@ export namespace SessionPrompt {
                       pieces.push(
                         ...result.attachments.map((attachment) => ({
                           ...attachment,
+                          id: Identifier.ascending("part"),
                           synthetic: true,
                           filename: attachment.filename ?? part.filename,
                           messageID: info.id,
@@ -2027,22 +2035,17 @@ Your turn should end by either asking a targeted question or calling plan_exit.
       ],
     })
     const text = await result.text.catch((err) => log.error("failed to generate title", { error: err }))
-    if (text)
-      return Session.update(
-        input.session.id,
-        (draft) => {
-          const cleaned = text
-            .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
-            .split("\n")
-            .map((line) => line.trim())
-            .find((line) => line.length > 0)
-          if (!cleaned) return
+    if (text) {
+      const cleaned = text
+        .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+        .split("\n")
+        .map((line) => line.trim())
+        .find((line) => line.length > 0)
+      if (!cleaned) return
 
-          const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
-          draft.title = title
-        },
-        { touch: false },
-      )
+      const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
+      return Session.setTitle({ sessionID: input.session.id, title })
+    }
   }
 
   const CYBER_ENV_CONTEXT_MARKER = "[CYBER_ENVIRONMENT_CONTEXT_V1]"

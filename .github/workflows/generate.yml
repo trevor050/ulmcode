@@ -7,7 +7,7 @@ on:
 
 jobs:
   generate:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
@@ -20,10 +20,17 @@ jobs:
 
       - name: Setup git committer
         id: committer
+        if: ${{ vars.OPENCODE_APP_ID && secrets.OPENCODE_APP_SECRET }}
         uses: ./.github/actions/setup-git-committer
         with:
           opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
           opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+
+      - name: Setup git committer (fallback)
+        if: ${{ !(vars.OPENCODE_APP_ID && secrets.OPENCODE_APP_SECRET) }}
+        run: |
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
 
       - name: Generate
         run: ./script/generate.ts
