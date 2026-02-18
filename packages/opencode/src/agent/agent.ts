@@ -68,6 +68,7 @@ export namespace Agent {
     const cfg = await Config.get()
 
     const skillDirs = await Skill.dirs()
+    const whitelistedDirs = [Truncate.GLOB, ...skillDirs.map((dir) => path.join(dir, "*"))]
     const defaults = PermissionNext.fromConfig({
       "*": "allow",
       bash_sensitive: "ask",
@@ -75,8 +76,7 @@ export namespace Agent {
       finding: "deny",
       external_directory: {
         "*": "ask",
-        [Truncate.GLOB]: "allow",
-        ...Object.fromEntries(skillDirs.map((dir) => [path.join(dir, "*"), "allow"])),
+        ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
       },
       question: "deny",
       plan_enter: "deny",
@@ -495,7 +495,8 @@ export namespace Agent {
             codesearch: "allow",
             read: "allow",
             external_directory: {
-              [Truncate.GLOB]: "allow",
+              "*": "ask",
+              ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
             },
           }),
           user,
