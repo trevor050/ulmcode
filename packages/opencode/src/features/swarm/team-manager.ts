@@ -5,6 +5,7 @@ import { SwarmClaimTable, SwarmMemberTable, SwarmTaskTable, SwarmTeamTable } fro
 import { Config } from "@/config/config"
 import { Session } from "@/session"
 import { Flag } from "@/flag/flag"
+import { SwarmAggressionPolicy } from "./aggression"
 
 export namespace SwarmTeamManager {
   export type TeamStatus = "active" | "paused" | "stopped"
@@ -18,6 +19,13 @@ export namespace SwarmTeamManager {
     tmuxDefaultEnabled: boolean
     highAutonomy: boolean
     defaultTopology: "mesh" | "brokered"
+  }
+
+  export type V21Flags = {
+    enabled: boolean
+    defaultAggression: SwarmAggressionPolicy.Level
+    askAggressionOnPlanExit: boolean
+    maxParallelDepthCap: number
   }
 
   export async function flags(): Promise<Flags> {
@@ -38,6 +46,23 @@ export namespace SwarmTeamManager {
         true,
       highAutonomy: cfg.cyber?.swarm_v2?.high_autonomy ?? true,
       defaultTopology: cfg.cyber?.swarm_v2?.default_topology ?? "mesh",
+    }
+  }
+
+  export async function v21Flags(): Promise<V21Flags> {
+    const cfg = await Config.get()
+    return {
+      enabled: cfg.cyber?.swarm_v2_1?.enabled ?? Flag.OPENCODE_EXPERIMENTAL_SWARM_V2_1 ?? false,
+      defaultAggression: SwarmAggressionPolicy.normalize(
+        cfg.cyber?.swarm_v2_1?.default_aggression ?? Flag.OPENCODE_EXPERIMENTAL_SWARM_V2_1_DEFAULT_AGGRESSION,
+      ),
+      askAggressionOnPlanExit:
+        cfg.cyber?.swarm_v2_1?.ask_aggression_on_plan_exit ??
+        Flag.OPENCODE_EXPERIMENTAL_SWARM_V2_1_ASK_AGGRESSION_ON_PLAN_EXIT ??
+        true,
+      maxParallelDepthCap: cfg.cyber?.swarm_v2_1?.max_parallel_depth_cap ??
+        Flag.OPENCODE_EXPERIMENTAL_SWARM_V2_1_MAX_PARALLEL_DEPTH_CAP ??
+        4,
     }
   }
 

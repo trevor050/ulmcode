@@ -1,6 +1,7 @@
 import { and, eq } from "@/storage/db"
 import { Database } from "@/storage/db"
 import { SwarmTaskTable } from "./swarm.sql"
+import { SwarmAggressionPolicy } from "./aggression"
 
 export namespace SwarmScheduler {
   export type RetryPolicy = "none" | "light" | "aggressive"
@@ -15,6 +16,16 @@ export namespace SwarmScheduler {
     if (policy === "none") return 0
     const base = policy === "light" ? 2_500 : 1_500
     return base * Math.max(attempt, 1)
+  }
+
+  export function limitsForAggression(input: {
+    aggression: SwarmAggressionPolicy.Level
+    maxParallelDepthCap?: number
+  }) {
+    return SwarmAggressionPolicy.derive({
+      aggression: input.aggression,
+      maxParallelDepthCap: input.maxParallelDepthCap,
+    })
   }
 
   export function lane(input: { providerID?: string; modelID?: string; teamID?: string }) {

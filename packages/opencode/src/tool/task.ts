@@ -14,7 +14,14 @@ import { Config } from "../config/config"
 import { Permission } from "@/permission"
 import { CyberEnvironment } from "@/session/environment"
 import { BackgroundAgentManager } from "@/features/background-agent/manager"
-import { SwarmIdentity, SwarmInbox, SwarmMeshRouter, SwarmTeamManager, SwarmTmux } from "@/features/swarm"
+import {
+  SwarmAggressionPolicy,
+  SwarmIdentity,
+  SwarmInbox,
+  SwarmMeshRouter,
+  SwarmTeamManager,
+  SwarmTmux,
+} from "@/features/swarm"
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
@@ -40,7 +47,10 @@ const parameters = z.object({
   delegation_mode: z.enum(["direct", "brokered"]).optional(),
   isolation_mode: z.enum(["shared", "isolated"]).optional(),
   retry_policy: z.enum(["none", "light", "aggressive"]).optional(),
+  swarm_aggression_override: z.enum(SwarmAggressionPolicy.values).optional(),
 })
+
+const OPERATOR_OR_PLANNER_AGENTS = new Set(["plan", "pentest", "action", "pentest_auto", "pentest_flow", "AutoPentest"])
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
@@ -242,6 +252,40 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const isolationMode = params.isolation_mode ?? "shared"
       const retryPolicy = params.retry_policy ?? "none"
       const sessionWithEnvironment = environment ? ({ ...session, environment } as Session.Info) : session
+      const swarmV21 = await SwarmTeamManager.v21Flags()
+      let swarmAggression = swarmV21.defaultAggression
+      let aggressionSource: SwarmAggressionPolicy.Source = "default"
+      if (environment?.type === "cyber" && swarmV21.enabled) {
+        const policy = await CyberEnvironment.readSwarmPolicy(sessionWithEnvironment)
+        if (policy?.swarm_aggression) {
+          swarmAggression = policy.swarm_aggression
+          aggressionSource = "policy"
+        }
+      }
+      if (params.swarm_aggression_override) {
+        if (!OPERATOR_OR_PLANNER_AGENTS.has(ctx.agent)) {
+          throw new Error(
+            "swarm_aggression_override is restricted to operator/planner roles.",
+          )
+        }
+        swarmAggression = params.swarm_aggression_override
+        aggressionSource = "override"
+      }
+      const aggressionLimits = SwarmAggressionPolicy.derive({
+        aggression: swarmAggression,
+        maxParallelDepthCap: swarmV21.maxParallelDepthCap,
+      })
+      const enforceAggression = environment?.type === "cyber" && swarmV21.enabled
+      if (enforceAggression && !aggressionLimits.allow_delegation) {
+        throw new Error(
+          "Swarm aggression is set to none for this engagement. Subagent delegation is disabled.",
+        )
+      }
+      if (enforceAggression && delegationDepth >= aggressionLimits.max_delegation_depth) {
+        throw new Error(
+          `Delegation depth limit reached for swarm aggression ${swarmAggression}. max_delegation_depth=${aggressionLimits.max_delegation_depth}`,
+        )
+      }
       let claimedScopes: string[] = []
       let swarmClaimIDs: string[] = []
       let wroteLegacyCoordination = false
@@ -348,6 +392,10 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         delegationMode,
         isolationMode,
         retryPolicy,
+        swarmAggression,
+        aggressionSource,
+        maxActiveBackground: aggressionLimits.max_active_background,
+        maxDelegationDepth: aggressionLimits.max_delegation_depth,
         claimIds: swarmClaimIDs,
         agent: agent.name,
         model,
@@ -513,6 +561,10 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           delegationDepth,
           isolationMode,
           retryPolicy,
+          swarmAggression,
+          aggressionSource,
+          maxActiveBackground: aggressionLimits.max_active_background,
+          maxDelegationDepth: aggressionLimits.max_delegation_depth,
           claimIds: swarmClaimIDs,
           cancel: () => SessionPrompt.cancel(session.id),
           run: async ({ signal, touch }) => {

@@ -67,6 +67,7 @@ describe("tool.report_finalize", () => {
         expect(await Bun.file(path.join(env.root, "reports", "sources.json")).exists()).toBe(true)
         expect(await Bun.file(path.join(env.root, "reports", "timeline.json")).exists()).toBe(true)
         expect(await Bun.file(path.join(env.root, "reports", "quality-checks.json")).exists()).toBe(true)
+        expect(await Bun.file(path.join(env.root, "reports", "swarm-quality.json")).exists()).toBe(true)
         expect(await Bun.file(path.join(env.root, "deliverables", "final", "report.md")).exists()).toBe(true)
         expect((result.metadata as any).finalDeliverableDir).toBe(path.join(env.root, "deliverables", "final"))
         expect((result.metadata as any).archiveDir).toContain(path.join(env.root, "deliverables", "archive"))

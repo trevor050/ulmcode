@@ -9,6 +9,7 @@ import { SwarmScheduler } from "@/features/swarm/scheduler"
 import { SwarmTelemetry } from "@/features/swarm/telemetry"
 import { SwarmTeamManager } from "@/features/swarm/team-manager"
 import { SwarmWatchdog } from "@/features/swarm/watchdog"
+import { SwarmAggressionPolicy } from "@/features/swarm/aggression"
 
 export namespace BackgroundAgentManager {
   const log = Log.create({ service: "background-agent.manager" })
@@ -38,6 +39,10 @@ export namespace BackgroundAgentManager {
     expectedOutputSchema: "brief" | "evidence_summary" | "report_section"
     isolationMode: "shared" | "isolated"
     retryPolicy: "none" | "light" | "aggressive"
+    swarmAggression: SwarmAggressionPolicy.Level
+    aggressionSource: SwarmAggressionPolicy.Source
+    maxActiveBackground: number | null
+    maxDelegationDepth: number
     retryCount: number
     schedulerLane: string
     claimIds: string[]
@@ -68,6 +73,10 @@ export namespace BackgroundAgentManager {
     delegationDepth?: number
     isolationMode?: "shared" | "isolated"
     retryPolicy?: "none" | "light" | "aggressive"
+    swarmAggression?: SwarmAggressionPolicy.Level
+    aggressionSource?: SwarmAggressionPolicy.Source
+    maxActiveBackground?: number | null
+    maxDelegationDepth?: number
     claimIds?: string[]
     run: (input: { signal: AbortSignal; touch(): void }) => Promise<{ output: string }>
     cancel: () => void
@@ -115,6 +124,10 @@ export namespace BackgroundAgentManager {
           expected_output_schema: task.expectedOutputSchema,
           isolation_mode: task.isolationMode,
           retry_policy: task.retryPolicy,
+          swarm_aggression: task.swarmAggression,
+          aggression_source: task.aggressionSource,
+          max_active_background: task.maxActiveBackground,
+          max_delegation_depth: task.maxDelegationDepth,
           retry_count: task.retryCount,
           scheduler_lane: task.schedulerLane,
           claim_ids: task.claimIds,
@@ -144,6 +157,10 @@ export namespace BackgroundAgentManager {
             expected_output_schema: task.expectedOutputSchema,
             isolation_mode: task.isolationMode,
             retry_policy: task.retryPolicy,
+            swarm_aggression: task.swarmAggression,
+            aggression_source: task.aggressionSource,
+            max_active_background: task.maxActiveBackground,
+            max_delegation_depth: task.maxDelegationDepth,
             retry_count: task.retryCount,
             scheduler_lane: task.schedulerLane,
             claim_ids: task.claimIds,
@@ -179,6 +196,10 @@ export namespace BackgroundAgentManager {
       expectedOutputSchema: row.expected_output_schema as TaskRecord["expectedOutputSchema"],
       isolationMode: row.isolation_mode as TaskRecord["isolationMode"],
       retryPolicy: row.retry_policy as TaskRecord["retryPolicy"],
+      swarmAggression: SwarmAggressionPolicy.normalize(row.swarm_aggression ?? undefined),
+      aggressionSource: (row.aggression_source as TaskRecord["aggressionSource"]) ?? "default",
+      maxActiveBackground: row.max_active_background ?? null,
+      maxDelegationDepth: row.max_delegation_depth ?? 2,
       retryCount: row.retry_count,
       schedulerLane: row.scheduler_lane ?? "default",
       claimIds: row.claim_ids ?? [],
@@ -236,6 +257,11 @@ export namespace BackgroundAgentManager {
       modelID: input.modelID,
       teamID: team?.id,
     })
+    const v21 = await SwarmTeamManager.v21Flags()
+    const derived = SwarmAggressionPolicy.derive({
+      aggression: input.swarmAggression ?? v21.defaultAggression,
+      maxParallelDepthCap: v21.maxParallelDepthCap,
+    })
     const task: TaskRecord = {
       id: `bg_${ulid().toLowerCase()}`,
       teamId: team?.id,
@@ -254,6 +280,11 @@ export namespace BackgroundAgentManager {
       expectedOutputSchema: input.expectedOutputSchema ?? "brief",
       isolationMode: input.isolationMode ?? "shared",
       retryPolicy: input.retryPolicy ?? "none",
+      swarmAggression: input.swarmAggression ?? v21.defaultAggression,
+      aggressionSource: input.aggressionSource ?? "default",
+      maxActiveBackground:
+        input.maxActiveBackground === undefined ? derived.max_active_background : input.maxActiveBackground,
+      maxDelegationDepth: input.maxDelegationDepth ?? derived.max_delegation_depth,
       retryCount: 0,
       schedulerLane,
       claimIds: input.claimIds ?? [],
@@ -522,6 +553,8 @@ export namespace BackgroundAgentManager {
       payload: {
         started_at: nowIso(task.startedAt),
         scheduler_lane: task.schedulerLane,
+        swarm_aggression: task.swarmAggression,
+        aggression_source: task.aggressionSource,
       },
     })
 
@@ -664,6 +697,15 @@ export namespace BackgroundAgentManager {
       providerConcurrency: globalThis.Record<string, number>
     },
   ) {
+    if (task.maxActiveBackground !== null) {
+      const running = Array.from(state().running.keys())
+        .map((id) => state().tasks.get(id))
+        .filter((item): item is TaskRecord => !!item)
+      const runningCount = task.teamId
+        ? running.filter((item) => item.teamId === task.teamId).length
+        : running.length
+      if (runningCount >= task.maxActiveBackground) return false
+    }
     return SwarmScheduler.canRun({
       lane: task.schedulerLane,
       providerID: task.providerID,

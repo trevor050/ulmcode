@@ -5,6 +5,7 @@ import type { MessageV2 } from "./message-v2"
 import type { Session } from "./index"
 import { Instance } from "@/project/instance"
 import { Log } from "../util/log"
+import { SwarmAggressionPolicy } from "@/features/swarm/aggression"
 
 export namespace CyberEnvironment {
   const log = Log.create({ service: "session.environment" })
@@ -51,6 +52,20 @@ export namespace CyberEnvironment {
     final_report_pdf_path: z.string().nullable(),
   })
   export type EngagementIndexEntry = z.infer<typeof EngagementIndexEntry>
+
+  export const SwarmPolicy = z.object({
+    version: z.literal(1),
+    engagement_id: z.string(),
+    swarm_aggression: z.enum(SwarmAggressionPolicy.values),
+    set_by_session_id: z.string(),
+    set_at: z.string(),
+    derived_limits: z.object({
+      allow_delegation: z.boolean(),
+      max_active_background: z.number().int().nonnegative().nullable(),
+      max_delegation_depth: z.number().int().nonnegative(),
+    }),
+  })
+  export type SwarmPolicy = z.infer<typeof SwarmPolicy>
 
   function shortSessionID(sessionID: string) {
     const normalized = sessionID.replace(/^session_/, "")
@@ -527,6 +542,49 @@ export namespace CyberEnvironment {
   export function resolveCoordinationDir(session: Session.Info) {
     if (session.environment?.type !== "cyber") return undefined
     return path.join(session.environment.root, "agents", "coordination")
+  }
+
+  export function resolveSwarmPolicyPath(session: Session.Info) {
+    const dir = resolveCoordinationDir(session)
+    if (!dir) return undefined
+    return path.join(dir, "swarm-policy.json")
+  }
+
+  export async function readSwarmPolicy(session: Session.Info) {
+    const file = resolveSwarmPolicyPath(session)
+    if (!file) return undefined
+    const parsed = await fs
+      .readFile(file, "utf8")
+      .then((x) => JSON.parse(x))
+      .catch(() => undefined)
+    if (!parsed) return undefined
+    return SwarmPolicy.safeParse(parsed).data
+  }
+
+  export async function writeSwarmPolicy(input: {
+    session: Session.Info
+    swarm_aggression: SwarmAggressionPolicy.Level
+    set_by_session_id: string
+    maxParallelDepthCap?: number
+  }) {
+    if (input.session.environment?.type !== "cyber") return undefined
+    const file = resolveSwarmPolicyPath(input.session)
+    if (!file) return undefined
+    const limits = SwarmAggressionPolicy.derive({
+      aggression: input.swarm_aggression,
+      maxParallelDepthCap: input.maxParallelDepthCap,
+    })
+    const body = SwarmPolicy.parse({
+      version: 1,
+      engagement_id: input.session.environment.engagementID,
+      swarm_aggression: input.swarm_aggression,
+      set_by_session_id: input.set_by_session_id,
+      set_at: new Date().toISOString(),
+      derived_limits: limits,
+    })
+    await fs.mkdir(path.dirname(file), { recursive: true })
+    await fs.writeFile(file, JSON.stringify(body, null, 2) + "\n", "utf8")
+    return body
   }
 
   export async function claimCoordinationScope(input: {

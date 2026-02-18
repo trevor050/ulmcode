@@ -167,4 +167,34 @@ describe("session.environment", () => {
       },
     })
   })
+
+  test("writes and reads per-engagement swarm policy", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({ title: "Swarm policy run" })
+        const env = CyberEnvironment.create(session)
+        await Session.update(session.id, (draft) => {
+          draft.environment = env
+        })
+        await CyberEnvironment.ensureSharedScaffold({ environment: env, session })
+
+        const saved = await CyberEnvironment.writeSwarmPolicy({
+          session: { ...session, environment: env },
+          swarm_aggression: "high",
+          set_by_session_id: session.id,
+          maxParallelDepthCap: 4,
+        })
+
+        expect(saved?.swarm_aggression).toBe("high")
+        expect(saved?.derived_limits.max_active_background).toBe(8)
+        expect(saved?.derived_limits.max_delegation_depth).toBe(3)
+
+        const loaded = await CyberEnvironment.readSwarmPolicy({ ...session, environment: env })
+        expect(loaded?.swarm_aggression).toBe("high")
+        expect(loaded?.set_by_session_id).toBe(session.id)
+      },
+    })
+  })
 })

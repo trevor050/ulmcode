@@ -1,3 +1,4 @@
+export { SwarmAggressionPolicy } from "./aggression"
 export { SwarmIdentity } from "./identity"
 export { SwarmInbox } from "./inbox"
 export { SwarmMeshRouter } from "./mesh-router"

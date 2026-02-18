@@ -8,6 +8,12 @@ import { Provider } from "../provider/provider"
 import { Instance } from "../project/instance"
 import { type SessionID, MessageID, PartID } from "../session/schema"
 import EXIT_DESCRIPTION from "./plan-exit.txt"
+<<<<<<< HEAD
+=======
+import ENTER_DESCRIPTION from "./plan-enter.txt"
+import { CyberEnvironment } from "@/session/environment"
+import { SwarmAggressionPolicy, SwarmTeamManager, SwarmTelemetry } from "@/features/swarm"
+>>>>>>> 4211dc3af (feat(swarm): add v2.1 pentest plan-time aggression policy)
 
 async function getLastModel(sessionID: SessionID) {
   for await (const item of MessageV2.stream(sessionID)) {
@@ -20,7 +26,7 @@ export const PlanExitTool = Tool.define("plan_exit", {
   description: EXIT_DESCRIPTION,
   parameters: z.object({}),
   async execute(_params, ctx) {
-    const session = await Session.get(ctx.sessionID)
+    let session = await Session.get(ctx.sessionID)
     const plan = path.relative(Instance.worktree, Session.plan(session))
     const answers = await Question.ask({
       sessionID: ctx.sessionID,
@@ -42,6 +48,62 @@ export const PlanExitTool = Tool.define("plan_exit", {
     if (answer === "No") throw new Question.RejectedError()
 
     const model = await getLastModel(ctx.sessionID)
+    const v21 = await SwarmTeamManager.v21Flags()
+
+    if (previousAgent === "pentest" && v21.enabled) {
+      const ensured = await CyberEnvironment.ensureSharedEnvironment({
+        session,
+        agentName: "pentest",
+        force: true,
+      })
+      if (ensured.environment && (ensured.created || ensured.changed || !session.environment)) {
+        session = await Session.update(session.id, (draft) => {
+          draft.environment = ensured.environment
+        })
+      }
+
+      if (v21.askAggressionOnPlanExit) {
+        const existingPolicy = await CyberEnvironment.readSwarmPolicy(session)
+        if (!existingPolicy) {
+          const answers = await Question.ask({
+            sessionID: ctx.sessionID,
+            questions: [
+              {
+                question: "Choose swarm aggression for this engagement.",
+                header: "Swarm Aggression",
+                custom: false,
+                options: [
+                  { label: "none", description: "No subagent delegation. Planner runs solo." },
+                  { label: "low", description: "Tight fanout with conservative delegation depth." },
+                  { label: "balanced", description: "Default balance of speed and control." },
+                  { label: "high", description: "Aggressive parallelism with safety controls." },
+                  { label: "max_parallel", description: "Maximum parallel fanout with safety guardrails." },
+                ],
+              },
+            ],
+            tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
+          })
+          const selected = SwarmAggressionPolicy.normalize(answers[0]?.[0], v21.defaultAggression)
+          const policy = await CyberEnvironment.writeSwarmPolicy({
+            session,
+            swarm_aggression: selected,
+            set_by_session_id: ctx.sessionID,
+            maxParallelDepthCap: v21.maxParallelDepthCap,
+          })
+          await SwarmTelemetry.event({
+            sessionID: ctx.sessionID,
+            type: "swarm_aggression_set",
+            payload: {
+              swarm_aggression: policy?.swarm_aggression ?? selected,
+              source: "plan_exit_intake",
+              engagement_id:
+                policy?.engagement_id ??
+                (session.environment?.type === "cyber" ? session.environment.engagementID : null),
+            },
+          })
+        }
+      }
+    }
 
     const userMsg: MessageV2.User = {
       id: MessageID.ascending(),

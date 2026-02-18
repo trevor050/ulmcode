@@ -58,6 +58,7 @@ export const ReportFinalizeTool = Tool.define("report_finalize", {
       result.sourcesPath,
       result.timelinePath,
       result.qualityChecksPath,
+      result.swarmQualityPath,
       result.metadataPath,
     ]
     for (const file of published) {
@@ -102,6 +103,7 @@ export const ReportFinalizeTool = Tool.define("report_finalize", {
         `Sources JSON: ${result.sourcesPath}`,
         `Timeline JSON: ${result.timelinePath}`,
         `Quality checks JSON: ${result.qualityChecksPath}`,
+        `Swarm quality JSON: ${result.swarmQualityPath}`,
         `Run metadata: ${result.metadataPath}`,
         `Findings: ${result.findingCount}`,
         `Sources: ${result.sourceCount}`,

@@ -125,7 +125,6 @@ Last updated: 2026-03-05
 - Report provenance now includes swarm policy snapshot sidecar:
   - `reports/swarm-quality.json`
   - copied into final deliverables during `report_finalize`.
-
 ## Swarm Revision Phase 2.1.1 (2026-02-19)
 - Seamless plan/pentest handoff stabilization:
   - `plan_exit` now no-ops when session is not currently in `plan` mode (prevents accidental pentest-mode misuse).

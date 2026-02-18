@@ -887,6 +887,26 @@ export namespace Config {
         })
         .optional()
         .describe("V2 swarm orchestration controls"),
+      swarm_v2_1: z
+        .object({
+          enabled: z.boolean().optional().describe("Enable V2.1 swarm aggression controls"),
+          default_aggression: z
+            .enum(["none", "low", "balanced", "high", "max_parallel"])
+            .optional()
+            .describe("Default swarm aggression level when policy is not explicitly set"),
+          ask_aggression_on_plan_exit: z
+            .boolean()
+            .optional()
+            .describe("Require choosing swarm aggression when leaving pentest plan mode"),
+          max_parallel_depth_cap: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Maximum delegation depth cap applied in max_parallel mode"),
+        })
+        .optional()
+        .describe("V2.1 swarm aggression behavior controls"),
     })
     .strict()
     .meta({

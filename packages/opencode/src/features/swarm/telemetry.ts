@@ -11,8 +11,8 @@ export namespace SwarmTelemetry {
     type: string
     payload?: Record<string, unknown>
   }) {
-    const flags = await SwarmTeamManager.flags()
-    if (!flags.enabled) return
+    const [v2, v21] = await Promise.all([SwarmTeamManager.flags(), SwarmTeamManager.v21Flags()])
+    if (!v2.enabled && !v21.enabled) return
 
     try {
       Database.use((db) =>
