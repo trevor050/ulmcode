@@ -55,6 +55,7 @@ import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
+import { toULMCodeLabel } from "@/util/branding"
 
 interface PromptInputProps {
   class?: string
@@ -1539,7 +1540,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           />
                         </Show>
                         <span class="truncate">
-                          {local.model.current()?.name ?? language.t("dialog.model.select.title")}
+                          {toULMCodeLabel(local.model.current()?.name) ?? language.t("dialog.model.select.title")}
                         </span>
                         <Icon name="chevron-down" size="small" class="shrink-0" />
                       </ModelSelectorPopover>

@@ -32,6 +32,18 @@ import { pathToFileURL } from "url"
 import { Effect, Layer, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
+import { BackgroundListTool } from "./background_list"
+import { BackgroundOutputTool } from "./background_output"
+import { BackgroundCancelTool } from "./background_cancel"
+import { TeamCreateTool } from "./team_create"
+import { TeamUpdateTool } from "./team_update"
+import { TeamListTool } from "./team_list"
+import { TeamMembersTool } from "./team_members"
+import { TeamMessageTool } from "./team_message"
+import { TeamStatusTool } from "./team_status"
+import { TeamPauseTool } from "./team_pause"
+import { TeamResumeTool } from "./team_resume"
+import { TeamStopTool } from "./team_stop"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -125,6 +137,18 @@ export namespace ToolRegistry {
           EditTool,
           WriteTool,
           TaskTool,
+          BackgroundListTool,
+          BackgroundOutputTool,
+          BackgroundCancelTool,
+          TeamCreateTool,
+          TeamUpdateTool,
+          TeamListTool,
+          TeamMembersTool,
+          TeamMessageTool,
+          TeamStatusTool,
+          TeamPauseTool,
+          TeamResumeTool,
+          TeamStopTool,
           WebFetchTool,
           TodoWriteTool,
           WebSearchTool,

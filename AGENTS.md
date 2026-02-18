@@ -181,7 +181,6 @@ Last updated: 2026-03-05
   - then creation of high-quality `report.html`,
   - then print-ready PDF generation from the HTML/CSS flow.
 - Guided pentest kickoff text now reinforces the same contract before first plan-mode turn, so auto-routed pentest sessions start with a deeper planning posture immediately.
-
 ## Contracts + Gotchas
 - Resolve git/repo root first to avoid nested path drift in this monorepo.
 - Quote shell paths because local machine paths can include spaces.

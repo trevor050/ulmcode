@@ -23,6 +23,8 @@ import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { Permission } from "@/permission"
 import { Auth } from "@/auth"
+import { Database, eq } from "@/storage/db"
+import { SessionTable } from "./session.sql"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -64,14 +66,27 @@ export namespace LLM {
       Provider.getProvider(input.model.providerID),
       Auth.get(input.model.providerID),
     ])
-    // TODO: move this to a proper hook
     const isOpenaiOauth = provider.id === "openai" && auth?.type === "oauth"
+    const parentSessionID = Database.use((db) =>
+      db
+        .select({ parent_id: SessionTable.parent_id })
+        .from(SessionTable)
+        .where(eq(SessionTable.id, input.sessionID))
+        .get()?.parent_id,
+    )
+    const includeCyber = !(input.agent.hidden === true && ["title", "summary", "compaction"].includes(input.agent.name))
+
+    const modelSystem = isOpenaiOauth ? [] : SystemPrompt.provider(input.model, { includeCyber })
+    const agentSystem = input.agent.prompt
+      ? [input.agent.prompt, ...(includeCyber ? [SystemPrompt.cyberCore()] : [])]
+      : modelSystem
 
     const system: string[] = []
     system.push(
       [
         // use agent prompt otherwise provider prompt
-        ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
+        // For Codex sessions, skip SystemPrompt.provider() since it's sent via options.instructions
+        ...agentSystem,
         // any custom prompt passed into this call
         ...input.system,
         // any custom prompt from last user message
@@ -254,6 +269,8 @@ export namespace LLM {
       maxOutputTokens,
       abortSignal: input.abort,
       headers: {
+        "x-session-id": input.sessionID,
+        ...(parentSessionID ? { "x-parent-session-id": parentSessionID } : {}),
         ...(input.model.providerID.startsWith("opencode")
           ? {
               "x-opencode-project": Instance.project.id,

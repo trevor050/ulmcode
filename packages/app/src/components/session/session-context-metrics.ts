@@ -1,4 +1,5 @@
 import type { AssistantMessage, Message } from "@opencode-ai/sdk/v2/client"
+import { toULMCodeLabel } from "@/util/branding"
 
 type Provider = {
   id: string
@@ -63,8 +64,8 @@ const build = (messages: Message[] = [], providers: Provider[] = []): Metrics =>
       message,
       provider,
       model,
-      providerLabel: provider?.name ?? message.providerID,
-      modelLabel: model?.name ?? message.modelID,
+      providerLabel: toULMCodeLabel(provider?.name ?? message.providerID),
+      modelLabel: toULMCodeLabel(model?.name ?? message.modelID),
       limit,
       input: message.tokens.input,
       output: message.tokens.output,

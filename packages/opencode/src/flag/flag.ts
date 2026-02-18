@@ -61,6 +61,23 @@ export namespace Flag {
   export const OPENCODE_ENABLE_EXA =
     truthy("OPENCODE_ENABLE_EXA") || OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_EXA")
   export const OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS = number("OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS")
+  export const OPENCODE_EXPERIMENTAL_BASH_MAX_TIMEOUT_MS = number("OPENCODE_EXPERIMENTAL_BASH_MAX_TIMEOUT_MS")
+  export const OPENCODE_EXPERIMENTAL_BASH_CHECKPOINT_MINUTES = numberList(
+    "OPENCODE_EXPERIMENTAL_BASH_CHECKPOINT_MINUTES",
+  )
+  export const OPENCODE_EXPERIMENTAL_ENFORCE_SCAN_SAFETY_DEFAULTS = truthy(
+    "OPENCODE_EXPERIMENTAL_ENFORCE_SCAN_SAFETY_DEFAULTS",
+  )
+  export const OPENCODE_EXPERIMENTAL_SWARM_V2 = OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_SWARM_V2")
+  export const OPENCODE_EXPERIMENTAL_SWARM_V2_SQLITE_READ_CANONICAL = truthy(
+    "OPENCODE_EXPERIMENTAL_SWARM_V2_SQLITE_READ_CANONICAL",
+  )
+  export const OPENCODE_EXPERIMENTAL_SWARM_V2_DUAL_WRITE_LEGACY_FILES = truthy(
+    "OPENCODE_EXPERIMENTAL_SWARM_V2_DUAL_WRITE_LEGACY_FILES",
+  )
+  export const OPENCODE_EXPERIMENTAL_SWARM_V2_TMUX_DEFAULT_ENABLED = truthy(
+    "OPENCODE_EXPERIMENTAL_SWARM_V2_TMUX_DEFAULT_ENABLED",
+  )
   export const OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX = number("OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX")
   export const OPENCODE_EXPERIMENTAL_OXFMT = OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_OXFMT")
   export const OPENCODE_EXPERIMENTAL_LSP_TY = truthy("OPENCODE_EXPERIMENTAL_LSP_TY")
@@ -84,6 +101,16 @@ export namespace Flag {
     if (!value) return undefined
     const parsed = Number(value)
     return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
+  }
+
+  function numberList(key: string) {
+    const value = process.env[key]
+    if (!value) return undefined
+    const parsed = value
+      .split(",")
+      .map((item) => Number(item.trim()))
+      .filter((item) => Number.isInteger(item) && item > 0)
+    return parsed.length ? parsed : undefined
   }
 }
 

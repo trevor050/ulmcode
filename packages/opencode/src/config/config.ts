@@ -832,6 +832,66 @@ export namespace Config {
       ref: "ServerConfig",
     })
 
+  export const Cyber = z
+    .object({
+      report_quality_mode: z
+        .enum(["warn", "strict"])
+        .optional()
+        .describe("Report quality gate mode: warn surfaces issues, strict fails finalize on quality failures"),
+      command_timeout_default_ms: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe("Default timeout in milliseconds for bash command execution"),
+      command_timeout_max_ms: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe("Hard maximum timeout in milliseconds for bash command execution"),
+      command_checkpoint_minutes: z
+        .array(z.number().int().positive())
+        .optional()
+        .describe("Minute checkpoints for long-running command progress metadata"),
+      enforce_scan_safety_defaults: z
+        .boolean()
+        .optional()
+        .describe("Enable conservative scan command defaults for cyber workflows"),
+      background_task: z
+        .object({
+          default_concurrency: z.number().int().positive().optional(),
+          stale_timeout_ms: z.number().int().positive().optional(),
+          provider_concurrency: z.record(z.string(), z.number().int().positive()).optional(),
+          model_concurrency: z.record(z.string(), z.number().int().positive()).optional(),
+        })
+        .optional()
+        .describe("Background subagent execution limits and stale-task handling"),
+      swarm_v2: z
+        .object({
+          enabled: z.boolean().optional().describe("Enable V2 swarm orchestration runtime"),
+          dual_write_legacy_files: z
+            .boolean()
+            .optional()
+            .describe("Dual-write SQLite swarm state and legacy coordination files during migration"),
+          sqlite_read_canonical: z
+            .boolean()
+            .optional()
+            .describe("Read swarm state from SQLite as canonical source"),
+          tmux_default_enabled: z.boolean().optional().describe("Default-enable tmux orchestration for swarm teams"),
+          high_autonomy: z.boolean().optional().describe("Enable high-autonomy mesh delegation mode by default"),
+          default_topology: z
+            .enum(["mesh", "brokered"])
+            .optional()
+            .describe("Default team topology for swarm orchestration"),
+        })
+        .optional()
+        .describe("V2 swarm orchestration controls"),
+    })
+    .strict()
+    .meta({
+      ref: "CyberConfig",
+    })
   export const Layout = z.enum(["auto", "stretch"]).meta({
     ref: "LayoutConfig",
   })

@@ -40,6 +40,26 @@ describe("tool.bash", () => {
       },
     })
   })
+
+  test("clamps excessive timeout requests to hard max", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const result = await bash.execute(
+          {
+            command: "echo bounded",
+            timeout: 99_000_000,
+            description: "Check timeout clamp",
+          },
+          ctx,
+        )
+        expect((result.metadata as any).timeoutClamped).toBe(true)
+        expect((result.metadata as any).timeoutMax).toBe(30 * 60 * 1000)
+        expect(result.output).toContain("bash tool clamped timeout")
+      },
+    })
+  })
 })
 
 describe("tool.bash permissions", () => {

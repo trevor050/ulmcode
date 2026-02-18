@@ -9,6 +9,7 @@ import { popularProviders } from "@/hooks/use-providers"
 import { useLanguage } from "@/context/language"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectProvider } from "./dialog-select-provider"
+import { toULMCodeLabel } from "@/util/branding"
 
 export const DialogManageModels: Component = () => {
   const local = useLocal()
@@ -48,12 +49,13 @@ export const DialogManageModels: Component = () => {
         groupBy={(x) => x.provider.id}
         groupHeader={(group) => {
           const provider = group.items[0].provider
+          const providerName = toULMCodeLabel(provider.name)
           return (
             <>
-              <span>{provider.name}</span>
+              <span>{providerName}</span>
               <Tooltip
                 placement="top"
-                value={language.t("dialog.model.manage.provider.toggle", { provider: provider.name })}
+                value={language.t("dialog.model.manage.provider.toggle", { provider: providerName })}
               >
                 <Switch
                   class="-mr-1"
@@ -61,7 +63,7 @@ export const DialogManageModels: Component = () => {
                   onChange={(checked) => setProviderVisibility(provider.id, checked)}
                   hideLabel
                 >
-                  {provider.name}
+                  {providerName}
                 </Switch>
               </Tooltip>
             </>

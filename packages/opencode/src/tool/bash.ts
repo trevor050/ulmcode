@@ -13,13 +13,17 @@ import { Filesystem } from "@/util/filesystem"
 import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag.ts"
 import { Shell } from "@/shell/shell"
+import { BashRisk } from "@/tool/bash-risk"
 
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncate"
 import { Plugin } from "@/plugin"
+import { Config } from "@/config/config"
 
 const MAX_METADATA_LENGTH = 30_000
-const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
+const DEFAULT_TIMEOUT_MS = 2 * 60 * 1000
+const MAX_TIMEOUT_MS = 30 * 60 * 1000
+const DEFAULT_CHECKPOINT_MINUTES = [5, 10, 15, 20, 25, 30]
 
 export const log = Log.create({ service: "bash-tool" })
 
@@ -51,6 +55,11 @@ const parser = lazy(async () => {
   return p
 })
 
+function commandPreview(command: string) {
+  const normalized = command.replace(/\s+/g, " ").trim()
+  return normalized.length > 240 ? normalized.slice(0, 237) + "..." : normalized
+}
+
 // TODO: we may wanna rename this tool so it works better on other shells
 export const BashTool = Tool.define("bash", async () => {
   const shell = Shell.acceptable()
@@ -80,7 +89,39 @@ export const BashTool = Tool.define("bash", async () => {
       if (params.timeout !== undefined && params.timeout < 0) {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
-      const timeout = params.timeout ?? DEFAULT_TIMEOUT
+      const cfg = await Config.get()
+      const defaultTimeout =
+        cfg.cyber?.command_timeout_default_ms ?? Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS ?? DEFAULT_TIMEOUT_MS
+      const maxTimeout = cfg.cyber?.command_timeout_max_ms ?? Flag.OPENCODE_EXPERIMENTAL_BASH_MAX_TIMEOUT_MS ?? MAX_TIMEOUT_MS
+      const requestedTimeout = params.timeout ?? defaultTimeout
+      const timeout = Math.min(requestedTimeout, maxTimeout)
+      const timeoutClamped = requestedTimeout !== timeout
+      const checkpointMinutes = Array.from(
+        new Set(
+          (
+            cfg.cyber?.command_checkpoint_minutes ??
+            Flag.OPENCODE_EXPERIMENTAL_BASH_CHECKPOINT_MINUTES ??
+            DEFAULT_CHECKPOINT_MINUTES
+          )
+            .filter((item) => Number.isInteger(item) && item > 0)
+            .sort((a, b) => a - b),
+        ),
+      )
+      if (cfg.cyber?.enforce_scan_safety_defaults || Flag.OPENCODE_EXPERIMENTAL_ENFORCE_SCAN_SAFETY_DEFAULTS) {
+        const cmd = params.command.toLowerCase()
+        const fullRangeNmap = /\bnmap\b/.test(cmd) && /\s-p-\b/.test(cmd)
+        const aggressiveScripts = /\bnmap\b/.test(cmd) && /--script\s*=\s*vuln/.test(cmd)
+        const unboundedMasscan = /\bmasscan\b/.test(cmd) && !/--rate=\d+/.test(cmd)
+        if (fullRangeNmap || aggressiveScripts || unboundedMasscan) {
+          throw new Error(
+            [
+              "Scan safety policy blocked this command.",
+              "Use progressive bounded scanning first (for example: nmap --top-ports 100 <target>).",
+              "Escalate to deep/full-range scans only after reviewing scoped results and authorization.",
+            ].join(" "),
+          )
+        }
+      }
       const tree = await parser().then((p) => p.parse(params.command))
       if (!tree) {
         throw new Error("Failed to parse command")
@@ -150,7 +191,27 @@ export const BashTool = Tool.define("bash", async () => {
         })
       }
 
+      const risk = BashRisk.classify(params.command)
+
       if (patterns.size > 0) {
+        if (risk.level === "sensitive") {
+          const approvalPatterns = Array.from(patterns)
+          await ctx.ask({
+            permission: "bash_sensitive",
+            patterns: approvalPatterns,
+            always: Array.from(always.size > 0 ? always : new Set(approvalPatterns)),
+            metadata: {
+              reason: risk.match.reason,
+              matched_rule: risk.match.matched_rule,
+              command_preview: commandPreview(params.command),
+              engagement_context: {
+                session_id: ctx.sessionID,
+                agent: ctx.agent,
+                cwd,
+              },
+            },
+          })
+        }
         await ctx.ask({
           permission: "bash",
           patterns: Array.from(patterns),
@@ -177,24 +238,37 @@ export const BashTool = Tool.define("bash", async () => {
       })
 
       let output = ""
+      const startedAt = Date.now()
+      const commandPreviewText = commandPreview(params.command)
 
       // Initialize metadata with empty output
-      ctx.metadata({
-        metadata: {
-          output: "",
-          description: params.description,
-        },
-      })
+      const emitMetadata = (runtime?: Record<string, unknown>) =>
+        ctx.metadata({
+          metadata: {
+            output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
+            description: params.description,
+            timeout_ms: timeout,
+            timeout_max_ms: maxTimeout,
+            timeout_requested_ms: requestedTimeout,
+            timeout_clamped: timeoutClamped,
+            command_preview: commandPreviewText,
+            ...(runtime ? { bash_runtime: runtime } : {}),
+            ...(risk.level === "sensitive"
+              ? {
+                  bash_risk: {
+                    level: risk.level,
+                    ...risk.match,
+                  },
+                }
+              : {}),
+          },
+        })
+
+      emitMetadata()
 
       const append = (chunk: Buffer) => {
         output += chunk.toString()
-        ctx.metadata({
-          metadata: {
-            // truncate the metadata to avoid GIANT blobs of data (has nothing to do w/ what agent can access)
-            output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
-            description: params.description,
-          },
-        })
+        emitMetadata()
       }
 
       proc.stdout?.on("data", append)
@@ -218,6 +292,25 @@ export const BashTool = Tool.define("bash", async () => {
 
       ctx.abort.addEventListener("abort", abortHandler, { once: true })
 
+      const checkpointTimers = checkpointMinutes
+        .map((minute) => ({
+          minute,
+          ms: minute * 60 * 1000,
+        }))
+        .filter((item) => item.ms <= timeout)
+        .map((item) =>
+          setTimeout(() => {
+            const elapsedMs = Date.now() - startedAt
+            const remainingMs = Math.max(timeout - elapsedMs, 0)
+            emitMetadata({
+              checkpoint_minute: item.minute,
+              elapsed_ms: elapsedMs,
+              remaining_ms: remainingMs,
+              status: "running",
+            })
+          }, item.ms),
+        )
+
       const timeoutTimer = setTimeout(() => {
         timedOut = true
         void kill()
@@ -226,6 +319,7 @@ export const BashTool = Tool.define("bash", async () => {
       await new Promise<void>((resolve, reject) => {
         const cleanup = () => {
           clearTimeout(timeoutTimer)
+          for (const timer of checkpointTimers) clearTimeout(timer)
           ctx.abort.removeEventListener("abort", abortHandler)
         }
 
@@ -244,6 +338,12 @@ export const BashTool = Tool.define("bash", async () => {
 
       const resultMetadata: string[] = []
 
+      if (timeoutClamped) {
+        resultMetadata.push(
+          `bash tool clamped timeout from requested ${requestedTimeout} ms to enforced max ${timeout} ms`,
+        )
+      }
+
       if (timedOut) {
         resultMetadata.push(`bash tool terminated command after exceeding timeout ${timeout} ms`)
       }
@@ -256,12 +356,33 @@ export const BashTool = Tool.define("bash", async () => {
         output += "\n\n<bash_metadata>\n" + resultMetadata.join("\n") + "\n</bash_metadata>"
       }
 
+      const elapsedMs = Date.now() - startedAt
+      emitMetadata({
+        elapsed_ms: elapsedMs,
+        remaining_ms: Math.max(timeout - elapsedMs, 0),
+        status: timedOut ? "timed_out" : aborted ? "aborted" : "completed",
+      })
+
       return {
         title: params.description,
         metadata: {
           output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
           exit: proc.exitCode,
+          timeout: timeout,
+          timeoutRequested: requestedTimeout,
+          timeoutClamped,
+          timeoutMax: maxTimeout,
+          elapsedMs,
           description: params.description,
+          commandPreview: commandPreviewText,
+          ...(risk.level === "sensitive"
+            ? {
+                bash_risk: {
+                  level: risk.level,
+                  ...risk.match,
+                },
+              }
+            : {}),
         },
         output,
       }
