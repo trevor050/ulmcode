@@ -65,25 +65,41 @@ export const PlanExitTool = Tool.define("plan_exit", {
       if (v21.askAggressionOnPlanExit) {
         const existingPolicy = await CyberEnvironment.readSwarmPolicy(session)
         if (!existingPolicy) {
-          const answers = await Question.ask({
-            sessionID: ctx.sessionID,
-            questions: [
-              {
-                question: "Choose swarm aggression for this engagement.",
-                header: "Swarm Aggression",
-                custom: false,
-                options: [
-                  { label: "none", description: "No subagent delegation. Planner runs solo." },
-                  { label: "low", description: "Tight fanout with conservative delegation depth." },
-                  { label: "balanced", description: "Default balance of speed and control." },
-                  { label: "high", description: "Aggressive parallelism with safety controls." },
-                  { label: "max_parallel", description: "Maximum parallel fanout with safety guardrails." },
-                ],
+          let selected = v21.defaultAggression
+          let source = "plan_exit_intake"
+          try {
+            const answers = await Question.ask({
+              sessionID: ctx.sessionID,
+              questions: [
+                {
+                  question: "Choose swarm aggression for this engagement.",
+                  header: "Swarm Aggression",
+                  custom: false,
+                  options: [
+                    { label: "none", description: "No subagent delegation. Planner runs solo." },
+                    { label: "low", description: "Tight fanout with conservative delegation depth." },
+                    { label: "balanced", description: "Default balance of speed and control." },
+                    { label: "high", description: "Aggressive parallelism with safety controls." },
+                    { label: "max_parallel", description: "Maximum parallel fanout with safety guardrails." },
+                  ],
+                },
+              ],
+              tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
+            })
+            selected = SwarmAggressionPolicy.normalize(answers[0]?.[0], v21.defaultAggression)
+          } catch (error) {
+            if (error instanceof Question.RejectedError) throw error
+            source = "fallback_default"
+            await SwarmTelemetry.event({
+              sessionID: ctx.sessionID,
+              type: "swarm_aggression_warning",
+              payload: {
+                warning: "plan_exit_question_unavailable",
+                fallback: v21.defaultAggression,
+                error: (error as Error)?.message ?? "unknown",
               },
-            ],
-            tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
-          })
-          const selected = SwarmAggressionPolicy.normalize(answers[0]?.[0], v21.defaultAggression)
+            })
+          }
           const policy = await CyberEnvironment.writeSwarmPolicy({
             session,
             swarm_aggression: selected,
@@ -95,7 +111,7 @@ export const PlanExitTool = Tool.define("plan_exit", {
             type: "swarm_aggression_set",
             payload: {
               swarm_aggression: policy?.swarm_aggression ?? selected,
-              source: "plan_exit_intake",
+              source,
               engagement_id:
                 policy?.engagement_id ??
                 (session.environment?.type === "cyber" ? session.environment.engagementID : null),
