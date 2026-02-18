@@ -8,6 +8,7 @@ test("dropping text/plain file: uri inserts a file pill", async ({ page, gotoSes
   await prompt.click()
 
   const path = process.platform === "win32" ? "C:\\opencode-e2e-drop.txt" : "/tmp/opencode-e2e-drop.txt"
+  const expected = process.platform === "win32" ? path.replaceAll("\\", "/") : path
   const dt = await page.evaluateHandle((text) => {
     const dt = new DataTransfer()
     dt.setData("text/plain", text)
@@ -18,5 +19,5 @@ test("dropping text/plain file: uri inserts a file pill", async ({ page, gotoSes
 
   const pill = page.locator(`${promptSelector} [data-type="file"]`).first()
   await expect(pill).toBeVisible()
-  await expect(pill).toHaveAttribute("data-path", path)
+  await expect(pill).toHaveAttribute("data-path", expected)
 })
