@@ -12,10 +12,17 @@ const parameters = z.object({
     SwarmInbox.MessageType.Handoff,
     SwarmInbox.MessageType.Completion,
     SwarmInbox.MessageType.Failure,
+    SwarmInbox.MessageType.Ack,
+    SwarmInbox.MessageType.Announcement,
   ]),
   to_session_id: z.string().optional(),
   from_session_id: z.string().optional(),
   payload: z.record(z.string(), z.any()).default({}),
+  correlation_id: z.string().optional(),
+  idempotency_key: z.string().optional(),
+  priority: z.enum(["low", "normal", "high", "critical"]).default("normal"),
+  ttl_seconds: z.number().int().positive().optional(),
+  attempt: z.number().int().positive().optional(),
 })
 
 export const TeamMessageTool = Tool.define("team_message", {
@@ -33,7 +40,12 @@ export const TeamMessageTool = Tool.define("team_message", {
       type: params.type,
       fromSessionID: params.from_session_id ?? ctx.sessionID,
       toSessionID: params.to_session_id,
-      payload: params.payload,
+      payload: params.payload ?? {},
+      correlationID: params.correlation_id,
+      idempotencyKey: params.idempotency_key,
+      priority: params.priority ?? "normal",
+      ttlSeconds: params.ttl_seconds,
+      attempt: params.attempt,
       dualWriteSessionID: ctx.sessionID,
     })
 

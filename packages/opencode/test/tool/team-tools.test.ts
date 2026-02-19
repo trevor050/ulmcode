@@ -7,6 +7,10 @@ import { TeamListTool } from "../../src/tool/team_list"
 import { TeamUpdateTool } from "../../src/tool/team_update"
 import { TeamMembersTool } from "../../src/tool/team_members"
 import { TeamMessageTool } from "../../src/tool/team_message"
+import { TeamInboxReadTool } from "../../src/tool/team_inbox_read"
+import { TeamInboxAckTool } from "../../src/tool/team_inbox_ack"
+import { TeamBroadcastTool } from "../../src/tool/team_broadcast"
+import { TeamWaitTool } from "../../src/tool/team_wait"
 import { TeamStatusTool } from "../../src/tool/team_status"
 import { TeamPauseTool } from "../../src/tool/team_pause"
 import { TeamResumeTool } from "../../src/tool/team_resume"
@@ -80,6 +84,53 @@ describe("tool.team_*", () => {
           ctx as any,
         )
         expect(messageResult.output).toContain("message_id:")
+
+        const inboxReadTool = await TeamInboxReadTool.init()
+        const inboxReadResult = await inboxReadTool.execute(
+          {
+            team_id: teamID,
+            scope: "mine",
+            to_session_id: worker.id,
+          },
+          ctx as any,
+        )
+        expect(inboxReadResult.output).toContain("count: 1")
+
+        const ackTool = await TeamInboxAckTool.init()
+        const messageID = String((messageResult.metadata as any).message.id)
+        const ackResult = await ackTool.execute(
+          {
+            team_id: teamID,
+            message_id: messageID,
+            from_session_id: worker.id,
+          },
+          ctx as any,
+        )
+        expect(ackResult.output).toContain("ack_message_id:")
+
+        const broadcastTool = await TeamBroadcastTool.init()
+        const broadcastResult = await broadcastTool.execute(
+          {
+            team_id: teamID,
+            payload: { ping: true },
+            teammate_targets: [worker.id],
+          },
+          ctx as any,
+        )
+        expect(broadcastResult.output).toContain("sent: 1")
+
+        const waitTool = await TeamWaitTool.init()
+        const waitResult = await waitTool.execute(
+          {
+            team_id: teamID,
+            scope: "mine",
+            to_session_id: worker.id,
+            timeout_ms: 1500,
+            poll_ms: 50,
+          },
+          ctx as any,
+        )
+        expect(waitResult.output).toContain("status: received")
 
         const statusTool = await TeamStatusTool.init()
         const statusResult = await statusTool.execute({ team_id: teamID }, ctx as any)

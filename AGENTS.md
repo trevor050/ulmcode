@@ -164,7 +164,6 @@ Last updated: 2026-03-05
 - Registry wiring updated to expose new tools by default.
 - Tests extended:
   - `packages/opencode/test/tool/team-tools.test.ts` now validates read/ack/broadcast/wait flows.
-
 ## Pentest Plan Prompt Hardening (2026-03-05)
 - Hardened plan-mode cyber prompt contract in:
   - `packages/opencode/src/session/prompt.ts`

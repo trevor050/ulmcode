@@ -44,6 +44,10 @@ import { TeamStatusTool } from "./team_status"
 import { TeamPauseTool } from "./team_pause"
 import { TeamResumeTool } from "./team_resume"
 import { TeamStopTool } from "./team_stop"
+import { TeamInboxReadTool } from "./team_inbox_read"
+import { TeamInboxAckTool } from "./team_inbox_ack"
+import { TeamBroadcastTool } from "./team_broadcast"
+import { TeamWaitTool } from "./team_wait"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -145,6 +149,10 @@ export namespace ToolRegistry {
           TeamListTool,
           TeamMembersTool,
           TeamMessageTool,
+          TeamInboxReadTool,
+          TeamInboxAckTool,
+          TeamBroadcastTool,
+          TeamWaitTool,
           TeamStatusTool,
           TeamPauseTool,
           TeamResumeTool,
