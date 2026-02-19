@@ -1,6 +1,13 @@
 export namespace SwarmAggressionPolicy {
   export const values = ["none", "low", "balanced", "high", "max_parallel"] as const
   export type Level = (typeof values)[number]
+  export const friendlyLabels: Record<Level, string> = {
+    none: "None",
+    low: "Low",
+    balanced: "Balanced",
+    high: "High",
+    max_parallel: "Max parallel",
+  }
 
   export const sourceValues = ["policy", "override", "default"] as const
   export type Source = (typeof sourceValues)[number]
@@ -11,9 +18,15 @@ export namespace SwarmAggressionPolicy {
     max_delegation_depth: number
   }
 
+  function key(input: string) {
+    return input.trim().toLowerCase().replace(/[\s-]+/g, "_")
+  }
+
   export function normalize(input: string | undefined, fallback: Level = "balanced"): Level {
     if (!input) return fallback
-    if ((values as readonly string[]).includes(input)) return input as Level
+    const normalized = key(input)
+    if ((values as readonly string[]).includes(normalized)) return normalized as Level
+    if (normalized === "maxparallel") return "max_parallel"
     return fallback
   }
 

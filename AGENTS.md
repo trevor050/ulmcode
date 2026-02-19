@@ -141,7 +141,6 @@ Last updated: 2026-03-05
 - TUI mode sync fix:
   - selected bottom agent now tracks latest effective user primary-agent transition, not only `plan_enter/plan_exit` tool-completion events.
   - helper added: `src/cli/cmd/tui/routes/session/agent-sync.ts`.
-
 ## Swarm Revision Phase 2.3 (2026-02-19, initial comms groundwork)
 - Added cross-agent communication tool surfaces:
   - `team_inbox_read`: read team or per-session inbox with message-type filters

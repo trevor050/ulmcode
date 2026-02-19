@@ -403,6 +403,9 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         expectedOutputSchema: params.expected_output_schema ?? "brief",
         coordinationScope: params.coordination_scope ?? [],
         teammateTargets: params.teammate_targets ?? [],
+        kickoffBootstrapCompleted: true,
+        delegationBootstrapCount: 1,
+        approvalIntentDetected: false,
       }
       const telemetryDefaults = {
         backgroundTaskId: "",

@@ -2,18 +2,16 @@ import z from "zod"
 import path from "path"
 import { Tool } from "./tool"
 import { Question } from "../question"
+import { Agent } from "../agent/agent"
 import { Session } from "../session"
 import { MessageV2 } from "../session/message-v2"
 import { Provider } from "../provider/provider"
 import { Instance } from "../project/instance"
 import { type SessionID, MessageID, PartID } from "../session/schema"
 import EXIT_DESCRIPTION from "./plan-exit.txt"
-<<<<<<< HEAD
-=======
 import ENTER_DESCRIPTION from "./plan-enter.txt"
 import { CyberEnvironment } from "@/session/environment"
 import { SwarmAggressionPolicy, SwarmTeamManager, SwarmTelemetry } from "@/features/swarm"
->>>>>>> 4211dc3af (feat(swarm): add v2.1 pentest plan-time aggression policy)
 
 async function getLastModel(sessionID: SessionID) {
   for await (const item of MessageV2.stream(sessionID)) {
@@ -22,31 +20,80 @@ async function getLastModel(sessionID: SessionID) {
   return Provider.defaultModel()
 }
 
+async function getLastUserAgent(sessionID: string) {
+  for await (const item of MessageV2.stream(sessionID)) {
+    if (item.info.role !== "user") continue
+    if (!item.info.agent) continue
+    return item.info.agent
+  }
+  return "pentest"
+}
+
+async function getPrePlanAgent(sessionID: string) {
+  let sawPlan = false
+  for await (const item of MessageV2.stream(sessionID)) {
+    if (item.info.role !== "user") continue
+    const agent = item.info.agent
+    if (!agent) continue
+    if (agent === "plan") {
+      sawPlan = true
+      continue
+    }
+    if (sawPlan) return agent
+  }
+  return "pentest"
+}
+
+function executionAgent(agent: string) {
+  if (agent === "pentest_auto" || agent === "pentest_flow" || agent === "AutoPentest") return "pentest"
+  return agent
+}
+
+function executionKickoff(input: { planPath: string; agent: string }) {
+  if (input.agent !== "pentest") {
+    return `The plan at ${input.planPath} has been approved. You are now back in ${input.agent} mode. Execute the plan.`
+  }
+  return [
+    `The plan at ${input.planPath} has been approved. You are now in pentest mode.`,
+    "Create or update your todo list now with concrete execution tasks and priorities.",
+    "Begin executing the approved plan immediately and capture evidence as you go.",
+    "Delegate specialized work early using the task tool with subagents (recon, assess, report, network_mapper, host_auditor, vuln_researcher, evidence_scribe).",
+  ].join("\n")
+}
+
+async function resolveExecutionAgent(sessionID: string) {
+  const session = await Session.get(sessionID)
+  const preferred = executionAgent(await getPrePlanAgent(sessionID))
+  if (session.environment?.type === "cyber" && preferred === "build") {
+    const pentest = await Agent.get("pentest")
+    if (pentest && pentest.mode !== "subagent") return "pentest"
+  }
+  const preferredAgent = await Agent.get(preferred)
+  if (preferredAgent && preferredAgent.mode !== "subagent") return preferred
+
+  const pentest = await Agent.get("pentest")
+  if (pentest && pentest.mode !== "subagent") return "pentest"
+
+  return Agent.defaultAgent()
+}
+
 export const PlanExitTool = Tool.define("plan_exit", {
   description: EXIT_DESCRIPTION,
   parameters: z.object({}),
   async execute(_params, ctx) {
     let session = await Session.get(ctx.sessionID)
-    const plan = path.relative(Instance.worktree, Session.plan(session))
-    const answers = await Question.ask({
-      sessionID: ctx.sessionID,
-      questions: [
-        {
-          question: `Plan at ${plan} is complete. Would you like to switch to the build agent and start implementing?`,
-          header: "Build Agent",
-          custom: false,
-          options: [
-            { label: "Yes", description: "Switch to build agent and start implementing the plan" },
-            { label: "No", description: "Stay with plan agent to continue refining the plan" },
-          ],
+    const activeAgent = await getLastUserAgent(ctx.sessionID)
+    if (activeAgent !== "plan") {
+      return {
+        title: "Already in execution mode",
+        output: "Plan handoff skipped because this session is not currently in plan mode.",
+        metadata: {
+          approvalIntentDetected: false,
         },
-      ],
-      tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
-    })
-
-    const answer = answers[0]?.[0]
-    if (answer === "No") throw new Question.RejectedError()
-
+      }
+    }
+    const plan = path.relative(Instance.worktree, Session.plan(session))
+    const previousAgent = await resolveExecutionAgent(ctx.sessionID)
     const model = await getLastModel(ctx.sessionID)
     const v21 = await SwarmTeamManager.v21Flags()
 
@@ -76,11 +123,11 @@ export const PlanExitTool = Tool.define("plan_exit", {
                   header: "Swarm Aggression",
                   custom: false,
                   options: [
-                    { label: "none", description: "No subagent delegation. Planner runs solo." },
-                    { label: "low", description: "Tight fanout with conservative delegation depth." },
-                    { label: "balanced", description: "Default balance of speed and control." },
-                    { label: "high", description: "Aggressive parallelism with safety controls." },
-                    { label: "max_parallel", description: "Maximum parallel fanout with safety guardrails." },
+                    { label: "None", description: "No subagent delegation. Planner runs solo." },
+                    { label: "Low", description: "Tight fanout with conservative delegation depth." },
+                    { label: "Balanced", description: "Default balance of speed and control." },
+                    { label: "High", description: "Aggressive parallelism with safety controls." },
+                    { label: "Max parallel", description: "Maximum parallel fanout with safety guardrails." },
                   ],
                 },
               ],
@@ -128,7 +175,7 @@ export const PlanExitTool = Tool.define("plan_exit", {
       time: {
         created: Date.now(),
       },
-      agent: "build",
+      agent: previousAgent,
       model,
     }
     await Session.updateMessage(userMsg)
@@ -137,25 +184,27 @@ export const PlanExitTool = Tool.define("plan_exit", {
       messageID: userMsg.id,
       sessionID: ctx.sessionID,
       type: "text",
-      text: `The plan at ${plan} has been approved, you can now edit files. Execute the plan`,
+      text: executionKickoff({ planPath: plan, agent: previousAgent }),
       synthetic: true,
     } satisfies MessageV2.TextPart)
 
     return {
-      title: "Switching to build agent",
-      output: "User approved switching to build agent. Wait for further instructions.",
-      metadata: {},
+      title: `Switching to ${previousAgent} agent`,
+      output: `Switched to ${previousAgent}. Continue execution immediately.`,
+      metadata: {
+        approvalIntentDetected: true,
+      },
     }
   },
 })
 
-/*
 export const PlanEnterTool = Tool.define("plan_enter", {
   description: ENTER_DESCRIPTION,
   parameters: z.object({}),
   async execute(_params, ctx) {
     const session = await Session.get(ctx.sessionID)
     const plan = path.relative(Instance.worktree, Session.plan(session))
+    const currentAgent = await getLastUserAgent(ctx.sessionID)
 
     const answers = await Question.ask({
       sessionID: ctx.sessionID,
@@ -166,7 +215,7 @@ export const PlanEnterTool = Tool.define("plan_enter", {
           custom: false,
           options: [
             { label: "Yes", description: "Switch to plan agent for research and planning" },
-            { label: "No", description: "Stay with build agent to continue making changes" },
+            { label: "No", description: `Stay with ${currentAgent} to continue execution` },
           ],
         },
       ],
@@ -206,4 +255,3 @@ export const PlanEnterTool = Tool.define("plan_enter", {
     }
   },
 })
-*/

@@ -1529,10 +1529,11 @@ Goal: Write your final plan to the plan file (the only file you can edit).
 - Include a verification section describing how to test the changes end-to-end (run the code, use MCP tools, run tests)
 
 ### Phase 5: Call plan_exit tool
-At the very end of your turn, once you have asked the user questions and are happy with your final plan file - you should always call plan_exit to indicate to the user that you are done planning.
+At the very end of your turn, once you have asked the user questions and are happy with your final plan file - you should always call the plan_exit tool to indicate to the user that you are done planning.
 This is critical - your turn should only end with either asking the user a question or calling plan_exit. Do not stop unless it's for these 2 reasons.
 
 **Important:** Use question tool to clarify requirements/approach, and ask for plan approval in normal chat with a short prompt like "Does this plan sound good? If not, tell me what to change." Once the user confirms it is good, call plan_exit to begin execution.
+Never output the literal string "plan_exit" in plain text. This must be a tool call.
 
 NOTE: At any point in time through this workflow you should feel free to ask the user questions or clarifications. Don't make large assumptions about user intent. The goal is to present a well researched plan to the user, and tie any loose ends before implementation begins.
 </system-reminder>`,
@@ -1565,7 +1566,7 @@ Use question tool for missing authorization/scope constraints, high-impact assum
 If confusion remains, continue asking focused follow-up questions until confidence is high enough to execute.
 Do not ask low-value or generic questions.
 After the plan is ready, ask for approval in normal chat: "Does this plan sound good? If not, tell me what to change."
-When the user confirms readiness, use plan_exit to switch to execution mode.
+When the user confirms readiness, call the plan_exit tool to switch to execution mode.
 
 ### Phase 3: Build Delegation Plan
 Goal: write an actionable operation order that starts execution cleanly.
@@ -1599,6 +1600,7 @@ The final section of the plan must describe the reporting closeout in this order
 3. Compile the final print-ready PDF from the HTML/CSS report flow.
 
 Call plan_exit only when the plan file is ready, ambiguities are resolved, and the user explicitly confirms they want execution to begin.
+Never output plain text "plan_exit". Use the tool call only.
 Your turn should end by either asking a targeted question or calling plan_exit.
 </system-reminder>`
   }
@@ -2126,6 +2128,7 @@ Your turn should end by either asking a targeted question or calling plan_exit.
   const CYBER_ENV_CONTEXT_MARKER = "[CYBER_ENVIRONMENT_CONTEXT_V1]"
   const CYBER_AUTO_INTAKE_MARKER = "[CYBER_AUTO_INTAKE_REQUIRED_V1]"
   const CYBER_PLAN_KICKOFF_MARKER = "[CYBER_PLAN_KICKOFF_REQUIRED_V1]"
+  const CYBER_EXEC_BOOTSTRAP_MARKER = "[CYBER_EXEC_BOOTSTRAP_REQUIRED_V1]"
 
   function hasEnvironmentContextReminder(messages: MessageV2.WithParts[]) {
     return messages.some((message) =>
@@ -2136,6 +2139,33 @@ Your turn should end by either asking a targeted question or calling plan_exit.
           part.text.includes(CYBER_ENV_CONTEXT_MARKER),
       ),
     )
+  }
+
+  function toToolParts(messages: MessageV2.WithParts[]) {
+    return messages.flatMap((message) =>
+      message.parts
+        .filter((part): part is MessageV2.ToolPart => part.type === "tool")
+        .map((part) => ({
+          part,
+          created: message.info.time.created ?? 0,
+        })),
+    )
+  }
+
+  function latestPlanExitTimestamp(messages: MessageV2.WithParts[]) {
+    return toToolParts(messages)
+      .filter((item) => item.part.tool === "plan_exit" && item.part.state.status === "completed")
+      .map((item) => item.created)
+      .sort((a, b) => b - a)[0]
+  }
+
+  function bootstrapStats(messages: MessageV2.WithParts[]) {
+    const handoffAt = latestPlanExitTimestamp(messages)
+    if (!handoffAt) return { active: false, todoCount: 0, delegationCount: 0 }
+    const after = toToolParts(messages).filter((item) => item.created > handoffAt)
+    const todoCount = after.filter((item) => item.part.tool === "todowrite" && item.part.state.status === "completed").length
+    const delegationCount = after.filter((item) => item.part.tool === "task" && item.part.state.status === "completed").length
+    return { active: true, todoCount, delegationCount }
   }
 
   async function insertCyberReminders(input: {
@@ -2261,7 +2291,7 @@ Your turn should end by either asking a targeted question or calling plan_exit.
           "Do not ask benign or unnecessary questions that do not change decisions.",
           "After collecting answers, summarize assumptions and build a detailed plan.",
           "Then ask in normal chat: 'Does this plan sound good? If not, tell me what to change.'",
-          "Use plan_exit only after the user confirms they want to proceed.",
+          "Use the plan_exit tool only after the user confirms they want to proceed.",
           "</system-reminder>",
         ].join("\n"),
       })
@@ -2289,12 +2319,50 @@ Your turn should end by either asking a targeted question or calling plan_exit.
           "PENTEST PLAN KICKOFF REQUIRED BEFORE BROAD DELEGATION.",
           "Run a brief, safe network exploration first (quick host/service map and obvious exposure inventory).",
           "Then produce a short plan with prioritized checks and clear subagent delegation lanes.",
-          "Before plan_exit, collect swarm aggression preference: none, low, balanced, high, or max_parallel.",
+          "Before plan_exit, collect swarm aggression preference: None, Low, Balanced, High, or Max parallel.",
           "If scope or constraints remain unclear after kickoff, use plan_enter and draft/refine the plan in plan mode before execution.",
           "</system-reminder>",
         ].join("\n"),
       })
       target.parts.push(part)
+    }
+
+    if (
+      input.agent.name === "pentest" ||
+      input.agent.name === "pentest_auto" ||
+      input.agent.name === "pentest_flow" ||
+      input.agent.name === "AutoPentest"
+    ) {
+      const bootstrap = bootstrapStats(input.messages)
+      if (bootstrap.active) {
+        const policy = await CyberEnvironment.readSwarmPolicy(input.session).catch(() => undefined)
+        const aggression = policy?.swarm_aggression ?? "balanced"
+        const requiredDelegationCount = aggression === "none" ? 0 : aggression === "low" ? 1 : 2
+        const kickoffBootstrapCompleted =
+          bootstrap.todoCount > 0 && bootstrap.delegationCount >= requiredDelegationCount
+        if (!kickoffBootstrapCompleted && !CyberEnvironment.hasReminderMarker(input.messages, CYBER_EXEC_BOOTSTRAP_MARKER)) {
+          const target = await ensureReminderMessage()
+          const part = await Session.updatePart({
+            id: Identifier.ascending("part"),
+            messageID: target.info.id,
+            sessionID: target.info.sessionID,
+            type: "text",
+            synthetic: true,
+            text: [
+              "<system-reminder>",
+              CYBER_EXEC_BOOTSTRAP_MARKER,
+              "EXECUTION BOOTSTRAP REQUIRED BEFORE DEEP SCANNING.",
+              "First action in execution mode must include todowrite with phased execution tasks.",
+              `Current swarm aggression: ${aggression}. Required initial delegation lanes: ${requiredDelegationCount}.`,
+              `Observed post-handoff: todowrite=${bootstrap.todoCount}, task delegations=${bootstrap.delegationCount}.`,
+              "Swarm aggression controls subagent collaboration strategy, not raw scan aggressiveness.",
+              "Complete bootstrap, then proceed with deeper scan phases.",
+              "</system-reminder>",
+            ].join("\n"),
+          })
+          target.parts.push(part)
+        }
+      }
     }
 
     if (
@@ -2456,17 +2524,17 @@ Your turn should end by either asking a targeted question or calling plan_exit.
       sessionID: user.sessionID,
       type: "text",
       synthetic: true,
-        text: [
-          "Guided pentest kickoff: enter plan mode before execution.",
-          "First, do a deep read-only grounding pass, starting with a brief safe network exploration snapshot.",
-          "Then use question tool for critical intake questions and continue focused follow-up questions until confidence is high.",
-          "Avoid benign/unnecessary questions.",
-          "Produce an absolute execution-ready plan with explicit testing phases, decision gates, and a clear subagent use/non-use map.",
-          "Make the plan specific enough that another operator could execute it with minimal improvisation.",
-          "Require a swarm aggression choice before execution handoff: none, low, balanced, high, or max_parallel.",
-          "When the plan is ready, ask in normal chat: 'Does this plan sound good? If not, tell me what to change.'",
-          "When the user confirms they are ready, call plan_exit to switch into execution mode.",
-          "The plan must end with reporting closeout: invoke report_writer, then build a high-quality report.html and final PDF from HTML/CSS.",
+      text: [
+        "Guided pentest kickoff: enter plan mode before execution.",
+        "First, do a deep read-only grounding pass, starting with a brief safe network exploration snapshot.",
+        "Then use question tool for critical intake questions and continue focused follow-up questions until confidence is high.",
+        "Avoid benign/unnecessary questions.",
+        "Produce an absolute execution-ready plan with explicit testing phases, decision gates, and a clear subagent use/non-use map.",
+        "Make the plan specific enough that another operator could execute it with minimal improvisation.",
+        "Require a swarm aggression choice before execution handoff: None, Low, Balanced, High, or Max parallel.",
+        "When the plan is ready, ask in normal chat: 'Does this plan sound good? If not, tell me what to change.'",
+        "When the user confirms they are ready, call the plan_exit tool to switch into execution mode.",
+        "The plan must end with reporting closeout: invoke report_writer, then build a high-quality report.html and final PDF from HTML/CSS.",
         "Produce a full actionable plan before active pentest execution.",
       ].join("\n"),
     })

@@ -146,14 +146,45 @@ describe("tool.plan", () => {
           time: { created: Date.now() },
         })
 
-        askSpy.mockResolvedValueOnce([["high"]])
+        askSpy.mockResolvedValueOnce([["High"]])
         const tool = await PlanExitTool.init()
         await tool.execute({}, { ...ctx, sessionID: session.id })
 
         expect(askSpy).toHaveBeenCalledTimes(1)
+        expect(askSpy.mock.calls[0]?.[0]?.questions?.[0]?.options?.map((o: any) => o.label)).toEqual([
+          "None",
+          "Low",
+          "Balanced",
+          "High",
+          "Max parallel",
+        ])
         const policyPath = path.join(env.root, "agents", "coordination", "swarm-policy.json")
         const policy = JSON.parse(await Bun.file(policyPath).text())
         expect(policy.swarm_aggression).toBe("high")
+      },
+    })
+  })
+
+  test("plan_exit no-ops when current mode is not plan", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: session.id,
+          agent: "pentest",
+          model: { providerID: "openai", modelID: "gpt-5" },
+          time: { created: Date.now() },
+        })
+
+        const tool = await PlanExitTool.init()
+        const result = await tool.execute({}, { ...ctx, sessionID: session.id })
+        expect(result.output).toContain("not currently in plan mode")
+        expect(result.metadata.approvalIntentDetected).toBe(false)
+        expect(askSpy).toHaveBeenCalledTimes(0)
       },
     })
   })

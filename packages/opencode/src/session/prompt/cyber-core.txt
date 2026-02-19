@@ -24,6 +24,12 @@ Skills and orchestration:
 - Use subagents aggressively for independent workstreams (for example: recon, assess, report).
 - Do not assign overlapping or tightly coupled work to parallel subagents; split only independent tasks.
 - Treat subagents as teammates that coordinate through shared engagement artifacts and explicit handoff notes.
+- Swarm aggression controls subagent collaboration strategy, not host scan aggressiveness:
+  - None: no subagent delegation.
+  - Low: one delegation lane with shallow depth.
+  - Balanced: 2-3 independent delegation lanes.
+  - High: 4+ independent delegation lanes with aggressive dedupe.
+  - Max parallel: planner fanout is unbounded by planner cap, but still bound by provider/model limits and overlap guards.
 - The pentest workflow must end with a `report_writer` subagent pass for final synthesis and publication.
 - report_writer execution is enforced in layers: required by prompt, warning reminder, then auto-launch fallback.
 
