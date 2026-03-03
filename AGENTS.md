@@ -222,6 +222,11 @@ Last updated: 2026-02-26
 - Keep package metadata (`package.json` license fields), user-facing license labels/links, and packaging metadata aligned with the root `LICENSE` to avoid mixed-license ambiguity.
 
 ## Upstream Sync Log
+- 2026-03-02: merged latest `upstream/dev` into local `dev` and resolved 13 merge conflicts across workflow/config, TUI session routing, tool registry, and skill-discovery tests.
+- 2026-03-02 sync gotchas:
+  - `packages/opencode/src/cli/cmd/tui/routes/session/index.tsx` now depends on `routes/session/agent-sync.ts`; keep both in sync during merges.
+  - `PlanEnterTool` can be accidentally commented out during upstream merges in `packages/opencode/src/tool/plan.ts`; if that happens, `packages/opencode/test/tool/plan.test.ts` fails immediately.
+  - Full `bun turbo typecheck` currently requires Bun `^1.3.10` per upstream script guard; local Bun `1.3.9` can still validate key packages with targeted `bun run --cwd packages/opencode typecheck` and `bun run --cwd packages/ui typecheck`.
 - 2026-02-08: merged `upstream/dev` into fork branch `codex/upstream-sync-20260208` (17 upstream commits integrated at sync time).
 - High-impact upstream areas landed:
   - prompt input UX and drag/drop attachment handling,

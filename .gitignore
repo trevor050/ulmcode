@@ -27,6 +27,7 @@ target
 opencode-dev
 logs/
 *.bun-build
+tsconfig.tsbuildinfo
 
 # ULM security: never commit runtime engagement artifacts/reports
 packages/opencode/finding.md
