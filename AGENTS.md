@@ -23,6 +23,8 @@ Last updated: 2026-02-26
 - PowerShell installer: `install.ps1` (Windows native).
 - Skills bundle script: `tools/ulmcode-profile/scripts/build-skills-bundle.sh` -> `ulmcode-skills.tar.gz`.
 - Profile initializer CLI: `ulmcode profile init` (writes `~/.config/ulmcode/opencode.json` + launchers, allowlists skills, configures MCP).
+- Upgrade path for distributed fork users: `ulmcode upgrade` (alias: `ulmcode update`).
+- Upgrade command resilience: when install method detection is `unknown`, CLI now falls back to `curl` installer flow (instead of erroring on `unknown` method).
 
 ## Current Behavior Snapshot
 - `pentest` is the default guided mode when no explicit agent is set.

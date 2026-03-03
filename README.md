@@ -63,6 +63,22 @@ nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev
 > [!TIP]
 > Remove versions older than 0.1.x before installing.
 
+### Updating
+
+```bash
+# Built-in updater (recommended for fork users installed via script)
+ulmcode upgrade
+
+# Alias
+ulmcode update
+```
+
+If you distribute a custom fork build, users can pin the release source:
+
+```bash
+ULMCODE_GITHUB_REPO=trevor050/ulmcode ulmcode upgrade
+```
+
 ### Desktop App (BETA)
 
 OpenCode is also available as a desktop application. Download directly from the [releases page](https://github.com/anomalyco/opencode/releases) or [opencode.ai/download](https://opencode.ai/download).
