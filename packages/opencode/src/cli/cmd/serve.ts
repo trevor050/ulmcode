@@ -23,6 +23,7 @@ export const ServeCommand = cmd({
     if (Installation.isLocal()) {
       workspaceSync = Project.list().map((project) => Workspace.startSyncing(project))
     }
+
     await new Promise(() => {})
     await server.stop()
     await Promise.all(workspaceSync.map((item) => item.stop()))
