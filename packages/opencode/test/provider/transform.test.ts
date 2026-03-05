@@ -211,6 +211,12 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
     expect(result.textVerbosity).toBe("low")
   })
 
+  test("gpt-5.4 should have textVerbosity set to low", () => {
+    const model = createGpt5Model("gpt-5.4")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBe("low")
+  })
+
   test("gpt-5.2-chat-latest should NOT have textVerbosity set (only supports medium)", () => {
     const model = createGpt5Model("gpt-5.2-chat-latest")
     const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
@@ -2385,6 +2391,21 @@ describe("ProviderTransform.variants", () => {
       })
       const result = ProviderTransform.variants(model)
       expect(Object.keys(result)).toEqual(["none", "minimal", "low", "medium", "high", "xhigh"])
+    })
+
+    test("gpt-5.4-pro inherits gpt-5 effort controls", () => {
+      const model = createMockModel({
+        id: "gpt-5.4-pro",
+        providerID: "openai",
+        api: {
+          id: "gpt-5.4-pro",
+          url: "https://api.openai.com",
+          npm: "@ai-sdk/openai",
+        },
+        release_date: "2026-03-05",
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["none", "low", "medium", "high", "xhigh"])
     })
   })
 

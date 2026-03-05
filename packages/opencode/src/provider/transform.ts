@@ -332,6 +332,17 @@ export namespace ProviderTransform {
   const WIDELY_SUPPORTED_EFFORTS = ["low", "medium", "high"]
   const OPENAI_EFFORTS = ["none", "minimal", ...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
 
+  function getGpt5MinorVersion(id: string) {
+    const match = id.match(/gpt-5\.(\d+)/)
+    return match ? Number(match[1]) : undefined
+  }
+
+  function supportsGpt5XHigh(id: string) {
+    if (id.includes("gpt-5.1-codex-max")) return true
+    const minor = getGpt5MinorVersion(id)
+    return minor !== undefined && minor >= 2
+  }
+
   export function variants(model: Provider.Model): Record<string, Record<string, any>> {
     if (!model.capabilities.reasoning) return {}
 
@@ -441,11 +452,8 @@ export namespace ProviderTransform {
           }
         }
         const copilotEfforts = iife(() => {
-          if (id.includes("5.1-codex-max") || id.includes("5.2") || id.includes("5.3"))
-            return [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
-          const arr = [...WIDELY_SUPPORTED_EFFORTS]
-          if (id.includes("gpt-5") && model.release_date >= "2025-12-04") arr.push("xhigh")
-          return arr
+          if (supportsGpt5XHigh(id)) return [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
+          return WIDELY_SUPPORTED_EFFORTS
         })
         return Object.fromEntries(
           copilotEfforts.map((effort) => [
@@ -493,7 +501,7 @@ export namespace ProviderTransform {
         if (id === "gpt-5-pro") return {}
         const openaiEfforts = iife(() => {
           if (id.includes("codex")) {
-            if (id.includes("5.2") || id.includes("5.3")) return [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
+            if (supportsGpt5XHigh(id)) return [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
             return WIDELY_SUPPORTED_EFFORTS
           }
           const arr = [...WIDELY_SUPPORTED_EFFORTS]

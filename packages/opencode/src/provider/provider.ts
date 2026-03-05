@@ -54,6 +54,69 @@ import { ModelID, ProviderID } from "./schema"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
+  const OPENAI_MODEL_PRESETS = [
+    {
+      id: "gpt-5.4",
+      name: "GPT-5.4",
+      family: "gpt",
+      release_date: "2026-03-05",
+      limit: { context: 1_050_000, input: 272_000, output: 128_000 },
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+    },
+    {
+      id: "gpt-5.4-pro",
+      name: "GPT-5.4 Pro",
+      family: "gpt",
+      release_date: "2026-03-05",
+      limit: { context: 1_050_000, input: 272_000, output: 128_000 },
+      capabilities: {
+        temperature: false,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+    },
+  ] as const
+
+  function ensureOpenAIModel(provider: Info, preset: (typeof OPENAI_MODEL_PRESETS)[number]) {
+    if (provider.models[preset.id]) return
+    const model: Model = {
+      id: preset.id,
+      providerID: provider.id,
+      name: preset.name,
+      family: preset.family,
+      api: {
+        id: preset.id,
+        url: provider.options.baseURL ?? "https://api.openai.com/v1",
+        npm: "@ai-sdk/openai",
+      },
+      status: "active",
+      headers: {},
+      options: {},
+      cost: {
+        input: 0,
+        output: 0,
+        cache: { read: 0, write: 0 },
+      },
+      limit: preset.limit,
+      capabilities: preset.capabilities,
+      release_date: preset.release_date,
+      variants: {},
+    }
+    model.variants = mapValues(ProviderTransform.variants(model), (variant) => variant)
+    provider.models[preset.id] = model
+  }
 
   function shouldUseCopilotResponsesApi(modelID: string): boolean {
     const match = /^gpt-(\d+)/.exec(modelID)
@@ -182,7 +245,8 @@ export namespace Provider {
         options: hasKey ? {} : { apiKey: "public" },
       }
     },
-    openai: async () => {
+    openai: async (input) => {
+      for (const preset of OPENAI_MODEL_PRESETS) ensureOpenAIModel(input, preset)
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
