@@ -466,3 +466,7 @@ const table = sqliteTable("session", {
 - Keep explicit approval gating for `plan_exit` when handing off to `pentest`; this prevents accidental immediate execution and plain-text `plan_exit` dead ends.
 - V2.1.1 follow-up: first-message pentest kickoff must be routed at message creation time (`SessionPrompt.createUserMessage`) to agent `plan`, not via loop-time synthetic kickoff. This keeps UI mode and execution mode aligned and prevents immediate snapback into pentest behavior.
 - V2.1.1 follow-up 2: first-message pentest reroute must also inject kickoff guidance + force-create cyber environment at ingestion (`SessionPrompt.prompt`) or plan mode falls back to generic read-only coding behavior and skips expected safe recon snapshot steps.
+- GPT-5.4 support hotfix (2026-03-05): OpenAI family handling was mostly already generic, but two manual paths needed intervention:
+  - `packages/opencode/src/plugin/codex.ts` had a stale OAuth allowlist/manual model injection path that would hide brand-new OpenAI models until explicitly added.
+  - `packages/opencode/src/provider/provider.ts` now supplements `gpt-5.4` and `gpt-5.4-pro` for the plain OpenAI provider so releases are not blocked on `models.dev` catalog lag.
+- Reasoning variants gotcha: `ProviderTransform.variants()` does not treat versioned GPT-5 models as supporting `minimal` by default unless the model id matches the legacy `gpt-5` / `gpt-5-*` pattern. Do not assume `gpt-5.4` or `gpt-5.4-pro` will expose `minimal` unless that logic is intentionally broadened.

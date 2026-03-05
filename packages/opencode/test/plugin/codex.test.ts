@@ -3,6 +3,7 @@ import {
   parseJwtClaims,
   extractAccountIdFromClaims,
   extractAccountId,
+  CodexAuthPlugin,
   type IdTokenClaims,
 } from "../../src/plugin/codex"
 
@@ -118,6 +119,58 @@ describe("plugin.codex", () => {
           refresh_token: "rt",
         }),
       ).toBe("acc-123")
+    })
+  })
+
+  describe("CodexAuthPlugin auth loader", () => {
+    test("preserves and injects GPT-5.4 models for oauth", async () => {
+      const hooks = await CodexAuthPlugin({
+        client: {
+          auth: {
+            set: async () => undefined,
+          },
+        },
+      } as any)
+
+      const provider = {
+        models: {
+          "gpt-4.1": {
+            id: "gpt-4.1",
+            cost: { input: 1, output: 1, cache: { read: 1, write: 1 } },
+          },
+          "gpt-5.2": {
+            id: "gpt-5.2",
+            cost: { input: 1, output: 1, cache: { read: 1, write: 1 } },
+          },
+        },
+      }
+
+      const result = await hooks.auth!.loader!(
+        async () =>
+          ({
+            type: "oauth",
+            access: "token",
+            refresh: "refresh",
+            expires: Date.now() + 60_000,
+          }) as any,
+        provider as any,
+      )
+
+      expect(result.apiKey).toBeTruthy()
+      expect(provider.models["gpt-4.1"]).toBeUndefined()
+      expect(provider.models["gpt-5.2"]).toBeTruthy()
+      expect(provider.models["gpt-5.4"]).toBeTruthy()
+      expect(provider.models["gpt-5.4-pro"]).toBeTruthy()
+      expect(provider.models["gpt-5.3-codex"]).toBeTruthy()
+      expect(provider.models["gpt-5.4"].limit.context).toBe(1_050_000)
+      expect(Object.keys(provider.models["gpt-5.4"].variants)).toEqual([
+        "none",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+      ])
+      expect(Object.values(provider.models).every((model: any) => model.cost.input === 0)).toBe(true)
     })
   })
 })

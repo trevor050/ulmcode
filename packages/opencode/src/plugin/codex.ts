@@ -12,6 +12,40 @@ const ISSUER = "https://auth.openai.com"
 const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
 const OAUTH_PORT = 1455
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000
+const CODEX_OAUTH_ALLOWED_MODELS = new Set([
+  "gpt-5.1-codex-max",
+  "gpt-5.1-codex-mini",
+  "gpt-5.1-codex",
+  "gpt-5.2",
+  "gpt-5.2-codex",
+  "gpt-5.3-codex",
+  "gpt-5.4",
+  "gpt-5.4-pro",
+])
+
+const CODEX_OAUTH_MODEL_PRESETS = [
+  {
+    id: "gpt-5.3-codex",
+    name: "GPT-5.3 Codex",
+    limit: { context: 400_000, input: 272_000, output: 128_000 },
+    release_date: "2026-02-05",
+    family: "gpt-codex",
+  },
+  {
+    id: "gpt-5.4",
+    name: "GPT-5.4",
+    limit: { context: 1_050_000, input: 272_000, output: 128_000 },
+    release_date: "2026-03-05",
+    family: "gpt",
+  },
+  {
+    id: "gpt-5.4-pro",
+    name: "GPT-5.4 Pro",
+    limit: { context: 1_050_000, input: 272_000, output: 128_000 },
+    release_date: "2026-03-05",
+    family: "gpt",
+  },
+] as const
 
 interface PkceCodes {
   verifier: string
@@ -83,6 +117,43 @@ export function extractAccountId(tokens: TokenResponse): string | undefined {
     return claims ? extractAccountIdFromClaims(claims) : undefined
   }
   return undefined
+}
+
+function ensureCodexOAuthModel(
+  provider: { models: Record<string, any> },
+  preset: (typeof CODEX_OAUTH_MODEL_PRESETS)[number],
+) {
+  if (provider.models[preset.id]) return
+
+  const model = {
+    id: preset.id,
+    providerID: "openai",
+    api: {
+      id: preset.id,
+      url: "https://chatgpt.com/backend-api/codex",
+      npm: "@ai-sdk/openai",
+    },
+    name: preset.name,
+    capabilities: {
+      temperature: false,
+      reasoning: true,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+    limit: preset.limit,
+    status: "active" as const,
+    options: {},
+    headers: {},
+    release_date: preset.release_date,
+    variants: {} as Record<string, Record<string, any>>,
+    family: preset.family,
+  }
+  model.variants = ProviderTransform.variants(model)
+  provider.models[preset.id] = model
 }
 
 function buildAuthorizeUrl(redirectUri: string, pkce: PkceCodes, state: string): string {
@@ -357,51 +428,13 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
         if (auth.type !== "oauth") return {}
 
         // Filter models to only allowed Codex models for OAuth
-        const allowedModels = new Set([
-          "gpt-5.1-codex-max",
-          "gpt-5.1-codex-mini",
-          "gpt-5.2",
-          "gpt-5.2-codex",
-          "gpt-5.3-codex",
-          "gpt-5.1-codex",
-        ])
         for (const modelId of Object.keys(provider.models)) {
           if (modelId.includes("codex")) continue
-          if (allowedModels.has(modelId)) continue
+          if (CODEX_OAUTH_ALLOWED_MODELS.has(modelId)) continue
           delete provider.models[modelId]
         }
 
-        if (!provider.models["gpt-5.3-codex"]) {
-          const model = {
-            id: "gpt-5.3-codex",
-            providerID: "openai",
-            api: {
-              id: "gpt-5.3-codex",
-              url: "https://chatgpt.com/backend-api/codex",
-              npm: "@ai-sdk/openai",
-            },
-            name: "GPT-5.3 Codex",
-            capabilities: {
-              temperature: false,
-              reasoning: true,
-              attachment: true,
-              toolcall: true,
-              input: { text: true, audio: false, image: true, video: false, pdf: false },
-              output: { text: true, audio: false, image: false, video: false, pdf: false },
-              interleaved: false,
-            },
-            cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-            limit: { context: 400_000, input: 272_000, output: 128_000 },
-            status: "active" as const,
-            options: {},
-            headers: {},
-            release_date: "2026-02-05",
-            variants: {} as Record<string, Record<string, any>>,
-            family: "gpt-codex",
-          }
-          model.variants = ProviderTransform.variants(model)
-          provider.models["gpt-5.3-codex"] = model
-        }
+        for (const preset of CODEX_OAUTH_MODEL_PRESETS) ensureCodexOAuthModel(provider, preset)
 
         // Zero out costs for Codex (included with ChatGPT subscription)
         for (const model of Object.values(provider.models)) {

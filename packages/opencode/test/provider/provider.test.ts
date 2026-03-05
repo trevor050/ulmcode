@@ -2128,6 +2128,35 @@ test("custom model with variants enabled and disabled", async () => {
   })
 })
 
+test("openai provider supplements GPT-5.4 models before models.dev catches up", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("OPENAI_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const standard = providers["openai"].models["gpt-5.4"]
+      const pro = providers["openai"].models["gpt-5.4-pro"]
+      expect(standard).toBeDefined()
+      expect(pro).toBeDefined()
+      expect(standard.limit.context).toBe(1_050_000)
+      expect(pro.limit.context).toBe(1_050_000)
+      expect(standard.api.npm).toBe("@ai-sdk/openai")
+    },
+  })
+})
+
 test("Google Vertex: retains baseURL for custom proxy", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
