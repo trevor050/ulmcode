@@ -49,6 +49,8 @@ import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
+import { CyberEnvironment } from "@/session/environment"
+import { Skill } from "@/tool/skill"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1443,16 +1445,32 @@ export namespace SessionPrompt {
       const plan = Session.plan(input.session)
       const exists = await Filesystem.exists(plan)
       if (!exists) await fs.mkdir(path.dirname(plan), { recursive: true })
+      const reminderText = buildPlanModeReminder({
+        session: input.session,
+        plan,
+        exists,
+      })
       const part = await Session.updatePart({
         id: PartID.ascending(),
         messageID: userMessage.info.id,
         sessionID: userMessage.info.sessionID,
         type: "text",
-        text: `<system-reminder>
+        text: reminderText,
+        synthetic: true,
+      })
+      userMessage.parts.push(part)
+      return input.messages
+    }
+    return input.messages
+  }
+
+  export function buildPlanModeReminder(input: { session: Session.Info; plan: string; exists: boolean }) {
+    if (input.session.environment?.type !== "cyber") {
+      return `<system-reminder>
 Plan mode is active. The user indicated that they do not want you to execute yet -- you MUST NOT make any edits (with the exception of the plan file mentioned below), run any non-readonly tools (including changing configs or making commits), or otherwise make any changes to the system. This supersedes any other instructions you have received.
 
 ## Plan File Info:
-${exists ? `A plan file already exists at ${plan}. You can read it and make incremental edits using the edit tool.` : `No plan file exists yet. You should create your plan at ${plan} using the write tool.`}
+${input.exists ? `A plan file already exists at ${input.plan}. You can read it and make incremental edits using the edit tool.` : `No plan file exists yet. You should create your plan at ${input.plan} using the write tool.`}
 You should build your plan incrementally by writing to or editing this file. NOTE that this is the only file you are allowed to edit - other than this you are only allowed to take READ-ONLY actions.
 
 ## Plan Workflow
@@ -1514,7 +1532,7 @@ Goal: Write your final plan to the plan file (the only file you can edit).
 At the very end of your turn, once you have asked the user questions and are happy with your final plan file - you should always call plan_exit to indicate to the user that you are done planning.
 This is critical - your turn should only end with either asking the user a question or calling plan_exit. Do not stop unless it's for these 2 reasons.
 
-**Important:** Use question tool to clarify requirements/approach, use plan_exit to request plan approval. Do NOT use question tool to ask "Is this plan okay?" - that's what plan_exit does.
+**Important:** Use question tool to clarify requirements/approach, and ask for plan approval in normal chat with a short prompt like "Does this plan sound good? If not, tell me what to change." Once the user confirms it is good, call plan_exit to begin execution.
 
 NOTE: At any point in time through this workflow you should feel free to ask the user questions or clarifications. Don't make large assumptions about user intent. The goal is to present a well researched plan to the user, and tie any loose ends before implementation begins.
 </system-reminder>`,
@@ -1523,7 +1541,66 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       userMessage.parts.push(part)
       return input.messages
     }
-    return input.messages
+
+    return `<system-reminder>
+Plan mode is active for a cyber engagement. The user asked you to plan first, so you MUST NOT execute live testing changes yet. In this phase, avoid destructive actions and only perform read-only discovery plus planning. This supersedes conflicting instructions.
+Your job is to produce an absolute, execution-ready pentest plan, not a lightweight brainstorm. Front-load depth before handoff. Do not rush to plan_exit until the plan is specific enough that another operator could execute it with minimal improvisation.
+
+## Plan File Info:
+${input.exists ? `A plan file already exists at ${input.plan}. Update it incrementally using edit.` : `No plan file exists yet. Create it at ${input.plan} using write.`}
+This plan file is the only file you should edit in this phase.
+
+## Cyber Plan Workflow
+
+### Phase 1: Deep Read-Only Grounding
+Goal: build a decision-grade picture of the environment before you recommend execution.
+1. Gather a safe, non-destructive asset and service snapshot first.
+2. Go beyond host counting. Identify likely trust boundaries, externally reachable services, likely auth surfaces, privilege boundaries, sensitive systems, chokepoints, and attack-path candidates.
+3. Record what you know, what you strongly suspect, and what remains unknown. Call out blockers that actually change execution choices.
+4. Do not move on while the plan still depends on hand-wavy assumptions you could resolve with additional read-only discovery.
+
+### Phase 2: Clarify Critical Unknowns
+Goal: Ask only what is necessary to execute safely and correctly.
+Use question tool for missing authorization/scope constraints, high-impact assumptions, or unclear objectives.
+If confusion remains, continue asking focused follow-up questions until confidence is high enough to execute.
+Do not ask low-value or generic questions.
+After the plan is ready, ask for approval in normal chat: "Does this plan sound good? If not, tell me what to change."
+When the user confirms readiness, use plan_exit to switch to execution mode.
+
+### Phase 3: Build Delegation Plan
+Goal: write an actionable operation order that starts execution cleanly.
+Include:
+- Explicit objectives, assumptions, constraints, and success criteria.
+- A recon summary that explains why each proposed testing lane exists.
+- Ranked attack-path hypotheses or validation tracks.
+- Prioritized testing lanes (network mapping, host audit, validation, evidence/reporting).
+- Specific subagent delegation map with non-overlapping responsibilities.
+- For each planned subagent: purpose, exact scope, expected inputs, expected outputs, stop conditions, and evidence it must return.
+- An explicit "where subagents WILL be used" section and an explicit "where subagents WILL NOT be used" section. Keep parent-only work for scope control, sequencing, cross-lane synthesis, and decisions that require shared context.
+- Evidence expectations and decision gates for escalation.
+- Safety constraints and out-of-scope guardrails.
+- Concrete sequencing and dependency notes so parallel work does not collide or duplicate effort.
+
+Subagent policy:
+- Use subagents only for independent, bounded lanes with minimal scope overlap.
+- Do NOT use subagents for initial scope framing, authorization decisions, cross-lane prioritization, or speculative tasks that are not yet justified by evidence.
+- Do NOT delegate overlapping recon just to look busy; parallelism without boundaries lowers quality.
+- If a lane depends on shared evolving context, keep it in the parent plan until the boundary is crisp.
+
+Plan quality bar:
+- No vague bullets like "enumerate more" or "test for vulns."
+- Name the concrete target areas, why they matter, what validation proves success/failure, and what evidence should be captured.
+- The plan should read like a real operation order with phases, gates, and ownership, not a generic checklist.
+
+### Phase 4: Finalize and Exit
+The final section of the plan must describe the reporting closeout in this order:
+1. Invoke the \`report_writer\` subagent for final synthesis.
+2. Produce a high-quality \`report.html\`.
+3. Compile the final print-ready PDF from the HTML/CSS report flow.
+
+Call plan_exit only when the plan file is ready, ambiguities are resolved, and the user explicitly confirms they want execution to begin.
+Your turn should end by either asking a targeted question or calling plan_exit.
+</system-reminder>`
   }
 
   export const ShellInput = z.object({
@@ -2045,5 +2122,400 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         throw err
       })
     }
+  }
+  const CYBER_ENV_CONTEXT_MARKER = "[CYBER_ENVIRONMENT_CONTEXT_V1]"
+  const CYBER_AUTO_INTAKE_MARKER = "[CYBER_AUTO_INTAKE_REQUIRED_V1]"
+  const CYBER_PLAN_KICKOFF_MARKER = "[CYBER_PLAN_KICKOFF_REQUIRED_V1]"
+
+  function hasEnvironmentContextReminder(messages: MessageV2.WithParts[]) {
+    return messages.some((message) =>
+      message.parts.some(
+        (part) =>
+          part.type === "text" &&
+          !!part.synthetic &&
+          part.text.includes(CYBER_ENV_CONTEXT_MARKER),
+      ),
+    )
+  }
+
+  async function insertCyberReminders(input: {
+    messages: MessageV2.WithParts[]
+    session: Session.Info
+    agent: Agent.Info
+  }) {
+    const userMessage = input.messages.findLast(
+      (msg): msg is MessageV2.WithParts & { info: MessageV2.User } => msg.info.role === "user",
+    )
+    if (!userMessage) return input.messages
+    if (!CyberEnvironment.isCyberAgent(input.agent.name)) return input.messages
+    if (!input.session.environment || input.session.environment.type !== "cyber") return input.messages
+    let reminderMessage: MessageV2.WithParts | undefined
+    const ensureReminderMessage = async () => {
+      if (reminderMessage) return reminderMessage
+      const info = (await Session.updateMessage({
+        id: Identifier.ascending("message"),
+        role: "assistant",
+        parentID: userMessage.info.id,
+        sessionID: userMessage.info.sessionID,
+        mode: input.agent.name,
+        agent: input.agent.name,
+        cost: 0,
+        path: {
+          cwd: Instance.directory,
+          root: Instance.worktree,
+        },
+        time: {
+          created: Date.now(),
+        },
+        tokens: {
+          input: 0,
+          output: 0,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+        },
+        modelID: userMessage.info.model.modelID,
+        providerID: userMessage.info.model.providerID,
+      })) as MessageV2.Assistant
+      reminderMessage = {
+        info,
+        parts: [],
+      }
+      input.messages.push(reminderMessage)
+      return reminderMessage
+    }
+
+    if (!hasEnvironmentContextReminder(input.messages)) {
+      const root = input.session.environment.root
+      const target = await ensureReminderMessage()
+      const part = await Session.updatePart({
+        id: Identifier.ascending("part"),
+        messageID: target.info.id,
+        sessionID: target.info.sessionID,
+        type: "text",
+        synthetic: true,
+        text: [
+          "<system-reminder>",
+          CYBER_ENV_CONTEXT_MARKER,
+          "CYBER ENGAGEMENT ENVIRONMENT ACTIVE",
+          `environment.root=${root}`,
+          `finding.md=${path.join(root, "finding.md")}`,
+          `handoff.md=${path.join(root, "handoff.md")}`,
+          `reports.dir=${path.join(root, "reports")}`,
+          "Paths include spaces on this host; always quote absolute paths in shell commands.",
+          "All pentest outputs must live in this shared environment.",
+          "Subagent completion contract: results.md must end with structured fields executed_commands, generated_files, unverified_claims, failed_commands.",
+          "For assess outputs: findings must be labeled validated vs hypothesis, and high confidence is reserved for validated findings only.",
+          "If commands partially fail (permission denied/root-required/timeout), they must be recorded explicitly in failed_commands.",
+          "</system-reminder>",
+        ].join("\n"),
+      })
+      target.parts.push(part)
+    }
+
+    if (
+      !CyberEnvironment.hasLoadedSkill(input.messages) &&
+      !CyberEnvironment.hasSkillReminderBeenShown(input.messages)
+    ) {
+      const target = await ensureReminderMessage()
+      const part = await Session.updatePart({
+        id: Identifier.ascending("part"),
+        messageID: target.info.id,
+        sessionID: target.info.sessionID,
+        type: "text",
+        synthetic: true,
+        text: [
+          "<system-reminder>",
+          CyberEnvironment.SKILL_REMINDER_MARKER,
+          "WARNING: NO SKILL HAS BEEN LOADED INTO CONTEXT FOR THIS CYBER SESSION.",
+          "Load a relevant skill before major work by calling the skill tool.",
+          "Example call: skill({\"name\":\"<skill-name>\"})",
+          "This is a soft warning only, execution remains allowed.",
+          "</system-reminder>",
+        ].join("\n"),
+      })
+      target.parts.push(part)
+    }
+
+    if (
+      (input.agent.name === "pentest_auto" || input.agent.name === "pentest_flow" || input.agent.name === "AutoPentest") &&
+      !CyberEnvironment.hasReminderMarker(input.messages, CYBER_AUTO_INTAKE_MARKER)
+    ) {
+      const target = await ensureReminderMessage()
+      const part = await Session.updatePart({
+        id: Identifier.ascending("part"),
+        messageID: target.info.id,
+        sessionID: target.info.sessionID,
+        type: "text",
+        synthetic: true,
+        text: [
+          "<system-reminder>",
+          CYBER_AUTO_INTAKE_MARKER,
+          "AUTO INTAKE MODE IS ACTIVE.",
+          "Before scanning/delegation, use question tool and collect only essential engagement details:",
+          "1) Scope boundaries (CIDRs/hosts/apps) and explicit out-of-scope assets.",
+          "2) Authorization and test window constraints.",
+          "3) Allowed test depth (safe recon only, standard validation, or controlled exploitation).",
+          "4) Primary objectives and critical assets.",
+          "5) Success criteria and reporting priorities.",
+          "If any high-impact ambiguity remains, keep asking focused follow-up questions until you are confident.",
+          "Do not ask benign or unnecessary questions that do not change decisions.",
+          "After collecting answers, summarize assumptions and build a detailed plan.",
+          "Then ask in normal chat: 'Does this plan sound good? If not, tell me what to change.'",
+          "Use plan_exit only after the user confirms they want to proceed.",
+          "</system-reminder>",
+        ].join("\n"),
+      })
+      target.parts.push(part)
+    }
+
+    if (
+      (input.agent.name === "pentest" ||
+        input.agent.name === "pentest_auto" ||
+        input.agent.name === "pentest_flow" ||
+        input.agent.name === "AutoPentest") &&
+      !CyberEnvironment.hasCompletedCyberSubtask(input.messages) &&
+      !CyberEnvironment.hasReminderMarker(input.messages, CYBER_PLAN_KICKOFF_MARKER)
+    ) {
+      const target = await ensureReminderMessage()
+      const part = await Session.updatePart({
+        id: Identifier.ascending("part"),
+        messageID: target.info.id,
+        sessionID: target.info.sessionID,
+        type: "text",
+        synthetic: true,
+        text: [
+          "<system-reminder>",
+          CYBER_PLAN_KICKOFF_MARKER,
+          "PENTEST PLAN KICKOFF REQUIRED BEFORE BROAD DELEGATION.",
+          "Run a brief, safe network exploration first (quick host/service map and obvious exposure inventory).",
+          "Then produce a short plan with prioritized checks and clear subagent delegation lanes.",
+          "If scope or constraints remain unclear after kickoff, use plan_enter and draft/refine the plan in plan mode before execution.",
+          "</system-reminder>",
+        ].join("\n"),
+      })
+      target.parts.push(part)
+    }
+
+    if (
+      input.agent.name === "pentest" &&
+      CyberEnvironment.hasCompletedCyberSubtask(input.messages) &&
+      !CyberEnvironment.hasReportWriterRun(input.messages) &&
+      !CyberEnvironment.hasReminderMarker(input.messages, CyberEnvironment.REPORT_WRITER_REQUIRED_MARKER)
+    ) {
+      const target = await ensureReminderMessage()
+      const part = await Session.updatePart({
+        id: Identifier.ascending("part"),
+        messageID: target.info.id,
+        sessionID: target.info.sessionID,
+        type: "text",
+        synthetic: true,
+        text: [
+          "<system-reminder>",
+          CyberEnvironment.REPORT_WRITER_REQUIRED_MARKER,
+          "REPORT WRITER IS REQUIRED BEFORE ENDING THIS PENTEST SESSION.",
+          "You must launch task(subagent_type=\"report_writer\") for final synthesis and PDF packaging.",
+          "Do this after recon/assess work is complete.",
+          "</system-reminder>",
+        ].join("\n"),
+      })
+      target.parts.push(part)
+    }
+
+    if (
+      input.agent.name === "report_writer" &&
+      !hasSpecificSkillLoaded(input.messages, "k12-risk-mapping-and-reporting") &&
+      !CyberEnvironment.hasReminderMarker(input.messages, CyberEnvironment.REPORT_WRITER_SKILL_MARKER)
+    ) {
+      const preloaded = await preloadReportingSkillBlock()
+      const target = await ensureReminderMessage()
+      const part = await Session.updatePart({
+        id: Identifier.ascending("part"),
+        messageID: target.info.id,
+        sessionID: target.info.sessionID,
+        type: "text",
+        synthetic: true,
+        text: [
+          "<system-reminder>",
+          CyberEnvironment.REPORT_WRITER_SKILL_MARKER,
+          "FIRST ACTION REQUIRED: LOAD THE REPORTING SKILL.",
+          "Call: skill({\"name\":\"k12-risk-mapping-and-reporting\"})",
+          "Then explore finding.md, agents/*/results.md, handoff.md, and evidence directories.",
+          "Create report-plan.md, report-outline.md, report-draft.md before finalizing.",
+          "Finalize with report_finalize.",
+          ...(preloaded ? ["", preloaded] : []),
+          "</system-reminder>",
+        ].join("\n"),
+      })
+      target.parts.push(part)
+    }
+
+    return input.messages
+  }
+
+  function buildCyberSystemContext(input: {
+    session: Session.Info
+    agent: Agent.Info
+    messages: MessageV2.WithParts[]
+  }) {
+    if (!CyberEnvironment.isCyberAgent(input.agent.name)) return []
+    if (!input.session.environment || input.session.environment.type !== "cyber") return []
+
+    const root = input.session.environment.root
+    const lines = [
+      "CYBER ENGAGEMENT ENVIRONMENT ACTIVE",
+      `environment.root=${root}`,
+      `finding.md=${path.join(root, "finding.md")}`,
+      `handoff.md=${path.join(root, "handoff.md")}`,
+      `reports.dir=${path.join(root, "reports")}`,
+      "Paths include spaces on this host; always quote absolute paths in shell commands.",
+      "All pentest outputs must live in this shared environment.",
+      "Subagent completion contract: results.md must end with structured fields executed_commands, generated_files, unverified_claims, failed_commands.",
+      "For assess outputs: findings must be labeled validated vs hypothesis, and high confidence is reserved for validated findings only.",
+      "If commands partially fail (permission denied/root-required/timeout), they must be recorded explicitly in failed_commands.",
+    ]
+
+    if (!CyberEnvironment.hasLoadedSkill(input.messages)) {
+      lines.push("WARNING: NO SKILL HAS BEEN LOADED INTO CONTEXT FOR THIS CYBER SESSION.")
+      lines.push("Load a relevant skill before major work by calling the skill tool.")
+      lines.push("Example call: skill({\"name\":\"<skill-name>\"})")
+    }
+
+    if (
+      input.agent.name === "pentest" &&
+      CyberEnvironment.hasCompletedCyberSubtask(input.messages) &&
+      !CyberEnvironment.hasReportWriterRun(input.messages)
+    ) {
+      lines.push("REPORT WRITER IS REQUIRED BEFORE ENDING THIS PENTEST SESSION.")
+      lines.push("Launch task(subagent_type=\"report_writer\") for final synthesis and PDF packaging.")
+    }
+
+    if (input.agent.name === "report_writer" && !hasSpecificSkillLoaded(input.messages, "k12-risk-mapping-and-reporting")) {
+      lines.push("FIRST ACTION REQUIRED: LOAD THE REPORTING SKILL.")
+      lines.push("Call: skill({\"name\":\"k12-risk-mapping-and-reporting\"})")
+      lines.push("Then explore finding.md, agents/*/results.md, handoff.md, and evidence directories.")
+      lines.push("Create report-plan.md, report-outline.md, report-draft.md before finalizing.")
+      lines.push("Finalize with report_finalize.")
+    }
+
+    return [lines.join("\n")]
+  }
+
+  function hasSpecificSkillLoaded(messages: MessageV2.WithParts[], skillName: string) {
+    return messages.some((message) =>
+      message.parts.some((part) => {
+        if (part.type !== "tool") return false
+        if (part.tool !== "skill") return false
+        if (part.state.status !== "completed") return false
+        return part.state.input?.name === skillName
+      }),
+    )
+  }
+
+  async function shouldAutoLaunchReportWriter(input: {
+    session: Session.Info
+    lastUser: MessageV2.User
+    messages: MessageV2.WithParts[]
+  }) {
+    if (input.lastUser.agent !== "pentest") return false
+    if (!input.session.environment || input.session.environment.type !== "cyber") return false
+    if (!CyberEnvironment.hasCompletedCyberSubtask(input.messages)) return false
+    if (CyberEnvironment.hasReportWriterRun(input.messages)) return false
+    return true
+  }
+
+  function shouldAutoKickoffPentestPlan(input: { messages: MessageV2.WithParts[]; lastUser: MessageV2.User }) {
+    if (
+      input.lastUser.agent !== "pentest" &&
+      input.lastUser.agent !== "pentest_auto" &&
+      input.lastUser.agent !== "pentest_flow" &&
+      input.lastUser.agent !== "AutoPentest"
+    )
+      return false
+    const hasAssistant = input.messages.some((message) => message.info.role === "assistant")
+    if (hasAssistant) return false
+    const hasPlanUser = input.messages.some(
+      (message) => message.info.role === "user" && message.info.agent === "plan",
+    )
+    if (hasPlanUser) return false
+    return true
+  }
+
+  async function queuePentestAutoPlanKickoff(input: { session: Session.Info; lastUser: MessageV2.User }) {
+    const user = await Session.updateMessage({
+      id: Identifier.ascending("message"),
+      role: "user",
+      sessionID: input.session.id,
+      time: { created: Date.now() },
+      agent: "plan",
+      model: input.lastUser.model,
+    })
+    await Session.updatePart({
+      id: Identifier.ascending("part"),
+      messageID: user.id,
+      sessionID: user.sessionID,
+      type: "text",
+      synthetic: true,
+      text: [
+        "Guided pentest kickoff: enter plan mode before execution.",
+        "First, do a deep read-only grounding pass, starting with a brief safe network exploration snapshot.",
+        "Then use question tool for critical intake questions and continue focused follow-up questions until confidence is high.",
+        "Avoid benign/unnecessary questions.",
+        "Produce an absolute execution-ready plan with explicit testing phases, decision gates, and a clear subagent use/non-use map.",
+        "Make the plan specific enough that another operator could execute it with minimal improvisation.",
+        "When the plan is ready, ask in normal chat: 'Does this plan sound good? If not, tell me what to change.'",
+        "When the user confirms they are ready, call plan_exit to switch into execution mode.",
+        "The plan must end with reporting closeout: invoke report_writer, then build a high-quality report.html and final PDF from HTML/CSS.",
+        "Produce a full actionable plan before active pentest execution.",
+      ].join("\n"),
+    })
+  }
+
+  async function queueReportWriterSubtask(input: {
+    session: Session.Info
+    lastUser: MessageV2.User
+  }) {
+    const reportWriter = await Agent.get("report_writer")
+    const model = reportWriter.model ?? input.lastUser.model
+    const user = await Session.updateMessage({
+      id: Identifier.ascending("message"),
+      role: "user",
+      sessionID: input.session.id,
+      time: { created: Date.now() },
+      agent: input.lastUser.agent,
+      model: input.lastUser.model,
+    })
+    await Session.updatePart({
+      id: Identifier.ascending("part"),
+      messageID: user.id,
+      sessionID: user.sessionID,
+      type: "subtask",
+      agent: "report_writer",
+      description: "Finalize client report package",
+      command: "auto-report-writer-finale",
+      model: {
+        providerID: model.providerID,
+        modelID: model.modelID,
+      },
+      prompt: [
+        "Finalize this engagement with a complete client-grade report workflow.",
+        "Required: load skill k12-risk-mapping-and-reporting first.",
+        "Required inputs: canonical finding.md, all agents/*/results.md, handoff.md, evidence directories.",
+        "Required intermediate files in reports/: report-plan.md, report-outline.md, report-draft.md, results.md, remediation-plan.md.",
+        "Required final action: call report_finalize.",
+        "Do not use allow_no_pdf=true unless the user explicitly asks for degraded mode without PDF.",
+      ].join("\n"),
+    })
+  }
+
+  async function preloadReportingSkillBlock() {
+    const skill = await Skill.get("k12-risk-mapping-and-reporting").catch(() => undefined)
+    if (!skill) return ""
+    return [
+      `<skill_content name="${skill.name}">`,
+      `# Skill: ${skill.name}`,
+      "",
+      skill.content.trim(),
+      "</skill_content>",
+    ].join("\n")
   }
 }
