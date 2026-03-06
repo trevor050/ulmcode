@@ -4,6 +4,10 @@ import { SwarmTaskTable } from "./swarm.sql"
 import { SwarmAggressionPolicy } from "./aggression"
 
 export namespace SwarmScheduler {
+  function isMissingSwarmTable(error: unknown) {
+    return error instanceof Error && /no such table: swarm_task/i.test(error.message)
+  }
+
   export type RetryPolicy = "none" | "light" | "aggressive"
 
   export function maxRetries(policy: RetryPolicy) {
@@ -36,20 +40,25 @@ export namespace SwarmScheduler {
   }
 
   export function counts() {
-    const tasks = Database.use((db) =>
-      db
-        .select({
-          id: SwarmTaskTable.id,
-          team_id: SwarmTaskTable.team_id,
-          provider_id: SwarmTaskTable.provider_id,
-          model_id: SwarmTaskTable.model_id,
-          scheduler_lane: SwarmTaskTable.scheduler_lane,
-          status: SwarmTaskTable.status,
-        })
-        .from(SwarmTaskTable)
-        .where(eq(SwarmTaskTable.status, "running"))
-        .all(),
-    )
+    const tasks = Database.use((db) => {
+      try {
+        return db
+          .select({
+            id: SwarmTaskTable.id,
+            team_id: SwarmTaskTable.team_id,
+            provider_id: SwarmTaskTable.provider_id,
+            model_id: SwarmTaskTable.model_id,
+            scheduler_lane: SwarmTaskTable.scheduler_lane,
+            status: SwarmTaskTable.status,
+          })
+          .from(SwarmTaskTable)
+          .where(eq(SwarmTaskTable.status, "running"))
+          .all()
+      } catch (error) {
+        if (isMissingSwarmTable(error)) return []
+        throw error
+      }
+    })
     return {
       total: tasks.length,
       byLane: tasks.reduce<Record<string, number>>((acc, item) => {
@@ -95,26 +104,36 @@ export namespace SwarmScheduler {
   }
 
   export function markRetry(input: { taskID: string; retryCount: number; status: "queued" | "failed" }) {
-    Database.use((db) =>
-      db
-        .update(SwarmTaskTable)
-        .set({
-          retry_count: input.retryCount,
-          status: input.status,
-          time_updated: Date.now(),
-        })
-        .where(eq(SwarmTaskTable.id, input.taskID))
-        .run(),
-    )
+    Database.use((db) => {
+      try {
+        db
+          .update(SwarmTaskTable)
+          .set({
+            retry_count: input.retryCount,
+            status: input.status,
+            time_updated: Date.now(),
+          })
+          .where(eq(SwarmTaskTable.id, input.taskID))
+          .run()
+      } catch (error) {
+        if (isMissingSwarmTable(error)) return
+        throw error
+      }
+    })
   }
 
   export function runningTask(taskID: string) {
-    return Database.use((db) =>
-      db
-        .select()
-        .from(SwarmTaskTable)
-        .where(and(eq(SwarmTaskTable.id, taskID), eq(SwarmTaskTable.status, "running")))
-        .get(),
-    )
+    return Database.use((db) => {
+      try {
+        return db
+          .select()
+          .from(SwarmTaskTable)
+          .where(and(eq(SwarmTaskTable.id, taskID), eq(SwarmTaskTable.status, "running")))
+          .get()
+      } catch (error) {
+        if (isMissingSwarmTable(error)) return undefined
+        throw error
+      }
+    })
   }
 }

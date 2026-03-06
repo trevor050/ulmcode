@@ -351,6 +351,23 @@ export namespace BackgroundAgentManager {
     return state().tasks.get(id)
   }
 
+  export async function update(
+    id: string,
+    patch: Partial<
+      Pick<TaskRecord, "status" | "output" | "error" | "startedAt" | "endedAt" | "durationMs" | "staleTimeoutMs">
+    >,
+  ) {
+    const current = await get(id)
+    if (!current) return undefined
+    const next: TaskRecord = {
+      ...current,
+      ...patch,
+    }
+    state().tasks.set(id, next)
+    await persistTask(next)
+    return next
+  }
+
   export async function cancel(id: string) {
     const s = state()
     const task = s.tasks.get(id) ?? (await get(id))

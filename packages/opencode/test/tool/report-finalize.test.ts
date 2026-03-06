@@ -41,6 +41,11 @@ describe("tool.report_finalize", () => {
           ].join("\n"),
         )
         await Bun.write(path.join(env.root, "agents", "session_recon", "results.md"), "# Recon\nDiscovered hosts")
+        await Bun.write(path.join(env.root, "deliverables", "runtime-summary.md"), "# Pentest Runtime Summary\n")
+        await Bun.write(
+          path.join(env.root, "deliverables", "runtime-summary.json"),
+          JSON.stringify({ generated_at: new Date().toISOString(), model_usage: { parent: { calls: 1 } } }, null, 2),
+        )
         await Bun.write(path.join(env.root, "reports", "report-plan.md"), "# Plan\n\n- finalize\n")
         await Bun.write(path.join(env.root, "reports", "report-outline.md"), "# Outline\n\n1. Summary\n")
         await Bun.write(path.join(env.root, "reports", "report-draft.md"), "# Draft\n\nDraft body.\n")
@@ -69,8 +74,18 @@ describe("tool.report_finalize", () => {
         expect(await Bun.file(path.join(env.root, "reports", "quality-checks.json")).exists()).toBe(true)
         expect(await Bun.file(path.join(env.root, "reports", "swarm-quality.json")).exists()).toBe(true)
         expect(await Bun.file(path.join(env.root, "deliverables", "final", "report.md")).exists()).toBe(true)
+        expect(await Bun.file(path.join(env.root, "deliverables", "final", "README.md")).exists()).toBe(true)
+        expect(await Bun.file(path.join(env.root, "deliverables", "final", "manifest.json")).exists()).toBe(true)
+        expect(await Bun.file(path.join(env.root, "deliverables", "final", "finding.md")).exists()).toBe(true)
+        expect(await Bun.file(path.join(env.root, "deliverables", "final", "handoff.md")).exists()).toBe(true)
+        expect(await Bun.file(path.join(env.root, "deliverables", "final", "engagement.md")).exists()).toBe(true)
+        expect(await Bun.file(path.join(env.root, "deliverables", "final", "runtime-summary.md")).exists()).toBe(true)
+        expect(await Bun.file(path.join(env.root, "deliverables", "final", "runtime-summary.json")).exists()).toBe(true)
+        expect(await Bun.file(path.join(env.root, "deliverables", "final", "subagent-summaries", "session_recon.md")).exists()).toBe(true)
         expect((result.metadata as any).finalDeliverableDir).toBe(path.join(env.root, "deliverables", "final"))
         expect((result.metadata as any).archiveDir).toContain(path.join(env.root, "deliverables", "archive"))
+        expect(result.output).toContain("Bundle README:")
+        expect(result.output).toContain("Run metadata:")
         expect(result.output).toContain("Quality status:")
       },
     })

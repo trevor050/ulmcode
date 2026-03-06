@@ -15,6 +15,9 @@ Execution policy:
 - Treat deep network scans as last-step escalation, not first-step defaults.
 - Prefer bounded scans with explicit host/port scope and short runtime ceilings before broad/full-range scans.
 - If a scan command would likely run beyond a few minutes, split it into smaller parallel chunks and checkpoint between phases.
+- Do not let the main operator thread get pinned behind a giant foreground scan. For long enumeration, crawling, or scanning, prefer background execution plus status polling and continue other evidence lanes in parallel.
+- A command expected to run for a long time should use a long-run execution profile, not a naive multi-hour foreground block.
+- Keep context lean during long runs. Prefer artifact paths plus concise digests over pasting giant command transcripts back into the conversation.
 - Web research is allowed and encouraged when it improves finding quality, exploit validation, CVE analysis, and remediation guidance.
 - Resolve and use a single repository root path early for repo file reads to avoid path drift (for example `git rev-parse --show-toplevel`).
 
@@ -24,6 +27,8 @@ Skills and orchestration:
 - Use subagents aggressively for independent workstreams (for example: recon, assess, report).
 - Do not assign overlapping or tightly coupled work to parallel subagents; split only independent tasks.
 - Treat subagents as teammates that coordinate through shared engagement artifacts and explicit handoff notes.
+- Keep the parent operator focused on sequencing, scope control, synthesis, and evidence review. Push bounded parallel work to subagents instead of delegating away the whole brain.
+- Do not conclude an engagement while there are still unexplored hosts, services, web content paths, or attack paths with enough evidence to justify another bounded lane.
 - Swarm aggression controls subagent collaboration strategy, not host scan aggressiveness:
   - None: no subagent delegation.
   - Low: one delegation lane with shallow depth.
@@ -90,6 +95,8 @@ Finding lifecycle:
 - Keep findings reproducible and auditable with clear command/output evidence.
 - Include structured `evidence_refs` when possible (file paths with line hints) to improve report quality checks.
 - Keep all cyber artifacts inside the engagement environment directories (evidence/, reports/, tmp/, agents/).
+- Publish final human-facing outputs into deliverables/final with a clean README/manifest entrypoint so the human team does not need to hunt through raw runtime folders.
+- Maintain deliverables/runtime-summary.{json,md} as the operator-facing record of model usage, compaction pressure, fetch repetition, and background work state.
 - For subagent runs, write a concise completion summary to that subagent's agents/<session-id>/results.md before finishing.
 - Every subagent `results.md` must end with a compact structured section containing:
   - executed_commands

@@ -31,6 +31,7 @@ import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Permission } from "@/permission"
 import { Global } from "@/global"
+import { CyberEnvironment } from "./environment"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 import { iife } from "@/util/iife"
 
@@ -110,6 +111,18 @@ export namespace Session {
     }
   }
 
+  async function loadEnvironment(sessionID: string) {
+    return Storage.read<CyberEnvironment.Info>(["session_env", sessionID]).catch(() => undefined)
+  }
+
+  async function saveEnvironment(sessionID: string, environment: CyberEnvironment.Info | undefined) {
+    if (!environment) {
+      await Storage.remove(["session_env", sessionID]).catch(() => undefined)
+      return
+    }
+    await Storage.write(["session_env", sessionID], environment)
+  }
+
   function getForkedTitle(title: string): string {
     const match = title.match(/^(.+) \(fork #(\d+)\)$/)
     if (match) {
@@ -158,6 +171,7 @@ export namespace Session {
           diff: z.string().optional(),
         })
         .optional(),
+      environment: CyberEnvironment.Info.optional(),
     })
     .meta({
       ref: "Session",
@@ -309,6 +323,7 @@ export namespace Session {
     directory: string
     permission?: Permission.Ruleset
   }) {
+    const parent = input.parentID ? await get(input.parentID).catch(() => undefined) : undefined
     const result: Info = {
       id: SessionID.descending(input.id),
       slug: Slug.create(),
@@ -323,11 +338,11 @@ export namespace Session {
         created: Date.now(),
         updated: Date.now(),
       },
+      environment: parent?.environment,
     }
     log.info("created", result)
-
     SyncEvent.run(Event.Created, { sessionID: result.id, info: result })
-
+    if (result.environment) await saveEnvironment(result.id, result.environment)
     const cfg = await Config.get()
     if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto")) {
       share(result.id).catch(() => {
@@ -357,7 +372,9 @@ export namespace Session {
   export const get = fn(SessionID.zod, async (id) => {
     const row = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
     if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
-    return fromRow(row)
+    const info = fromRow(row)
+    info.environment = await loadEnvironment(info.id)
+    return info
   })
 
   export const share = fn(SessionID.zod, async (id) => {
@@ -380,6 +397,52 @@ export namespace Session {
 
     SyncEvent.run(Event.Updated, { sessionID: id, info: { share: { url: null } } })
   })
+
+  export async function update(id: string, editor: (session: Info) => void, options?: { touch?: boolean }) {
+    const env = await loadEnvironment(id)
+    let nextEnv = env
+    const info = Database.use((db) => {
+      const row = db.select().from(SessionTable).where(eq(SessionTable.id, id)).get()
+      if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
+      const draft = fromRow(row)
+      if (env) draft.environment = env
+      editor(draft)
+      nextEnv = draft.environment
+      if (options?.touch !== false) {
+        draft.time.updated = Date.now()
+      }
+      const update = toRow(draft)
+      const updated = db
+        .update(SessionTable)
+        .set({
+          parent_id: update.parent_id,
+          slug: update.slug,
+          directory: update.directory,
+          title: update.title,
+          version: update.version,
+          share_url: update.share_url,
+          summary_additions: update.summary_additions,
+          summary_deletions: update.summary_deletions,
+          summary_files: update.summary_files,
+          summary_diffs: update.summary_diffs,
+          revert: update.revert,
+          permission: update.permission,
+          time_created: update.time_created,
+          time_updated: update.time_updated,
+          time_compacting: update.time_compacting,
+          time_archived: update.time_archived,
+        })
+        .where(eq(SessionTable.id, id))
+        .returning()
+        .get()
+      if (!updated) throw new NotFoundError({ message: `Session not found: ${id}` })
+      const next = fromRow(updated)
+      Database.effect(() => Bus.publish(Event.Updated, { info: { ...next, environment: nextEnv } }))
+      return next
+    })
+    await saveEnvironment(id, nextEnv)
+    return { ...info, environment: nextEnv }
+  }
 
   export const setTitle = fn(
     z.object({

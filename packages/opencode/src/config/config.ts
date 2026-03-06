@@ -1031,6 +1031,7 @@ export namespace Config {
         .describe(
           "Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.",
         ),
+      cyber: Cyber.optional().describe("Cybersecurity orchestration settings for pentest workflows"),
       username: z
         .string()
         .optional()
@@ -1048,9 +1049,22 @@ export namespace Config {
           // primary
           plan: Agent.optional(),
           build: Agent.optional(),
+          pentest: Agent.optional(),
+          AutoPentest: Agent.optional(),
+          pentest_flow: Agent.optional(),
+          pentest_auto: Agent.optional(),
           // subagent
           general: Agent.optional(),
           explore: Agent.optional(),
+          recon: Agent.optional(),
+          assess: Agent.optional(),
+          report: Agent.optional(),
+          analyst: Agent.optional(),
+          network_mapper: Agent.optional(),
+          host_auditor: Agent.optional(),
+          vuln_researcher: Agent.optional(),
+          evidence_scribe: Agent.optional(),
+          report_writer: Agent.optional(),
           // specialized
           title: Agent.optional(),
           summary: Agent.optional(),

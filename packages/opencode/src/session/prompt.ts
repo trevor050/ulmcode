@@ -50,7 +50,7 @@ import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
 import { CyberEnvironment } from "@/session/environment"
-import { Skill } from "@/tool/skill"
+import { Skill } from "@/skill"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1536,11 +1536,7 @@ This is critical - your turn should only end with either asking the user a quest
 Never output the literal string "plan_exit" in plain text. This must be a tool call.
 
 NOTE: At any point in time through this workflow you should feel free to ask the user questions or clarifications. Don't make large assumptions about user intent. The goal is to present a well researched plan to the user, and tie any loose ends before implementation begins.
-</system-reminder>`,
-        synthetic: true,
-      })
-      userMessage.parts.push(part)
-      return input.messages
+</system-reminder>`
     }
 
     return `<system-reminder>

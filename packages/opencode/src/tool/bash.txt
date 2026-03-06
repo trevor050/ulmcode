@@ -22,9 +22,13 @@ Before executing the command, please follow these steps:
 
 Usage notes:
   - The command argument is required.
-  - You can specify an optional timeout in milliseconds. If not specified, commands will time out after 120000ms (2 minutes).
-  - Hard runtime guardrail: any requested timeout above 1800000ms (30 minutes) is automatically clamped to 30 minutes.
-  - Runtime progress checkpoints are emitted at 5/10/15/20/25/30 minutes for long-running commands.
+  - You can specify an optional timeout in milliseconds. If not specified, interactive commands time out after 120000ms (2 minutes).
+  - Use `execution_profile="interactive"` for quick commands that should block until completion.
+  - Use `execution_profile="long_run_background"` for scans, crawls, enumeration, or any command expected to run longer than interactive latency. This queues the command in the background and returns a task id. Then use `background_list`, `background_output`, and `background_cancel`.
+  - Use `execution_profile="manual_unbounded"` only when you intentionally want no hard runtime timeout. This keeps heartbeat metadata enabled and relies on operator cancellation or stale/no-progress detection instead of a short wall clock cap.
+  - Hard runtime guardrail: interactive timeout requests above 1800000ms (30 minutes) are automatically clamped to 30 minutes.
+  - Runtime progress checkpoints are emitted at 5/10/15/20/25/30 minutes, plus periodic heartbeat updates for long-running commands.
+  - In cyber workflows, obviously long scan commands may be auto-promoted to `long_run_background` so they do not block the main run.
   - It is very helpful if you write a clear, concise description of what this command does in 5-10 words.
   - If the output exceeds ${maxLines} lines or ${maxBytes} bytes, it will be truncated and the full output will be written to a file. You can use Read with offset/limit to read specific sections or Grep to search the full content. Do NOT use `head`, `tail`, or other truncation commands to limit output; the full output will already be captured to a file for more precise searching.
 

@@ -178,6 +178,53 @@ Last updated: 2026-03-05
   - then creation of high-quality `report.html`,
   - then print-ready PDF generation from the HTML/CSS flow.
 - Guided pentest kickoff text now reinforces the same contract before first plan-mode turn, so auto-routed pentest sessions start with a deeper planning posture immediately.
+## Pentest Runtime Overhaul (2026-03-05)
+- `packages/opencode/src/tool/bash.ts` now supports explicit execution profiles:
+  - `interactive`: bounded foreground command execution,
+  - `long_run_background`: queues long-running commands into background task management,
+  - `manual_unbounded`: explicit no-hard-timeout path with heartbeat + stale-progress monitoring.
+- Cyber scan commands that are obviously long-running can now auto-promote to `long_run_background` instead of pinning the main operator loop.
+- Scan safety got stricter in the right way:
+  - unsafe deep scans are still blocked by default in `interactive`,
+  - but authorized deep work can proceed through long-run/manual profiles instead of being hard-stopped just for duration.
+- Background bash commands reuse the recovered background task manager:
+  - live progress updates are persisted through `background_output`,
+  - `background_list`, `background_output`, and `background_cancel` are now the canonical control loop for long scans.
+- `report_finalize` now produces an actual operator-facing final bundle under `deliverables/final/`:
+  - `README.md` entrypoint,
+  - `manifest.json`,
+  - copied `engagement.md`, `handoff.md`, `finding.md`,
+  - copied `subagent-summaries/*.md`,
+  - authored report artifacts and machine-readable JSON sidecars.
+- Test-environment gotcha:
+  - `packages/opencode/src/features/swarm/scheduler.ts` now has a missing-table fallback for `swarm_task`, because some isolated tests exercise background execution before swarm SQLite tables exist.
+## Pentest Runtime Completion (2026-03-05)
+- Fresh upstream replay branch is `codex/pentest-runtime-completion`; core pentest runtime work has been replayed on top of `upstream/dev` instead of continuing on the older drifted branch.
+- Session model integration gap was real:
+  - upstream base was missing persisted `Session.update(...)` + cyber environment storage,
+  - restored via `packages/opencode/src/session/index.ts` using `Storage["session_env", sessionID]`,
+  - child sessions now inherit cyber environment correctly on the synced branch.
+- Pentest agent registry is restored in `packages/opencode/src/agent/agent.ts`:
+  - primary: `pentest` plus compatibility aliases `AutoPentest`, `pentest_flow`, `pentest_auto`
+  - subagents: `recon`, `assess`, `report`, `analyst`, `network_mapper`, `host_auditor`, `vuln_researcher`, `evidence_scribe`, `report_writer`
+  - default primary agent preference now falls back to `pentest`, not generic `build`, when no override is set.
+- Config integration gotcha:
+  - root config schema must include `cyber` or test/local configs using `cyber.swarm_v2_1.*` will fail validation.
+  - agent config schema now includes pentest-specific built-ins so user config overrides do not trip schema validation.
+- Added built-in pentest runtime plugin:
+  - `packages/opencode/src/plugin/pentest-runtime.ts`
+  - hooked through `packages/opencode/src/plugin/index.ts`
+  - responsibilities:
+    - summarize oversized tool output into artifact-backed digests,
+    - reduce old tool-output context during long sessions,
+    - enrich compaction with pending-background/runtime-summary carry-forward context.
+- Added runtime-visible pentest summary artifacts:
+  - `engagements/<id>/deliverables/runtime-summary.json`
+  - `engagements/<id>/deliverables/runtime-summary.md`
+  - generator: `packages/opencode/src/session/runtime-summary.ts`
+  - tracks parent vs subagent model calls, tool-output byte shrinkage, summarized/truncated handoffs, repeated fetch-like tools, compaction counts, and background/swarm state.
+- `report_finalize` now publishes runtime summaries into `deliverables/final/` alongside the final report bundle so operators get one clean handoff surface.
+- `task` cyber subagent reminder now explicitly says subagents own one bounded lane only and must call out unexplored remainder + justified follow-up before finishing.
 ## Contracts + Gotchas
 - Resolve git/repo root first to avoid nested path drift in this monorepo.
 - Quote shell paths because local machine paths can include spaces.
@@ -193,6 +240,7 @@ Last updated: 2026-03-05
 - History rewrite caution: running `git-filter-repo` across active branch history rewrites commit SHAs and can make fork divergence metrics explode (for example, thousands "ahead" with similar content). If cleanup is required, prefer path-scoped rewrites and then rebuild `dev` on top of `upstream/dev` with a squashed delta to restore sane ahead/behind counts.
 - Branding gotcha (2026-02-10): keep external docs/service URLs on real OpenCode domains (for example `opencode.ai`, `api.opencode.ai`) unless DNS/domain ownership is confirmed. String-rebranding helpers should not rewrite domains by default.
 - Prompt/runtime gotcha (2026-02-10): cyber environment details now flow through system context, while synthetic cyber reminders are intentionally sparse and reserved for late-stage gates.
+- Bash runtime gotcha (2026-03-05): for long enumeration/scanning, prefer `execution_profile=long_run_background` over inflating `timeout`. The whole point is to keep the parent lane moving while background work runs.
 - Opus 4.6 guardrail (2026-02-10): disable synthetic assistant reminder injection to satisfy strict Claude user-message sequencing behavior.
 - TUI agent-switch gotcha (2026-02-26): in `packages/opencode/src/cli/cmd/tui/routes/session/index.tsx`, do not couple agent auto-sync effects to `local.agent.current()` reads. That creates a feedback loop that immediately overwrites manual `tab agents` / command-palette changes in sessions with existing messages. Sync from message-derived signals only.
 

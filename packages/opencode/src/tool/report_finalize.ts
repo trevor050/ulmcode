@@ -5,6 +5,103 @@ import { Tool } from "./tool"
 import { ReportBundle } from "@/report/report"
 import { Session } from "@/session"
 import { CyberEnvironment } from "@/session/environment"
+import { PentestRuntimeSummary } from "@/session/runtime-summary"
+
+async function listSubagentResults(root: string) {
+  const agentsDir = path.join(root, "agents")
+  const entries = await fs.readdir(agentsDir, { withFileTypes: true }).catch(() => [])
+  const results: string[] = []
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    if (entry.name === "coordination") continue
+    const candidate = path.join(agentsDir, entry.name, "results.md")
+    const exists = await fs
+      .stat(candidate)
+      .then((stat) => stat.isFile())
+      .catch(() => false)
+    if (exists) results.push(candidate)
+  }
+  return results.sort()
+}
+
+async function writeBundleIndex(input: {
+  finalDir: string
+  engagementRoot?: string
+  report: Awaited<ReturnType<typeof ReportBundle.generate>>
+  finalReportPdfPath: string
+}) {
+  const subagentResults = input.engagementRoot ? await listSubagentResults(input.engagementRoot) : []
+  const supportArtifacts = input.engagementRoot
+    ? [
+        path.join(input.engagementRoot, "engagement.md"),
+        path.join(input.engagementRoot, "handoff.md"),
+        path.join(input.engagementRoot, "finding.md"),
+        path.join(input.engagementRoot, "deliverables", "runtime-summary.md"),
+        path.join(input.engagementRoot, "deliverables", "runtime-summary.json"),
+      ]
+    : []
+  const manifest = {
+    generated_at: new Date().toISOString(),
+    engagement_root: input.engagementRoot ?? null,
+    final_dir: input.finalDir,
+    findings: input.report.findingCount,
+    sources: input.report.sourceCount,
+    subagents: input.report.subagentCount,
+    quality_status: input.report.quality.quality_status,
+    pdf_generated: input.report.pdfGenerated,
+    artifacts: {
+      report_pdf: input.finalReportPdfPath,
+      report_html: path.join(input.finalDir, path.basename(input.report.reportHtmlPath)),
+      report_markdown: path.join(input.finalDir, path.basename(input.report.reportPath)),
+      results_markdown: path.join(input.finalDir, path.basename(input.report.resultsPath)),
+      remediation_plan: path.join(input.finalDir, path.basename(input.report.remediationPlanPath)),
+      findings_json: path.join(input.finalDir, path.basename(input.report.findingsPath)),
+      sources_json: path.join(input.finalDir, path.basename(input.report.sourcesPath)),
+      timeline_json: path.join(input.finalDir, path.basename(input.report.timelinePath)),
+      quality_checks_json: path.join(input.finalDir, path.basename(input.report.qualityChecksPath)),
+      swarm_quality_json: path.join(input.finalDir, path.basename(input.report.swarmQualityPath)),
+      run_metadata_json: path.join(input.finalDir, path.basename(input.report.metadataPath)),
+      runtime_summary_markdown: path.join(input.finalDir, "runtime-summary.md"),
+      runtime_summary_json: path.join(input.finalDir, "runtime-summary.json"),
+      support_artifacts: supportArtifacts.map((file) => path.join(input.finalDir, path.basename(file))),
+      subagent_summaries: subagentResults.map((file) => path.join(input.finalDir, "subagent-summaries", path.basename(path.dirname(file)) + ".md")),
+    },
+  }
+
+  const readme = [
+    "# Final Deliverables",
+    "",
+    `- Generated: ${manifest.generated_at}`,
+    `- Quality status: ${manifest.quality_status}`,
+    `- Findings: ${manifest.findings}`,
+    `- Sources: ${manifest.sources}`,
+    `- Subagents: ${manifest.subagents}`,
+    `- PDF generated: ${manifest.pdf_generated}`,
+    "",
+    "## Start Here",
+    `- Client report PDF: ${manifest.artifacts.report_pdf}`,
+    `- Client report HTML: ${manifest.artifacts.report_html}`,
+    `- Results summary: ${manifest.artifacts.results_markdown}`,
+    `- Remediation plan: ${manifest.artifacts.remediation_plan}`,
+    "",
+    "## Team Support Files",
+    `- Engagement notes: ${manifest.artifacts.support_artifacts[0] ?? "n/a"}`,
+    `- Handoff log: ${manifest.artifacts.support_artifacts[1] ?? "n/a"}`,
+    `- Canonical findings log: ${manifest.artifacts.support_artifacts[2] ?? "n/a"}`,
+    `- Runtime summary (Markdown): ${manifest.artifacts.runtime_summary_markdown}`,
+    `- Runtime summary (JSON): ${manifest.artifacts.runtime_summary_json}`,
+    `- Subagent summaries dir: ${path.join(input.finalDir, "subagent-summaries")}`,
+    "",
+    "## Machine Manifest",
+    `- ${path.join(input.finalDir, "manifest.json")}`,
+    "",
+  ].join("\n")
+
+  await Promise.all([
+    fs.writeFile(path.join(input.finalDir, "README.md"), readme + "\n", "utf8"),
+    fs.writeFile(path.join(input.finalDir, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n", "utf8"),
+  ])
+}
 
 const parameters = z.object({
   session_id: z.string().optional().describe("Target session ID. Defaults to current session."),
@@ -70,6 +167,33 @@ export const ReportFinalizeTool = Tool.define("report_finalize", {
     await fs.mkdir(path.dirname(archiveDir), { recursive: true })
     await fs.cp(reportsDir, archiveDir, { recursive: true, force: true }).catch(() => {})
 
+    const engagementRoot = session.environment?.type === "cyber" ? session.environment.root : undefined
+    if (engagementRoot) {
+      await PentestRuntimeSummary.write({ sessionID: session.id }).catch(() => undefined)
+      const supportArtifacts = ["engagement.md", "handoff.md", "finding.md"]
+      for (const filename of supportArtifacts) {
+        const source = path.join(engagementRoot, filename)
+        const target = path.join(finalDir, filename)
+        await fs.copyFile(source, target).catch(() => {})
+      }
+      for (const source of [
+        CyberEnvironment.resolveRuntimeSummaryMarkdownPath(session),
+        CyberEnvironment.resolveRuntimeSummaryJsonPath(session),
+      ]) {
+        if (!source) continue
+        const target = path.join(finalDir, path.basename(source))
+        await fs.copyFile(source, target).catch(() => {})
+      }
+
+      const subagentResults = await listSubagentResults(engagementRoot)
+      const summaryDir = path.join(finalDir, "subagent-summaries")
+      await fs.mkdir(summaryDir, { recursive: true })
+      for (const source of subagentResults) {
+        const sessionSlug = path.basename(path.dirname(source))
+        await fs.copyFile(source, path.join(summaryDir, `${sessionSlug}.md`)).catch(() => {})
+      }
+    }
+
     if (session.environment?.type === "cyber") {
       await CyberEnvironment.updateEngagementIndex({
         session,
@@ -86,12 +210,22 @@ export const ReportFinalizeTool = Tool.define("report_finalize", {
       )
     }
 
+    const finalReportPdfPath = path.join(finalDir, path.basename(result.reportPdfPath))
+    await writeBundleIndex({
+      finalDir,
+      engagementRoot,
+      report: result,
+      finalReportPdfPath,
+    })
+
     return {
       title: "Finalized client report bundle",
       output: [
         `Session: ${result.sessionID}`,
         `Final deliverable directory: ${finalDir}`,
-        `Final report PDF: ${path.join(finalDir, path.basename(result.reportPdfPath))}`,
+        `Final report PDF: ${finalReportPdfPath}`,
+        `Bundle README: ${path.join(finalDir, "README.md")}`,
+        `Bundle manifest: ${path.join(finalDir, "manifest.json")}`,
         `Archive directory: ${archiveDir}`,
         `Render plan: ${result.reportRenderPlanPath}`,
         `Report HTML: ${result.reportHtmlPath}`,
@@ -120,7 +254,7 @@ export const ReportFinalizeTool = Tool.define("report_finalize", {
       metadata: {
         ...result,
         finalDeliverableDir: finalDir,
-        finalReportPdfPath: path.join(finalDir, path.basename(result.reportPdfPath)),
+        finalReportPdfPath,
         archiveDir,
         quality_status: result.quality.quality_status,
         quality_warnings: result.quality.quality_warnings,

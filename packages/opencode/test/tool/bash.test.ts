@@ -8,6 +8,7 @@ import { tmpdir } from "../fixture/fixture"
 import type { Permission } from "../../src/permission"
 import { Truncate } from "../../src/tool/truncate"
 import { SessionID, MessageID } from "../../src/session/schema"
+import { BackgroundAgentManager } from "../../src/features/background-agent/manager"
 
 const ctx = {
   sessionID: SessionID.make("ses_test"),
@@ -57,6 +58,58 @@ describe("tool.bash", () => {
         expect((result.metadata as any).timeoutClamped).toBe(true)
         expect((result.metadata as any).timeoutMax).toBe(30 * 60 * 1000)
         expect(result.output).toContain("bash tool clamped timeout")
+      },
+    })
+  })
+
+  test("queues long_run_background commands instead of blocking", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const result = await bash.execute(
+          {
+            command: `bun -e "setTimeout(() => console.log('background-ok'), 25)"`,
+            execution_profile: "long_run_background",
+            description: "Queue background command",
+          },
+          ctx,
+        )
+        expect((result.metadata as any).executionProfile).toBe("long_run_background")
+        expect((result.metadata as any).backgroundTaskId).toBeTruthy()
+        expect(result.output).toContain("background_task_id:")
+
+        const taskId = (result.metadata as any).backgroundTaskId as string
+        for (let i = 0; i < 30; i++) {
+          const task = await BackgroundAgentManager.get(taskId)
+          if (task?.status === "completed") break
+          await Bun.sleep(25)
+        }
+
+        const task = await BackgroundAgentManager.get(taskId)
+        expect(task?.status).toBe("completed")
+        expect(task?.output).toContain("background-ok")
+      },
+    })
+  })
+
+  test("manual_unbounded does not clamp timeout metadata", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const result = await bash.execute(
+          {
+            command: "echo manual",
+            execution_profile: "manual_unbounded",
+            timeout: 99_000_000,
+            description: "Run manual unbounded command",
+          },
+          ctx,
+        )
+        expect((result.metadata as any).executionProfile).toBe("manual_unbounded")
+        expect((result.metadata as any).timeout).toBeNull()
+        expect((result.metadata as any).timeoutClamped).toBe(false)
       },
     })
   })

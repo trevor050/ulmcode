@@ -207,6 +207,8 @@ export namespace CyberEnvironment {
       `- Findings log: ${path.join(root, "finding.md")}`,
       `- Cross-agent handoff: ${path.join(root, "handoff.md")}`,
       `- Reports: ${path.join(root, "reports")}`,
+      `- Runtime summary (JSON): ${path.join(root, "deliverables", "runtime-summary.json")}`,
+      `- Runtime summary (Markdown): ${path.join(root, "deliverables", "runtime-summary.md")}`,
       `- Raw evidence: ${path.join(root, "evidence", "raw")}`,
       `- Processed evidence: ${path.join(root, "evidence", "processed")}`,
       "",
@@ -537,6 +539,16 @@ export namespace CyberEnvironment {
   export function resolveDeliverablesArchiveDir(session: Session.Info) {
     if (session.environment?.type !== "cyber") return undefined
     return path.join(session.environment.root, "deliverables", "archive")
+  }
+
+  export function resolveRuntimeSummaryJsonPath(session: Session.Info) {
+    if (session.environment?.type !== "cyber") return undefined
+    return path.join(session.environment.root, "deliverables", "runtime-summary.json")
+  }
+
+  export function resolveRuntimeSummaryMarkdownPath(session: Session.Info) {
+    if (session.environment?.type !== "cyber") return undefined
+    return path.join(session.environment.root, "deliverables", "runtime-summary.md")
   }
 
   export function resolveCoordinationDir(session: Session.Info) {

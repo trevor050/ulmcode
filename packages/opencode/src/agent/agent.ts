@@ -11,6 +11,7 @@ import { ProviderTransform } from "../provider/transform"
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
+import PROMPT_PENTEST_AUTO from "./prompt/pentest-auto.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { Permission } from "@/permission"
@@ -22,6 +23,11 @@ import { Skill } from "../skill"
 import { Effect, ServiceMap, Layer } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
+
+function normalizePrimaryAgentName(name: string) {
+  if (name === "AutoPentest" || name === "pentest_flow" || name === "pentest_auto") return "pentest"
+  return name
+}
 
 export namespace Agent {
   export const Info = z
@@ -143,6 +149,90 @@ export namespace Agent {
               mode: "primary",
               native: true,
             },
+            pentest: {
+              name: "pentest",
+              description:
+                "Primary guided cyber orchestrator for authorized internal engagements. Collects scope, plans deeply, then executes with subagents.",
+              prompt: PROMPT_PENTEST_AUTO,
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  question: "allow",
+                  plan_enter: "allow",
+                  task: "allow",
+                  finding: "allow",
+                  webfetch: "allow",
+                  websearch: "allow",
+                }),
+                user,
+              ),
+              options: {},
+              mode: "primary",
+              native: true,
+            },
+            AutoPentest: {
+              name: "AutoPentest",
+              description: "Deprecated alias for pentest.",
+              prompt: PROMPT_PENTEST_AUTO,
+              hidden: true,
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  question: "allow",
+                  plan_enter: "allow",
+                  task: "allow",
+                  finding: "allow",
+                  webfetch: "allow",
+                  websearch: "allow",
+                }),
+                user,
+              ),
+              options: {},
+              mode: "primary",
+              native: true,
+            },
+            pentest_flow: {
+              name: "pentest_flow",
+              description: "Deprecated alias for pentest.",
+              prompt: PROMPT_PENTEST_AUTO,
+              hidden: true,
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  question: "allow",
+                  plan_enter: "allow",
+                  task: "allow",
+                  finding: "allow",
+                  webfetch: "allow",
+                  websearch: "allow",
+                }),
+                user,
+              ),
+              options: {},
+              mode: "primary",
+              native: true,
+            },
+            pentest_auto: {
+              name: "pentest_auto",
+              description: "Deprecated alias for pentest.",
+              prompt: PROMPT_PENTEST_AUTO,
+              hidden: true,
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  question: "allow",
+                  plan_enter: "allow",
+                  task: "allow",
+                  finding: "allow",
+                  webfetch: "allow",
+                  websearch: "allow",
+                }),
+                user,
+              ),
+              options: {},
+              mode: "primary",
+              native: true,
+            },
             general: {
               name: "general",
               description: `General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel.`,
@@ -150,6 +240,160 @@ export namespace Agent {
                 defaults,
                 Permission.fromConfig({
                   todowrite: "deny",
+                }),
+                user,
+              ),
+              options: {},
+              mode: "subagent",
+              native: true,
+            },
+            recon: {
+              name: "recon",
+              description: "Subagent for safe internal attack-surface discovery and enumeration.",
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  task: "deny",
+                  finding: "allow",
+                  webfetch: "allow",
+                  websearch: "allow",
+                }),
+                user,
+              ),
+              options: {},
+              mode: "subagent",
+              native: true,
+            },
+            assess: {
+              name: "assess",
+              description: "Subagent for validation, exploitability analysis, and impact triage.",
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  task: "deny",
+                  finding: "allow",
+                  webfetch: "allow",
+                  websearch: "allow",
+                }),
+                user,
+              ),
+              options: {},
+              mode: "subagent",
+              native: true,
+            },
+            report: {
+              name: "report",
+              description: "Subagent for reporting, evidence normalization, and remediation framing.",
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  task: "deny",
+                  finding: "allow",
+                  webfetch: "allow",
+                  websearch: "allow",
+                }),
+                user,
+              ),
+              options: {},
+              mode: "subagent",
+              native: true,
+            },
+            analyst: {
+              name: "analyst",
+              description: "Compatibility alias for assess agent behavior.",
+              hidden: true,
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  task: "deny",
+                  finding: "allow",
+                  webfetch: "allow",
+                  websearch: "allow",
+                }),
+                user,
+              ),
+              options: {},
+              mode: "subagent",
+              native: true,
+            },
+            network_mapper: {
+              name: "network_mapper",
+              description: "Subagent for network enumeration and attack-surface mapping.",
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  task: "deny",
+                  finding: "allow",
+                  webfetch: "allow",
+                  websearch: "allow",
+                }),
+                user,
+              ),
+              options: {},
+              mode: "subagent",
+              native: true,
+            },
+            host_auditor: {
+              name: "host_auditor",
+              description: "Subagent for host-level posture and misconfiguration auditing.",
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  task: "deny",
+                  finding: "allow",
+                  webfetch: "allow",
+                  websearch: "allow",
+                }),
+                user,
+              ),
+              options: {},
+              mode: "subagent",
+              native: true,
+            },
+            vuln_researcher: {
+              name: "vuln_researcher",
+              description: "Subagent for exploitability and CVE validation research.",
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  task: "deny",
+                  finding: "allow",
+                  webfetch: "allow",
+                  websearch: "allow",
+                }),
+                user,
+              ),
+              options: {},
+              mode: "subagent",
+              native: true,
+            },
+            evidence_scribe: {
+              name: "evidence_scribe",
+              description: "Subagent for evidence normalization and finding log quality.",
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  task: "deny",
+                  finding: "allow",
+                  webfetch: "allow",
+                  websearch: "allow",
+                }),
+                user,
+              ),
+              options: {},
+              mode: "subagent",
+              native: true,
+            },
+            report_writer: {
+              name: "report_writer",
+              description: "Final reporting specialist for full client-grade synthesis and PDF deliverables.",
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  task: "deny",
+                  finding: "allow",
+                  webfetch: "allow",
+                  websearch: "allow",
                 }),
                 user,
               ),
@@ -283,11 +527,12 @@ export namespace Agent {
 
           const list = Effect.fnUntraced(function* () {
             const cfg = yield* config.get()
+            const preferred = cfg.default_agent ? normalizePrimaryAgentName(cfg.default_agent) : "pentest"
             return pipe(
               agents,
               values(),
               sortBy(
-                [(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "build"), "desc"],
+                [(x) => x.name === preferred, "desc"],
                 [(x) => x.name, "asc"],
               ),
             )
@@ -296,11 +541,15 @@ export namespace Agent {
           const defaultAgent = Effect.fnUntraced(function* () {
             const c = yield* config.get()
             if (c.default_agent) {
-              const agent = agents[c.default_agent]
+              const agent = agents[normalizePrimaryAgentName(c.default_agent)]
               if (!agent) throw new Error(`default agent "${c.default_agent}" not found`)
               if (agent.mode === "subagent") throw new Error(`default agent "${c.default_agent}" is a subagent`)
               if (agent.hidden === true) throw new Error(`default agent "${c.default_agent}" is hidden`)
               return agent.name
+            }
+            const preferredDefault = agents.pentest
+            if (preferredDefault && preferredDefault.mode !== "subagent" && preferredDefault.hidden !== true) {
+              return preferredDefault.name
             }
             const visible = Object.values(agents).find((a) => a.mode !== "subagent" && a.hidden !== true)
             if (!visible) throw new Error("no primary visible agent found")
