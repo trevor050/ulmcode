@@ -114,7 +114,6 @@ export namespace Agent {
             action: {
               name: "action",
               description: "General execution agent. Executes tools based on configured permissions.",
-              color: "#ef4444",
               options: {},
               permission: Permission.merge(
                 defaults,
@@ -146,7 +145,6 @@ export namespace Agent {
             plan: {
               name: "plan",
               description: "Plan mode. Disallows all edit tools.",
-              color: "#22c55e",
               options: {},
               permission: Permission.merge(
                 defaults,
