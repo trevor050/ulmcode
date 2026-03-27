@@ -1,6 +1,6 @@
 # ULMcode Agents Notes
 
-Last updated: 2026-03-05
+Last updated: 2026-03-27
 
 ## Repo Reality (Read This First)
 - `/Users/trevorrosato/codeprojects/ULMcode/` is a workspace container only (not a git repo).
@@ -60,6 +60,15 @@ Last updated: 2026-03-05
 - Important repo reality:
   - a naive full merge from current `dev` to latest `upstream/dev` on 2026-03-13 exploded into broad unrelated monorepo conflicts and schema/runtime drift far outside pentest mode.
   - For now, upstream should be treated as a selective reference source for the pentest/runtime surfaces unless someone explicitly signs up to do the larger repo-wide reconciliation.
+
+## Upstream Sync Notes (2026-03-27)
+- Latest successful sync approach was: start from fresh `upstream/dev`, then selectively cherry-pick the ULM pentest/runtime stack instead of trying to merge the older customization branch directly.
+- Two easy-to-miss merge traps showed up during that sync:
+  - `packages/opencode/src/provider/provider.ts` can accidentally end up with a duplicated `openai` loader return block that breaks parsing and makes the `xai` loader disappear into nonsense.
+  - `packages/opencode/src/session/message-v2.ts` can accidentally end up with duplicate `OutputFormat*` / `Format` declarations and a duplicated `format` property on `MessageV2.User`.
+- Plan-mode continuity still depends on the tiny wiring details:
+  - `packages/opencode/src/session/prompt.ts` needs the pentest-first-prompt reroute plus the `Identifier` import used by later synthetic message helpers.
+  - `packages/opencode/src/session/processor.ts` needs both `fallbackPlanExitIfNeeded()` and the `Identifier` import it uses when synthesizing the follow-up execution message.
 ## Swarm Foundation Phase 1 (2026-02-18)
 - Implemented hard bash guardrails:
   - default timeout remains 2 minutes,

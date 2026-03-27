@@ -84,29 +84,6 @@ export namespace MessageV2 {
   })
   export type OutputFormat = z.infer<typeof Format>
 
-  export const OutputFormatText = z
-    .object({
-      type: z.literal("text"),
-    })
-    .meta({
-      ref: "OutputFormatText",
-    })
-
-  export const OutputFormatJsonSchema = z
-    .object({
-      type: z.literal("json_schema"),
-      name: z.string(),
-      schema: z.record(z.string(), z.any()),
-    })
-    .meta({
-      ref: "OutputFormatJsonSchema",
-    })
-
-  export const Format = z.discriminatedUnion("type", [OutputFormatText, OutputFormatJsonSchema]).meta({
-    ref: "OutputFormat",
-  })
-  export type OutputFormat = z.infer<typeof Format>
-
   const PartBase = z.object({
     id: PartID.zod,
     sessionID: SessionID.zod,
@@ -397,7 +374,6 @@ export namespace MessageV2 {
     }),
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
-    format: Format.optional(),
     variant: z.string().optional(),
   }).meta({
     ref: "UserMessage",
