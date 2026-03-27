@@ -69,6 +69,9 @@ Last updated: 2026-03-27
 - Plan-mode continuity still depends on the tiny wiring details:
   - `packages/opencode/src/session/prompt.ts` needs the pentest-first-prompt reroute plus the `Identifier` import used by later synthetic message helpers.
   - `packages/opencode/src/session/processor.ts` needs both `fallbackPlanExitIfNeeded()` and the `Identifier` import it uses when synthesizing the follow-up execution message.
+- Agent selector drift after upstream sync came from two separate issues at once:
+  - `.opencode/agent/docs.md` was still present locally, so `docs` kept showing up as a workspace primary agent even though it was supposed to be removed.
+  - the intended `build` -> `action` rename had not actually been carried through the native agent registry, so the visible primary action agent regressed.
 ## Swarm Foundation Phase 1 (2026-02-18)
 - Implemented hard bash guardrails:
   - default timeout remains 2 minutes,

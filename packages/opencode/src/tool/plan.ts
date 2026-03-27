@@ -64,7 +64,7 @@ function executionKickoff(input: { planPath: string; agent: string }) {
 async function resolveExecutionAgent(sessionID: string) {
   const session = await Session.get(sessionID)
   const preferred = executionAgent(await getPrePlanAgent(sessionID))
-  if (session.environment?.type === "cyber" && preferred === "build") {
+  if (session.environment?.type === "cyber" && (preferred === "build" || preferred === "action")) {
     const pentest = await Agent.get("pentest")
     if (pentest && pentest.mode !== "subagent") return "pentest"
   }

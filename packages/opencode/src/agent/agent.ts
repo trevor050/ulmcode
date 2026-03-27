@@ -26,6 +26,7 @@ import { makeRuntime } from "@/effect/run-service"
 
 function normalizePrimaryAgentName(name: string) {
   if (name === "AutoPentest" || name === "pentest_flow" || name === "pentest_auto") return "pentest"
+  if (name === "build") return "action"
   return name
 }
 
@@ -110,9 +111,25 @@ export namespace Agent {
           const user = Permission.fromConfig(cfg.permission ?? {})
 
           const agents: Record<string, Info> = {
+            action: {
+              name: "action",
+              description: "General execution agent. Executes tools based on configured permissions.",
+              options: {},
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  question: "allow",
+                  plan_enter: "allow",
+                }),
+                user,
+              ),
+              mode: "primary",
+              native: true,
+            },
             build: {
               name: "build",
-              description: "The default agent. Executes tools based on configured permissions.",
+              description: "Compatibility alias for action.",
+              hidden: true,
               options: {},
               permission: Permission.merge(
                 defaults,
@@ -476,9 +493,11 @@ export namespace Agent {
             },
           }
 
-          for (const [key, value] of Object.entries(cfg.agent ?? {})) {
+          for (const [rawKey, value] of Object.entries(cfg.agent ?? {})) {
+            const key = normalizePrimaryAgentName(rawKey)
             if (value.disable) {
               delete agents[key]
+              if (rawKey === "build") delete agents.build
               continue
             }
             let item = agents[key]
@@ -503,6 +522,14 @@ export namespace Agent {
             item.steps = value.steps ?? item.steps
             item.options = mergeDeep(item.options, value.options ?? {})
             item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
+            if (rawKey === "build" && agents.build) {
+              agents.build = {
+                ...item,
+                name: "build",
+                description: "Compatibility alias for action.",
+                hidden: true,
+              }
+            }
           }
 
           // Ensure Truncate.GLOB is allowed unless explicitly configured

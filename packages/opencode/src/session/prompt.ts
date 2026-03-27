@@ -1424,7 +1424,7 @@ export namespace SessionPrompt {
         })
       }
       const wasPlan = input.messages.some((msg) => msg.info.role === "assistant" && msg.info.agent === "plan")
-      if (wasPlan && input.agent.name === "build") {
+      if (wasPlan && (input.agent.name === "build" || input.agent.name === "action")) {
         userMessage.parts.push({
           id: PartID.ascending(),
           messageID: userMessage.info.id,
@@ -1440,7 +1440,7 @@ export namespace SessionPrompt {
     // New plan mode logic when flag is enabled
     const assistantMessage = input.messages.findLast((msg) => msg.info.role === "assistant")
 
-    // Switching from plan mode to build mode
+    // Switching from plan mode to action mode
     if (input.agent.name !== "plan" && assistantMessage?.info.agent === "plan") {
       const plan = Session.plan(input.session)
       const exists = await Filesystem.exists(plan)

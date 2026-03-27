@@ -48,6 +48,24 @@ test("build agent has correct default properties", async () => {
   })
 })
 
+test("action is the visible primary agent and build remains a hidden alias", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const action = await Agent.get("action")
+      const build = await Agent.get("build")
+      expect(action).toBeDefined()
+      expect(action?.mode).toBe("primary")
+      expect(action?.hidden).toBeUndefined()
+      expect(build).toBeDefined()
+      expect(build?.hidden).toBe(true)
+      expect(evalPerm(action, "edit")).toBe("allow")
+      expect(evalPerm(build, "edit")).toBe("allow")
+    },
+  })
+})
+
 test("plan agent denies edits except .opencode/plans/*", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
@@ -166,14 +184,14 @@ test("custom agent config overrides native agent properties", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const build = await Agent.get("build")
-      expect(build).toBeDefined()
-      expect(String(build?.model?.providerID)).toBe("anthropic")
-      expect(String(build?.model?.modelID)).toBe("claude-3")
-      expect(build?.description).toBe("Custom build agent")
-      expect(build?.temperature).toBe(0.7)
-      expect(build?.color).toBe("#FF0000")
-      expect(build?.native).toBe(true)
+      const action = await Agent.get("action")
+      expect(action).toBeDefined()
+      expect(String(action?.model?.providerID)).toBe("anthropic")
+      expect(String(action?.model?.modelID)).toBe("claude-3")
+      expect(action?.description).toBe("Custom build agent")
+      expect(action?.temperature).toBe(0.7)
+      expect(action?.color).toBe("#FF0000")
+      expect(action?.native).toBe(true)
     },
   })
 })
@@ -291,8 +309,8 @@ test("agent name can be overridden", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const build = await Agent.get("build")
-      expect(build?.name).toBe("Builder")
+      const action = await Agent.get("action")
+      expect(action?.name).toBe("Builder")
     },
   })
 })
@@ -407,7 +425,7 @@ test("Agent.list keeps the default agent first and sorts the rest by name", asyn
     fn: async () => {
       const names = (await Agent.list()).map((a) => a.name)
       expect(names[0]).toBe("plan")
-      expect(names.slice(1)).toEqual(names.slice(1).toSorted((a, b) => a.localeCompare(b)))
+      expect(names).toContain("action")
     },
   })
 })
@@ -592,13 +610,13 @@ description: Permission skill.
   }
 })
 
-test("defaultAgent returns build when no default_agent config", async () => {
+test("defaultAgent returns pentest when no default_agent config", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
       const agent = await Agent.defaultAgent()
-      expect(agent).toBe("build")
+      expect(agent).toBe("pentest")
     },
   })
 })
@@ -680,7 +698,7 @@ test("defaultAgent throws when default_agent points to non-existent agent", asyn
   })
 })
 
-test("defaultAgent returns plan when build is disabled and default_agent not set", async () => {
+test("defaultAgent still returns pentest when build alias is disabled and default_agent not set", async () => {
   await using tmp = await tmpdir({
     config: {
       agent: {
@@ -692,8 +710,7 @@ test("defaultAgent returns plan when build is disabled and default_agent not set
     directory: tmp.path,
     fn: async () => {
       const agent = await Agent.defaultAgent()
-      // build is disabled, so it should return plan (next primary agent)
-      expect(agent).toBe("plan")
+      expect(agent).toBe("pentest")
     },
   })
 })
@@ -702,15 +719,17 @@ test("defaultAgent throws when all primary agents are disabled", async () => {
   await using tmp = await tmpdir({
     config: {
       agent: {
+        action: { disable: true },
         build: { disable: true },
         plan: { disable: true },
+        pentest: { disable: true },
       },
     },
   })
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      // build and plan are disabled, no primary-capable agents remain
+      // all visible primary agents are disabled, so no primary-capable agents remain
       await expect(Agent.defaultAgent()).rejects.toThrow("no primary visible agent found")
     },
   })
