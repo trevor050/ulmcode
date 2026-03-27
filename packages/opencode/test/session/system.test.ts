@@ -6,6 +6,18 @@ import { SystemPrompt } from "../../src/session/system"
 import { tmpdir } from "../fixture/fixture"
 
 describe("session.system", () => {
+  test("provider prompts include cyber core by default and can opt out", async () => {
+    const model = {
+      api: { id: "gpt-5.4" },
+    } as any
+
+    const withCyber = SystemPrompt.provider(model)
+    const withoutCyber = SystemPrompt.provider(model, { includeCyber: false })
+
+    expect(withCyber.join("\n")).toContain(SystemPrompt.cyberCore())
+    expect(withoutCyber.join("\n")).not.toContain(SystemPrompt.cyberCore())
+  })
+
   test("skills output is sorted by name and stable across calls", async () => {
     await using tmp = await tmpdir({
       git: true,

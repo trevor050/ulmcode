@@ -10,25 +10,39 @@ import PROMPT_GPT from "./prompt/gpt.txt"
 
 import PROMPT_CODEX from "./prompt/codex.txt"
 import PROMPT_TRINITY from "./prompt/trinity.txt"
+import PROMPT_CYBER_CORE from "./prompt/cyber-core.txt"
 import type { Provider } from "@/provider/provider"
 import type { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
 import { Skill } from "@/skill"
 
 export namespace SystemPrompt {
-  export function provider(model: Provider.Model) {
+  type Options = {
+    includeCyber?: boolean
+  }
+
+  function withCyber(base: string[], options?: Options) {
+    if (options?.includeCyber === false) return base
+    return [...base, PROMPT_CYBER_CORE]
+  }
+
+  export function cyberCore() {
+    return PROMPT_CYBER_CORE
+  }
+
+  export function provider(model: Provider.Model, options?: Options) {
     if (model.api.id.includes("gpt-4") || model.api.id.includes("o1") || model.api.id.includes("o3"))
-      return [PROMPT_BEAST]
+      return withCyber([PROMPT_BEAST], options)
     if (model.api.id.includes("gpt")) {
       if (model.api.id.includes("codex")) {
-        return [PROMPT_CODEX]
+        return withCyber([PROMPT_CODEX], options)
       }
-      return [PROMPT_GPT]
+      return withCyber([PROMPT_GPT], options)
     }
-    if (model.api.id.includes("gemini-")) return [PROMPT_GEMINI]
-    if (model.api.id.includes("claude")) return [PROMPT_ANTHROPIC]
-    if (model.api.id.toLowerCase().includes("trinity")) return [PROMPT_TRINITY]
-    return [PROMPT_DEFAULT]
+    if (model.api.id.includes("gemini-")) return withCyber([PROMPT_GEMINI], options)
+    if (model.api.id.includes("claude")) return withCyber([PROMPT_ANTHROPIC], options)
+    if (model.api.id.toLowerCase().includes("trinity")) return withCyber([PROMPT_TRINITY], options)
+    return withCyber([PROMPT_DEFAULT], options)
   }
 
   export async function environment(model: Provider.Model) {

@@ -72,6 +72,10 @@ Last updated: 2026-03-27
 - Agent selector drift after upstream sync came from two separate issues at once:
   - `.opencode/agent/docs.md` was still present locally, so `docs` kept showing up as a workspace primary agent even though it was supposed to be removed.
   - the intended `build` -> `action` rename had not actually been carried through the native agent registry, so the visible primary action agent regressed.
+- Another sync regression came from prompt API drift:
+  - `packages/opencode/src/session/llm.ts` still expected `SystemPrompt.cyberCore()` and `SystemPrompt.provider(..., { includeCyber })`.
+  - upstream `packages/opencode/src/session/system.ts` had been simplified and no longer exported that contract.
+  - fix is to preserve the newer provider-selection logic but keep the `includeCyber` option and `cyberCore()` helper alive, otherwise hidden/subagent sessions can crash at runtime with `SystemPrompt.cyberCore is not a function`.
 ## Swarm Foundation Phase 1 (2026-02-18)
 - Implemented hard bash guardrails:
   - default timeout remains 2 minutes,
