@@ -448,4 +448,68 @@ describe("session.processor plan_exit fallback", () => {
       },
     })
   })
+
+  test("does not auto-approve when the user only promises future approval", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+
+        await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: session.id,
+          agent: "pentest",
+          model: { providerID: "openai", modelID: "gpt-5" },
+          time: { created: Date.now() - 50 },
+        })
+        await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: session.id,
+          agent: "plan",
+          model: { providerID: "openai", modelID: "gpt-5" },
+          time: { created: Date.now() - 40 },
+        })
+        await seedPlanAssistant({
+          sessionID: session.id,
+          text: "Here is the plan. I can execute after you confirm.",
+        })
+
+        const futureApproval = await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: session.id,
+          agent: "plan",
+          model: { providerID: "openai", modelID: "gpt-5" },
+          time: { created: Date.now() - 20 },
+        })
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: futureApproval.id,
+          sessionID: session.id,
+          type: "text",
+          text: "come up with a plan to test your tools, i'll give you the go ahead later",
+        })
+
+        const assistant = await seedPlanAssistant({
+          sessionID: session.id,
+          text: "I have the plan ready.",
+        })
+        askSpy.mockResolvedValueOnce([["Make changes"]])
+
+        const handled = await SessionProcessor.fallbackPlanExitIfNeeded({
+          sessionID: session.id,
+          assistantMessage: assistant,
+          model: await Provider.defaultModel(),
+        })
+
+        expect(handled).toBe(false)
+        expect(askSpy).not.toHaveBeenCalled()
+        const latestUser = (await Session.messages({ sessionID: session.id })).findLast((msg) => msg.info.role === "user")
+        expect(latestUser?.info.agent).toBe("plan")
+      },
+    })
+  })
 })

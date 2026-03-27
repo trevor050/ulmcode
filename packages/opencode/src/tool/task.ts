@@ -463,7 +463,9 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           signal.removeEventListener("abort", cancelRecovery)
           const finalResult = result ?? ((await promptResult) as MessageV2.WithParts)
           touch?.()
-          const text = finalResult.parts.findLast((x) => x.type === "text")?.text ?? ""
+          const text =
+            finalResult.parts.findLast((x) => x.type === "text")?.text?.trim() ||
+            `Subagent ${agent.name} completed without a text summary. Review session ${session.id} for tool output and artifacts.`
           if (environment?.type === "cyber") {
             const denial = /prevents you from using this specific tool call|permission[^.\n]*deny/i.test(text)
             if (denial) {

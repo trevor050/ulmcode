@@ -30,6 +30,13 @@ export namespace SessionProcessor {
     /\byes\b/,
   ]
 
+  const FUTURE_APPROVAL_PATTERNS = [
+    /\bi(?:\s+will|'ll)\s+give\s+you\s+the\s+go\s+ahead\b/,
+    /\b(?:once|when|after)\s+i\s+(?:give|say)\s+(?:you\s+)?the\s+go\s+ahead\b/,
+    /\bi(?:\s+will|'ll)\s+let\s+you\s+know\b/,
+    /\bwait\s+for\s+(?:my\s+)?approval\b/,
+  ]
+
   function extractText(message: MessageV2.WithParts | undefined) {
     if (!message) return ""
     return message.parts
@@ -41,6 +48,7 @@ export namespace SessionProcessor {
 
   function hasApprovalIntent(text: string) {
     if (!text.trim()) return false
+    if (FUTURE_APPROVAL_PATTERNS.some((pattern) => pattern.test(text))) return false
     return APPROVAL_PATTERNS.some((pattern) => pattern.test(text))
   }
 

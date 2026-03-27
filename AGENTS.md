@@ -76,6 +76,15 @@ Last updated: 2026-03-27
   - `packages/opencode/src/session/llm.ts` still expected `SystemPrompt.cyberCore()` and `SystemPrompt.provider(..., { includeCyber })`.
   - upstream `packages/opencode/src/session/system.ts` had been simplified and no longer exported that contract.
   - fix is to preserve the newer provider-selection logic but keep the `includeCyber` option and `cyberCore()` helper alive, otherwise hidden/subagent sessions can crash at runtime with `SystemPrompt.cyberCore is not a function`.
+- Plan fallback approval detection was too eager after the sync:
+  - `session/processor.ts` treated any message containing `go ahead` as approval, even future-tense phrasing like `I'll give you the go ahead later`.
+  - that could silently kick a plan session into execution mode without an actual `plan_exit` tool call.
+  - guard future/conditional approval phrasing before trusting regex approval intent.
+- Subagent summaries can complete with tools but no final text:
+  - `tool/task.ts` previously emitted an empty `<task_result>` block in that case, which makes harness debugging miserable.
+  - keep a fallback summary string so parent sessions always get a visible completion note and a child session reference.
+- TUI session switching still had one stale `build` reference after the `action` rename:
+  - `cli/cmd/tui/routes/session/index.tsx` was still setting the local agent to `build` on `plan_exit`.
 ## Swarm Foundation Phase 1 (2026-02-18)
 - Implemented hard bash guardrails:
   - default timeout remains 2 minutes,
