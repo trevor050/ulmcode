@@ -88,7 +88,6 @@ export namespace Provider {
       },
     },
   ] as const
-
   function ensureOpenAIModel(provider: Info, preset: (typeof OPENAI_MODEL_PRESETS)[number]) {
     if (provider.models[preset.id]) return
     const model: Model = {
@@ -247,6 +246,14 @@ export namespace Provider {
     },
     openai: async (input) => {
       for (const preset of OPENAI_MODEL_PRESETS) ensureOpenAIModel(input, preset)
+      return {
+        autoload: false,
+        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+          return sdk.responses(modelID)
+        },
+        options: {},
+      }
+    },
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {

@@ -190,6 +190,18 @@ export namespace SessionPrompt {
     return loop({ sessionID: input.sessionID })
   })
 
+  const PENTEST_AUTO_PLAN_AGENTS = new Set(["pentest", "pentest_auto", "pentest_flow", "AutoPentest"])
+
+  async function shouldRouteFirstPentestPromptToPlan(input: { sessionID: string; agentName: string }) {
+    if (!PENTEST_AUTO_PLAN_AGENTS.has(input.agentName)) return false
+    const messages = await Session.messages({ sessionID: input.sessionID, limit: 20 })
+    const hasAssistant = messages.some((message) => message.info.role === "assistant")
+    if (hasAssistant) return false
+    const hasPlanUser = messages.some((message) => message.info.role === "user" && message.info.agent === "plan")
+    if (hasPlanUser) return false
+    return true
+  }
+
   export async function resolvePromptParts(template: string): Promise<PromptInput["parts"]> {
     const parts: PromptInput["parts"] = [
       {
@@ -986,12 +998,18 @@ export namespace SessionPrompt {
   }
 
   async function createUserMessage(input: PromptInput) {
-    const agentName = input.agent || (await Agent.defaultAgent())
-    const agent = await Agent.get(agentName)
+    const requestedAgentName = input.agent ?? (await Agent.defaultAgent())
+    const effectiveAgentName = (await shouldRouteFirstPentestPromptToPlan({
+      sessionID: input.sessionID,
+      agentName: requestedAgentName,
+    }))
+      ? "plan"
+      : requestedAgentName
+    const agent = await Agent.get(effectiveAgentName)
     if (!agent) {
       const available = await Agent.list().then((agents) => agents.filter((a) => !a.hidden).map((a) => a.name))
       const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
-      const error = new NamedError.Unknown({ message: `Agent not found: "${agentName}".${hint}` })
+      const error = new NamedError.Unknown({ message: `Agent not found: "${effectiveAgentName}".${hint}` })
       Bus.publish(Session.Event.Error, {
         sessionID: input.sessionID,
         error: error.toObject(),

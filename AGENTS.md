@@ -32,6 +32,34 @@ Last updated: 2026-03-05
 - Engagement scaffold must maintain required artifacts (`finding.md`, `handoff.md`, `engagement.md`, evidence folders, agent results, reports).
 - Reporting flow is enforced; `report_writer` must run before finalization.
 
+## GPT-5.4 Pentest Reliability Pass (2026-03-13)
+- Created safety snapshot branch before invasive work: `backup/dev-pre-gpt54-pentest-20260313`.
+- Working branch for the pass is `codex/gpt54-pentest-reliability`.
+- GPT-5.4 support had to be manually re-stitched after branch drift:
+  - `packages/opencode/src/provider/provider.ts` now supplements `openai` with `gpt-5.4` and `gpt-5.4-pro` when `models.dev` lags.
+  - `packages/opencode/src/plugin/codex.ts` now preserves/injects `gpt-5.4` and `gpt-5.4-pro` for Codex OAuth instead of filtering them out.
+  - `packages/opencode/src/provider/transform.ts` now treats GPT-5.4 as part of the `xhigh` reasoning-effort cohort where appropriate.
+  - Symptom was annoying: docs/tests said GPT-5.4 existed, but live model selection could still hide it because provider bootstrap and OAuth filtering had drifted apart.
+- Plan-flow drift also bit the pentest path:
+  - `packages/opencode/src/session/prompt.ts` must keep the first-prompt pentest -> `plan` reroute hook (`shouldRouteFirstPentestPromptToPlan`) wired inside `createUserMessage`, not just the later synthetic kickoff text helpers.
+  - `packages/opencode/src/session/processor.ts` must keep `fallbackPlanExitIfNeeded()` wired into the live processor path, otherwise literal `plan_exit` text emissions from the model stop recovering correctly even though the tests/documentation still imply that behavior exists.
+- Pentest bash execution is back on explicit lanes instead of dumb timeout-only behavior:
+  - `interactive`
+  - `long_run_background`
+  - `manual_unbounded`
+- Background command control loop is live again:
+  - tools: `background_list`, `background_output`, `background_cancel`
+  - manager currently uses in-memory runtime state instead of reviving the older DB-heavy swarm persistence stack.
+- Pentest runtime summarization is live again through the internal `PentestRuntimePlugin`:
+  - oversized tool output is written to artifacts and replaced with digest text in context,
+  - runtime summary artifacts are written to `deliverables/runtime-summary.{json,md}`,
+  - compaction carry-forward now preserves pending background work and reporting closure obligations.
+- Final reporting bundle flow is hardened again:
+  - `deliverables/final/` is the operator handoff root,
+  - `report_finalize` expects authored intermediate artifacts and copies runtime summary + subagent summaries into the final bundle.
+- Important repo reality:
+  - a naive full merge from current `dev` to latest `upstream/dev` on 2026-03-13 exploded into broad unrelated monorepo conflicts and schema/runtime drift far outside pentest mode.
+  - For now, upstream should be treated as a selective reference source for the pentest/runtime surfaces unless someone explicitly signs up to do the larger repo-wide reconciliation.
 ## Swarm Foundation Phase 1 (2026-02-18)
 - Implemented hard bash guardrails:
   - default timeout remains 2 minutes,
