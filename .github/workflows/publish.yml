@@ -102,9 +102,9 @@ jobs:
 
       - name: Upload skills bundle to release
         run: |
-          gh release upload "${{ needs.version.outputs.tag }}" ./dist/ulmcode-skills.tar.gz --clobber
+          gh release upload "${{ needs.version.outputs.tag }}" ./dist/ulmcode-skills.tar.gz --clobber --repo "${{ needs.version.outputs.repo }}"
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.committer.outputs.token }}
 
       - uses: actions/upload-artifact@v4
         with:
