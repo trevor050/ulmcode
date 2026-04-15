@@ -2,84 +2,80 @@ import { test, expect, describe } from "bun:test"
 import path from "path"
 import { unlink } from "fs/promises"
 
+import { ProviderID } from "../../src/provider/schema"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
 import { Env } from "../../src/env"
 import { Global } from "../../src/global"
 import { Filesystem } from "../../src/util/filesystem"
+import { Effect } from "effect"
+import { AppRuntime } from "../../src/effect/app-runtime"
+
+async function list() {
+  return AppRuntime.runPromise(
+    Effect.gen(function* () {
+      const provider = yield* Provider.Service
+      return yield* provider.list()
+    }),
+  )
+}
 
 test("Bedrock: config region takes precedence over AWS_REGION env var", async () => {
-  // Avoid a slow/fragile dependency install in this test: the region-precedence logic
-  // does not depend on the AWS credential chain when a bearer token is present.
-  const prevBearer = process.env.AWS_BEARER_TOKEN_BEDROCK
-  process.env.AWS_BEARER_TOKEN_BEDROCK = "test-bearer-token"
-  try {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        await Filesystem.write(
-          path.join(dir, "opencode.json"),
-          JSON.stringify({
-            $schema: "https://opencode.ai/config.json",
-            provider: {
-              "amazon-bedrock": {
-                options: {
-                  region: "eu-west-1",
-                },
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Filesystem.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "amazon-bedrock": {
+              options: {
+                region: "eu-west-1",
               },
             },
-          }),
-        )
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      init: async () => {
-        Env.set("AWS_REGION", "us-east-1")
-        Env.set("AWS_PROFILE", "default")
-      },
-      fn: async () => {
-        const providers = await Provider.list()
-        expect(providers["amazon-bedrock"]).toBeDefined()
-        expect(providers["amazon-bedrock"].options?.region).toBe("eu-west-1")
-      },
-    })
-  } finally {
-    if (prevBearer === undefined) delete process.env.AWS_BEARER_TOKEN_BEDROCK
-    else process.env.AWS_BEARER_TOKEN_BEDROCK = prevBearer
-  }
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("AWS_REGION", "us-east-1")
+      Env.set("AWS_PROFILE", "default")
+    },
+    fn: async () => {
+      const providers = await list()
+      expect(providers[ProviderID.amazonBedrock]).toBeDefined()
+      expect(providers[ProviderID.amazonBedrock].options?.region).toBe("eu-west-1")
+    },
+  })
 })
 
 test("Bedrock: falls back to AWS_REGION env var when no config region", async () => {
-  const prevBearer = process.env.AWS_BEARER_TOKEN_BEDROCK
-  process.env.AWS_BEARER_TOKEN_BEDROCK = "test-bearer-token"
-  try {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        await Filesystem.write(
-          path.join(dir, "opencode.json"),
-          JSON.stringify({
-            $schema: "https://opencode.ai/config.json",
-          }),
-        )
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      init: async () => {
-        Env.set("AWS_REGION", "eu-west-1")
-        Env.set("AWS_PROFILE", "default")
-      },
-      fn: async () => {
-        const providers = await Provider.list()
-        expect(providers["amazon-bedrock"]).toBeDefined()
-        expect(providers["amazon-bedrock"].options?.region).toBe("eu-west-1")
-      },
-    })
-  } finally {
-    if (prevBearer === undefined) delete process.env.AWS_BEARER_TOKEN_BEDROCK
-    else process.env.AWS_BEARER_TOKEN_BEDROCK = prevBearer
-  }
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Filesystem.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("AWS_REGION", "eu-west-1")
+      Env.set("AWS_PROFILE", "default")
+    },
+    fn: async () => {
+      const providers = await list()
+      expect(providers[ProviderID.amazonBedrock]).toBeDefined()
+      expect(providers[ProviderID.amazonBedrock].options?.region).toBe("eu-west-1")
+    },
+  })
 })
 
 test("Bedrock: loads when bearer token from auth.json is present", async () => {
@@ -131,9 +127,9 @@ test("Bedrock: loads when bearer token from auth.json is present", async () => {
         Env.set("AWS_BEARER_TOKEN_BEDROCK", "")
       },
       fn: async () => {
-        const providers = await Provider.list()
-        expect(providers["amazon-bedrock"]).toBeDefined()
-        expect(providers["amazon-bedrock"].options?.region).toBe("eu-west-1")
+        const providers = await list()
+        expect(providers[ProviderID.amazonBedrock]).toBeDefined()
+        expect(providers[ProviderID.amazonBedrock].options?.region).toBe("eu-west-1")
       },
     })
   } finally {
@@ -176,9 +172,9 @@ test("Bedrock: config profile takes precedence over AWS_PROFILE env var", async 
       Env.set("AWS_ACCESS_KEY_ID", "test-key-id")
     },
     fn: async () => {
-      const providers = await Provider.list()
-      expect(providers["amazon-bedrock"]).toBeDefined()
-      expect(providers["amazon-bedrock"].options?.region).toBe("us-east-1")
+      const providers = await list()
+      expect(providers[ProviderID.amazonBedrock]).toBeDefined()
+      expect(providers[ProviderID.amazonBedrock].options?.region).toBe("us-east-1")
     },
   })
 })
@@ -207,9 +203,9 @@ test("Bedrock: includes custom endpoint in options when specified", async () => 
       Env.set("AWS_PROFILE", "default")
     },
     fn: async () => {
-      const providers = await Provider.list()
-      expect(providers["amazon-bedrock"]).toBeDefined()
-      expect(providers["amazon-bedrock"].options?.endpoint).toBe(
+      const providers = await list()
+      expect(providers[ProviderID.amazonBedrock]).toBeDefined()
+      expect(providers[ProviderID.amazonBedrock].options?.endpoint).toBe(
         "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com",
       )
     },
@@ -243,9 +239,9 @@ test("Bedrock: autoloads when AWS_WEB_IDENTITY_TOKEN_FILE is present", async () 
       Env.set("AWS_ACCESS_KEY_ID", "")
     },
     fn: async () => {
-      const providers = await Provider.list()
-      expect(providers["amazon-bedrock"]).toBeDefined()
-      expect(providers["amazon-bedrock"].options?.region).toBe("us-east-1")
+      const providers = await list()
+      expect(providers[ProviderID.amazonBedrock]).toBeDefined()
+      expect(providers[ProviderID.amazonBedrock].options?.region).toBe("us-east-1")
     },
   })
 })
@@ -283,10 +279,10 @@ test("Bedrock: model with us. prefix should not be double-prefixed", async () =>
       Env.set("AWS_PROFILE", "default")
     },
     fn: async () => {
-      const providers = await Provider.list()
-      expect(providers["amazon-bedrock"]).toBeDefined()
+      const providers = await list()
+      expect(providers[ProviderID.amazonBedrock]).toBeDefined()
       // The model should exist with the us. prefix
-      expect(providers["amazon-bedrock"].models["us.anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
+      expect(providers[ProviderID.amazonBedrock].models["us.anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
     },
   })
 })
@@ -320,9 +316,9 @@ test("Bedrock: model with global. prefix should not be prefixed", async () => {
       Env.set("AWS_PROFILE", "default")
     },
     fn: async () => {
-      const providers = await Provider.list()
-      expect(providers["amazon-bedrock"]).toBeDefined()
-      expect(providers["amazon-bedrock"].models["global.anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
+      const providers = await list()
+      expect(providers[ProviderID.amazonBedrock]).toBeDefined()
+      expect(providers[ProviderID.amazonBedrock].models["global.anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
     },
   })
 })
@@ -356,9 +352,9 @@ test("Bedrock: model with eu. prefix should not be double-prefixed", async () =>
       Env.set("AWS_PROFILE", "default")
     },
     fn: async () => {
-      const providers = await Provider.list()
-      expect(providers["amazon-bedrock"]).toBeDefined()
-      expect(providers["amazon-bedrock"].models["eu.anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
+      const providers = await list()
+      expect(providers[ProviderID.amazonBedrock]).toBeDefined()
+      expect(providers[ProviderID.amazonBedrock].models["eu.anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
     },
   })
 })
@@ -392,10 +388,10 @@ test("Bedrock: model without prefix in US region should get us. prefix added", a
       Env.set("AWS_PROFILE", "default")
     },
     fn: async () => {
-      const providers = await Provider.list()
-      expect(providers["amazon-bedrock"]).toBeDefined()
+      const providers = await list()
+      expect(providers[ProviderID.amazonBedrock]).toBeDefined()
       // Non-prefixed model should still be registered
-      expect(providers["amazon-bedrock"].models["anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
+      expect(providers[ProviderID.amazonBedrock].models["anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
     },
   })
 })
