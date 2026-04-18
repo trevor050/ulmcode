@@ -23,6 +23,7 @@ env:
 jobs:
   unit:
     name: unit (${{ matrix.settings.name }})
+    if: github.repository == 'anomalyco/opencode' || github.event_name != 'push'
     strategy:
       fail-fast: false
       matrix:
@@ -90,6 +91,7 @@ jobs:
 
   e2e:
     name: e2e (${{ matrix.settings.name }})
+    if: github.repository == 'anomalyco/opencode' || github.event_name != 'push'
     strategy:
       fail-fast: false
       matrix:
