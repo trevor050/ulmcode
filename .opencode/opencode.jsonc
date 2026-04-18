@@ -6,6 +6,11 @@
     },
   },
   "default_agent": "pentest",
+  "permission": {
+    "edit": {
+      "packages/opencode/migration/*": "deny",
+    },
+  },
   "mcp": {},
   "tools": {
     "github-triage": false,
