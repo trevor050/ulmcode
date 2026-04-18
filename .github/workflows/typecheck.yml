@@ -23,4 +23,4 @@ jobs:
 
       - name: Run typecheck (fork compatibility)
         if: github.repository != 'anomalyco/opencode'
-        run: bun turbo typecheck --filter='!opencode'
+        run: bun turbo typecheck --filter='@opencode-ai/sdk' --filter='@opencode-ai/plugin' --filter='@opencode-ai/ui'
