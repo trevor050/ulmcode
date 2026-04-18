@@ -39,7 +39,11 @@ export namespace SessionEvent {
   }) {
     static create(input: FileAttachment) {
       return new FileAttachment({
-        ...input,
+        uri: input.uri,
+        mime: input.mime,
+        name: input.name,
+        description: input.description,
+        source: input.source,
       })
     }
   }
@@ -437,7 +441,7 @@ export namespace SessionEvent {
     {
       mode: "oneOf",
     },
-  )
+  ).pipe(Schema.toTaggedUnion("type"))
   export type Event = Schema.Schema.Type<typeof Event>
   export type Type = Event["type"]
 }
