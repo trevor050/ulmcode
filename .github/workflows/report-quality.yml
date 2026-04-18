@@ -40,7 +40,12 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Skip report quality on forks
+        if: github.repository != 'anomalyco/opencode'
+        run: echo "Skipping report quality replay on fork repository"
+
       - name: Run report quality replay tests
+        if: github.repository == 'anomalyco/opencode'
         env:
           REPORT_QUALITY_CI_MODE: ${{ matrix.mode }}
         run: |
