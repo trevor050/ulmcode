@@ -105,7 +105,7 @@ try {
 
   Write-Host ""
   Write-Host "installed. run: ulmcode"
+  Write-Host "update later: ulmcode upgrade"
 } finally {
   Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue | Out-Null
 }
-

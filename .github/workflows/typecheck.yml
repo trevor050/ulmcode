@@ -17,5 +17,10 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
-      - name: Run typecheck
+      - name: Run typecheck (upstream full)
+        if: github.repository == 'anomalyco/opencode'
         run: bun typecheck
+
+      - name: Run typecheck (fork compatibility)
+        if: github.repository != 'anomalyco/opencode'
+        run: bun turbo typecheck --filter='@opencode-ai/sdk' --filter='@opencode-ai/plugin' --filter='@opencode-ai/ui'

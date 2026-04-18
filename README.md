@@ -33,7 +33,10 @@
   <a href="README.br.md">Português (Brasil)</a> |
   <a href="README.th.md">ไทย</a> |
   <a href="README.tr.md">Türkçe</a> |
-  <a href="README.uk.md">Українська</a>
+  <a href="README.uk.md">Українська</a> |
+  <a href="README.bn.md">বাংলা</a> |
+  <a href="README.gr.md">Ελληνικά</a> |
+  <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
 [![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
@@ -60,6 +63,22 @@ nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev
 
 > [!TIP]
 > Remove versions older than 0.1.x before installing.
+
+### Updating
+
+```bash
+# Built-in updater (recommended for fork users installed via script)
+ulmcode upgrade
+
+# Alias
+ulmcode update
+```
+
+If you distribute a custom fork build, users can pin the release source:
+
+```bash
+ULMCODE_GITHUB_REPO=trevor050/ulmcode ulmcode upgrade
+```
 
 ### Desktop App (BETA)
 

@@ -21,4 +21,9 @@ export const logo = {
   ],
 }
 
-export const marks = "¤"
+export const go = {
+  left: ["    ", "█▀▀▀", "█_^█", "▀▀▀▀"],
+  right: ["    ", "█▀▀█", "█__█", "▀▀▀▀"],
+}
+
+export const marks = "_^~,"
