@@ -65,9 +65,14 @@ jobs:
             turbo-${{ runner.os }}-
 
       - name: Run unit tests
+        if: github.repository == 'anomalyco/opencode'
         run: bun turbo test:ci
         env:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
+
+      - name: Skip unit tests on forks
+        if: github.repository != 'anomalyco/opencode'
+        run: echo "Skipping heavy unit matrix on fork repository"
 
       - name: Publish unit reports
         if: always()
@@ -121,12 +126,14 @@ jobs:
         uses: ./.github/actions/setup-bun
 
       - name: Read Playwright version
+        if: github.repository == 'anomalyco/opencode'
         id: playwright-version
         run: |
           version=$(node -e 'console.log(require("./package.json").workspaces.catalog["@playwright/test"])')
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright browsers
+        if: github.repository == 'anomalyco/opencode'
         id: playwright-cache
         uses: actions/cache@v4
         with:
@@ -134,21 +141,26 @@ jobs:
           key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}-chromium
 
       - name: Install Playwright system dependencies
-        if: runner.os == 'Linux'
+        if: github.repository == 'anomalyco/opencode' && runner.os == 'Linux'
         working-directory: packages/app
         run: bunx playwright install-deps chromium
 
       - name: Install Playwright browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        if: github.repository == 'anomalyco/opencode' && steps.playwright-cache.outputs.cache-hit != 'true'
         working-directory: packages/app
         run: bunx playwright install chromium
 
       - name: Run app e2e tests
+        if: github.repository == 'anomalyco/opencode'
         run: bun --cwd packages/app test:e2e:local
         env:
           CI: true
           PLAYWRIGHT_JUNIT_OUTPUT: e2e/junit-${{ matrix.settings.name }}.xml
         timeout-minutes: 30
+
+      - name: Skip e2e tests on forks
+        if: github.repository != 'anomalyco/opencode'
+        run: echo "Skipping heavy e2e matrix on fork repository"
 
       - name: Upload Playwright artifacts
         if: always()
