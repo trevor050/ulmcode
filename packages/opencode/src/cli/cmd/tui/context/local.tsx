@@ -11,8 +11,7 @@ import { useToast } from "../ui/toast"
 import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
-import { toULMCodeLabel } from "../util/branding"
-import { Filesystem } from "@/util"
+import { Filesystem } from "@/util/filesystem"
 
 export function parseModel(model: string) {
   const [providerID, ...rest] = model.split("/")
@@ -232,8 +231,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const provider = sync.data.provider.find((x) => x.id === value.providerID)
           const info = provider?.models[value.modelID]
           return {
-            provider: toULMCodeLabel(provider?.name ?? value.providerID),
-            model: toULMCodeLabel(info?.name ?? value.modelID),
+            provider: provider?.name ?? value.providerID,
+            model: info?.name ?? value.modelID,
             reasoning: info?.capabilities?.reasoning ?? false,
           }
         }),
