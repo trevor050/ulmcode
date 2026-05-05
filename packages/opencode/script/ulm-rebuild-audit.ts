@@ -139,6 +139,7 @@ async function auditOperationRuntime() {
   requireText("packages/opencode/src/ulm/artifact.ts", artifact, [
     "runtimeHealthGaps",
     "runtime blind spot:",
+    "recoverStaleTasks=true",
     "operation_checkpoint",
     "operation_audit",
     "stage-gates",
