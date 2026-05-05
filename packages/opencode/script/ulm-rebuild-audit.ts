@@ -358,13 +358,14 @@ async function auditLabCatalog() {
     "k12-lms-payment-webhook-replay",
     "k12-family-messaging-cross-class-broadcast",
     "k12-third-party-integration-token-leak",
+    "k12-sso-roster-export-chain",
   ]) {
     assert(labs.includes(id), `lab catalog missing ${id}`)
   }
   assert(labs.length >= 15, `expected at least 15 bundled labs, found ${labs.length}`)
   assert(
-    manifests.some((manifest) => (manifest.findings?.length ?? 0) >= 2),
-    "expected at least one bundled multi-finding lab",
+    manifests.filter((manifest) => (manifest.findings?.length ?? 0) >= 2).length >= 2,
+    "expected at least two bundled multi-finding labs",
   )
   assert(
     manifests.some((manifest) => typeof manifest.report?.authoredMarkdownFile === "string"),

@@ -812,6 +812,98 @@ async function probeDistrictPortalChainedExposure() {
   ]
 }
 
+async function probeSsoRosterExportChain() {
+  const { proc, base } = await startTarget("k12-sso-roster-export-chain")
+  const health = await fetch(`${base}/health`).then((res) => res.json()) as { ok?: boolean; lab?: string }
+  if (!health.ok || health.lab !== "k12-sso-roster-export-chain") fail(proc, "health probe failed")
+
+  const config = await fetch(`${base}/.well-known/sso-config`).then((res) => res.json()) as {
+    callbackAllowlist?: string[]
+    requireSignedRelayState?: boolean
+    labFinding?: string
+  }
+  if (
+    !config.callbackAllowlist?.includes("http://localhost:8080/callback") ||
+    config.requireSignedRelayState ||
+    config.labFinding !== "sso_callback_allowlist_overbroad"
+  ) {
+    fail(proc, "SSO config probe did not confirm overbroad callback policy")
+  }
+
+  const exchange = await fetch(`${base}/api/sso/exchange`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ redirectUri: "http://localhost:8080/callback", assertion: "synthetic" }),
+  }).then((res) => res.json()) as {
+    authenticated?: boolean
+    mfaRequired?: boolean
+    session?: string
+    labFinding?: string
+  }
+  if (
+    !exchange.authenticated ||
+    exchange.mfaRequired ||
+    exchange.session !== "sso-admin-session" ||
+    exchange.labFinding !== "sso_admin_session_without_step_up"
+  ) {
+    fail(proc, "SSO exchange probe did not confirm admin session without step-up")
+  }
+
+  const roster = await fetch(`${base}/api/roster/export?include=all`, {
+    headers: { authorization: `Bearer ${exchange.session}` },
+  }).then((res) => res.json()) as {
+    authorized?: boolean
+    tenantScope?: string
+    fields?: string[]
+    labFinding?: string
+  }
+  if (
+    !roster.authorized ||
+    roster.tenantScope !== "all-districts" ||
+    !roster.fields?.includes("homelessStatus") ||
+    roster.labFinding !== "sso_roster_bulk_export_overexposure"
+  ) {
+    fail(proc, "roster export probe did not confirm sensitive cross-district export")
+  }
+
+  const vendor = await fetch(`${base}/api/vendor/sync`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${exchange.session}` },
+    body: JSON.stringify({ vendor: "grade-sync-plus" }),
+  }).then((res) => res.json()) as {
+    accepted?: boolean
+    outboundScopes?: string[]
+    approvalRequired?: boolean
+    labFinding?: string
+  }
+  if (
+    !vendor.accepted ||
+    !vendor.outboundScopes?.includes("student-support:read") ||
+    vendor.approvalRequired ||
+    vendor.labFinding !== "vendor_sync_excessive_scopes"
+  ) {
+    fail(proc, "vendor sync probe did not confirm excessive scopes")
+  }
+
+  const audit = await fetch(`${base}/api/audit/events`).then((res) => res.json()) as {
+    elevatedExportAlert?: boolean
+    elevatedVendorAlert?: boolean
+    labFinding?: string
+  }
+  if (audit.elevatedExportAlert || audit.elevatedVendorAlert || audit.labFinding !== "chained_activity_audit_gap") {
+    fail(proc, "audit probe did not confirm missing elevated chain alerts")
+  }
+
+  proc.kill()
+  await proc.exited
+  return [
+    "target: k12-sso-roster-export-chain",
+    "sso_admin_session_without_step_up: confirmed",
+    "sso_roster_bulk_export_overexposure: confirmed",
+    "vendor_sync_excessive_scopes: confirmed",
+  ]
+}
+
 const lines = [
   "ulm_lab_target: ok",
   ...(await probeMfaGap()),
@@ -830,6 +922,7 @@ const lines = [
   ...(await probeFamilyMessagingCrossClassBroadcast()),
   ...(await probeThirdPartyIntegrationTokenLeak()),
   ...(await probeDistrictPortalChainedExposure()),
+  ...(await probeSsoRosterExportChain()),
 ]
 
 console.log(lines.join("\n"))

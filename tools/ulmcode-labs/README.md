@@ -28,6 +28,7 @@ Bundled labs:
 - `k12-family-messaging-cross-class-broadcast`: client-supplied class id lets a teacher broadcast to another class's guardians.
 - `k12-third-party-integration-token-leak`: exposed vendor OAuth token grants roster preview and sync access.
 - `k12-district-portal-chained-exposure`: multi-finding district portal case covering admin MFA and cross-district sensitive export exposure.
+- `k12-sso-roster-export-chain`: multi-finding SSO chain covering callback policy, cross-district roster export, vendor sync scopes, and audit gaps.
 
 The labs include tiny intentionally weak HTTP services under `service/`. Probe them without Docker:
 
@@ -54,4 +55,5 @@ docker compose -f tools/ulmcode-labs/k12-lms-payment-webhook-replay/docker-compo
 docker compose -f tools/ulmcode-labs/k12-family-messaging-cross-class-broadcast/docker-compose.yml up --build
 docker compose -f tools/ulmcode-labs/k12-third-party-integration-token-leak/docker-compose.yml up --build
 docker compose -f tools/ulmcode-labs/k12-district-portal-chained-exposure/docker-compose.yml up --build
+docker compose -f tools/ulmcode-labs/k12-sso-roster-export-chain/docker-compose.yml up --build
 ```
