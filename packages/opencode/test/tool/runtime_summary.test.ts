@@ -258,6 +258,84 @@ describe("tool.runtime_summary", () => {
     })
   })
 
+  test("includes stale background job restart args when backgroundTasks is omitted", async () => {
+    await using dir = await tmpdir({ git: true })
+    await provideTestInstance({
+      directory: dir.path,
+      fn: () =>
+        Effect.runPromise(
+          Effect.gen(function* () {
+            const worktree = Instance.worktree
+            yield* Effect.promise(() =>
+              writeOperationCheckpoint(worktree, {
+                operationID: "school",
+                objective: "Authorized school assessment",
+                stage: "validation",
+                status: "running",
+                summary: "Validation is still running.",
+              }),
+            )
+
+            const jobs = yield* BackgroundJob.Service
+            const storage = yield* Storage.Service
+            const id = `tool_${crypto.randomUUID().replaceAll("-", "")}`
+            yield* Effect.addFinalizer(() => storage.remove(["background_job", id]).pipe(Effect.ignore))
+            yield* jobs.start({
+              id,
+              type: "task",
+              title: "stale validator",
+              metadata: {
+                sessionID: id,
+                subagent: "validator",
+                subagent_type: "validator",
+                description: "stale validator",
+                prompt: "continue stale validation",
+                operationID: "school",
+              },
+              run: Effect.never,
+            })
+
+            const result = yield* Effect.gen(function* () {
+              const tool = yield* RuntimeSummaryTool
+              const def = yield* tool.init()
+              return yield* def.execute(
+                {
+                  operationID: "school",
+                },
+                {
+                  sessionID: "session-1" as any,
+                  messageID: MessageID.ascending(),
+                  agent: "build",
+                  abort: new AbortController().signal,
+                  messages: [],
+                  metadata: () => Effect.void,
+                  ask: () => Effect.void,
+                },
+              )
+            }).pipe(Effect.provide(Layer.fresh(BackgroundJob.layer)))
+
+            const record = yield* Effect.promise(() => fs.readFile(result.metadata.json, "utf8").then(JSON.parse))
+            expect(record.backgroundTasks).toEqual([
+              {
+                id,
+                agent: "validator",
+                status: "stale",
+                summary: "stale validator",
+                restartArgs: {
+                  task_id: id,
+                  background: true,
+                  description: "stale validator",
+                  prompt: "continue stale validation",
+                  subagent_type: "validator",
+                  operationID: "school",
+                },
+              },
+            ])
+          }).pipe(Effect.scoped, Effect.provide(layer)),
+        ),
+    })
+  })
+
   test("scopes persisted background jobs to the requested operation when operation metadata exists", async () => {
     await using dir = await tmpdir({ git: true })
     await provideTestInstance({

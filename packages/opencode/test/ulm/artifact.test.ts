@@ -557,7 +557,20 @@ describe("ULM artifact ledger", () => {
     await writeRuntimeSummary(worktree, {
       operationID: "school",
       backgroundTasks: [
-        { id: "task-recon-1", agent: "recon", status: "stale", summary: "No heartbeat after scan launch." },
+        {
+          id: "task-recon-1",
+          agent: "recon",
+          status: "stale",
+          summary: "No heartbeat after scan launch.",
+          restartArgs: {
+            task_id: "task-recon-1",
+            background: true,
+            description: "restart recon lane",
+            prompt: "resume recon lane",
+            subagent_type: "recon",
+            operationID: "school",
+          },
+        },
       ],
     })
 
@@ -572,6 +585,7 @@ describe("ULM artifact ledger", () => {
     expect(brief.recommendedTools).toContain("operation_checkpoint")
     expect(brief.recommendedTools).toContain("task_status")
     expect(formatOperationResumeBrief(brief)).toContain("operation checkpoint is stale")
+    expect(formatOperationResumeBrief(brief)).toContain('"prompt":"resume recon lane"')
   })
 
   test("derives runtime usage from assistant messages when usage is not provided", async () => {

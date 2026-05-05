@@ -264,6 +264,15 @@ export type RuntimeSummaryInput = {
     agent?: string
     status: "running" | "completed" | "failed" | "cancelled" | "stale" | "unknown"
     summary?: string
+    restartArgs?: {
+      task_id: string
+      background: boolean
+      description: string
+      prompt: string
+      subagent_type: string
+      operationID?: string
+      command?: string
+    }
   }>
   notes?: string[]
 }
@@ -579,7 +588,9 @@ export function formatOperationStatusDashboard(status: OperationStatusSummary) {
     ...(background.length
       ? background.map(
           (task) =>
-            `- ${task.id} ${task.status}${task.agent ? ` (${task.agent})` : ""}${task.summary ? ` - ${task.summary}` : ""}`,
+            `- ${task.id} ${task.status}${task.agent ? ` (${task.agent})` : ""}${
+              task.summary ? ` - ${task.summary}` : ""
+            }${task.restartArgs ? `; restart_args: ${JSON.stringify(task.restartArgs)}` : ""}`,
         )
       : ["- none recorded"]),
     "",
@@ -742,7 +753,9 @@ export function formatOperationResumeBrief(brief: OperationResumeBrief) {
     ...(background.length
       ? background.map(
           (task) =>
-            `- ${task.id} ${task.status}${task.agent ? ` (${task.agent})` : ""}${task.summary ? ` - ${task.summary}` : ""}`,
+            `- ${task.id} ${task.status}${task.agent ? ` (${task.agent})` : ""}${
+              task.summary ? ` - ${task.summary}` : ""
+            }${task.restartArgs ? `; restart_args: ${JSON.stringify(task.restartArgs)}` : ""}`,
         )
       : ["- none recorded"]),
     "",
@@ -820,7 +833,9 @@ function runtimeSummaryMarkdown(record: RuntimeSummaryRecord) {
     ...(tasks.length
       ? tasks.map(
           (task) =>
-            `- ${task.id}: ${task.status}${task.agent ? ` (${task.agent})` : ""} - ${task.summary ?? ""}`,
+            `- ${task.id}: ${task.status}${task.agent ? ` (${task.agent})` : ""} - ${task.summary ?? ""}${
+              task.restartArgs ? `; restart_args: ${JSON.stringify(task.restartArgs)}` : ""
+            }`,
         )
       : ["- none recorded"]),
     "",

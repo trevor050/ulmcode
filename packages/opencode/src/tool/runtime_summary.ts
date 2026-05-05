@@ -6,6 +6,7 @@ import { Session } from "@/session/session"
 import { BackgroundJob } from "@/background/job"
 import { SessionID, type SessionID as SessionIDT } from "@/session/schema"
 import type { MessageV2 } from "@/session/message-v2"
+import { taskRestartArgs } from "./task_restart_args"
 import { writeRuntimeSummary } from "@/ulm/artifact"
 
 const ModelCalls = Schema.Struct({
@@ -48,6 +49,17 @@ const BackgroundTask = Schema.Struct({
   agent: Schema.optional(Schema.String),
   status: Schema.Literals(["running", "completed", "failed", "cancelled", "stale", "unknown"]),
   summary: Schema.optional(Schema.String),
+  restartArgs: Schema.optional(
+    Schema.Struct({
+      task_id: Schema.String,
+      background: Schema.Boolean,
+      description: Schema.String,
+      prompt: Schema.String,
+      subagent_type: Schema.String,
+      operationID: Schema.optional(Schema.String),
+      command: Schema.optional(Schema.String),
+    }),
+  ),
 })
 
 export const Parameters = Schema.Struct({
@@ -105,7 +117,7 @@ function collectBackgroundJobMessages(
           const messages = yield* session.messages({ sessionID })
           const descendants = yield* collectChildMessages(session, sessionID)
           return [...messages, ...descendants]
-        }).pipe(Effect.catch(() => Effect.succeed<MessageV2.WithParts[]>([]))),
+        }).pipe(Effect.catchCause(() => Effect.succeed<MessageV2.WithParts[]>([]))),
       ),
     )
     return batches.flat()
@@ -180,6 +192,7 @@ export const RuntimeSummaryTool = Tool.define<typeof Parameters, Metadata, Sessi
               agent: backgroundAgent(job),
               status: backgroundStatus(job.status),
               summary: backgroundSummary(job),
+              restartArgs: taskRestartArgs(job),
             }))
           const result = yield* Effect.tryPromise(() =>
             writeRuntimeSummary(worktree, {
