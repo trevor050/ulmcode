@@ -29,7 +29,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 
 - `.ulmcode/operations/<operation-id>/` is the canonical operation artifact root.
 - `operation_checkpoint` records stage gates and resumable heartbeats.
-- `operation_status` restores context after interruptions and compaction, including runtime budget/model/task rollups when a runtime summary exists.
+- `operation_status` restores context after interruptions and compaction, including runtime budget/model/task rollups when a runtime summary exists. It now emits a compact operator dashboard before the raw JSON payload.
 - `operation_plan` records execution-ready phase order, success criteria, subagent/no-subagent policy, assumptions, and report closeout.
 - `evidence_record` writes durable evidence JSON plus optional raw text, so findings can cite recorded artifacts instead of chat-only claims.
 - `finding_record` enforces evidence before validated/report-ready findings.
@@ -55,6 +55,6 @@ Source checked on 2026-05-05 from `~/.config/opencode` without copying secrets.
 
 - True background job execution resume across process restart. Metadata is persisted and listable, but in-flight fibers are not restarted after process death.
 - Full cross-session cost/token extraction into operation budgets. `runtime_summary` now derives current-session assistant message usage, but it does not yet recursively harvest child sessions or long-dead background job transcripts.
-- TUI operation dashboard.
+- Full TUI operation dashboard. The tool output now has a compact dashboard, but there is not yet a dedicated interactive TUI route.
 - Lab replay harness for intentionally vulnerable targets.
 - Full vendored plugin source. The isolated profile records plugin dependencies and routing, but does not vendor third-party plugin code into this repo.

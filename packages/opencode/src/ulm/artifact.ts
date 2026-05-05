@@ -449,6 +449,72 @@ function mergeRuntimeUsage(input: RuntimeSummaryInput) {
   }
 }
 
+function listLines(items: string[] | undefined, empty: string) {
+  if (!items?.length) return [`- ${empty}`]
+  return items.map((item) => `- ${item}`)
+}
+
+function compactRecord(input: Record<string, number> | undefined) {
+  return Object.entries(input ?? {})
+    .filter(([, value]) => value > 0)
+    .map(([key, value]) => `${key}=${value}`)
+    .join(", ")
+}
+
+export function formatOperationStatusDashboard(status: OperationStatusSummary) {
+  const operation = status.operation
+  const modelSplit = compactRecord(status.runtime?.modelCalls?.byModel)
+  const stateSplit = compactRecord(status.findings.byState)
+  const severitySplit = compactRecord(status.findings.bySeverity)
+  const evidenceSplit = compactRecord(status.evidence.byKind)
+  const reports = [
+    status.plans.operation ? "plan" : undefined,
+    status.reports.outline ? "outline" : undefined,
+    status.reports.markdown ? "report.md" : undefined,
+    status.reports.html ? "html" : undefined,
+    status.reports.pdf ? "pdf" : undefined,
+    status.reports.readme ? "readme" : undefined,
+    status.reports.manifest ? "manifest" : undefined,
+    status.runtimeSummary ? "runtime" : undefined,
+  ].filter((item): item is string => !!item)
+  const background = status.runtime?.backgroundTasks ?? []
+  return [
+    `# ${status.operationID} - ${operation?.stage ?? "unknown"}/${operation?.status ?? "unknown"}`,
+    "",
+    `root: ${status.root}`,
+    `risk: ${operation?.riskLevel ?? "unknown"}`,
+    `summary: ${operation?.summary ?? "No checkpoint recorded."}`,
+    "",
+    `findings: ${status.findings.total} total${stateSplit ? ` (${stateSplit})` : ""}${
+      severitySplit ? `; severity ${severitySplit}` : ""
+    }`,
+    `evidence: ${status.evidence.total} total${evidenceSplit ? ` (${evidenceSplit})` : ""}`,
+    `reports: ${reports.length ? reports.join(", ") : "none"}`,
+    `runtime: ${status.runtime?.modelCalls?.total ?? 0} calls, ${status.runtime?.usage?.totalTokens ?? 0} tokens, $${
+      status.runtime?.usage?.costUSD ?? 0
+    }${status.runtime?.usage?.remainingUSD !== undefined ? `, $${status.runtime.usage.remainingUSD} remaining` : ""}`,
+    `models: ${modelSplit || "none recorded"}`,
+    "",
+    "next_actions:",
+    ...listLines(operation?.nextActions, "none recorded"),
+    "",
+    "blockers:",
+    ...listLines(operation?.blockers, "none recorded"),
+    "",
+    "active_tasks:",
+    ...listLines(operation?.activeTasks, "none recorded"),
+    "",
+    "background:",
+    ...(background.length
+      ? background.map(
+          (task) =>
+            `- ${task.id} ${task.status}${task.agent ? ` (${task.agent})` : ""}${task.summary ? ` - ${task.summary}` : ""}`,
+        )
+      : ["- none recorded"]),
+    "",
+  ].join("\n")
+}
+
 function statusMarkdown(record: OperationRecord) {
   return [
     `# ${record.operationID}`,

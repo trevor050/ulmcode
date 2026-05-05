@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
 import DESCRIPTION from "./operation_status.txt"
 import { Instance } from "@/project/instance"
-import { readOperationStatus } from "@/ulm/artifact"
+import { formatOperationStatusDashboard, readOperationStatus } from "@/ulm/artifact"
 
 export const Parameters = Schema.Struct({
   operationID: Schema.String,
@@ -30,7 +30,12 @@ export const OperationStatusTool = Tool.define<typeof Parameters, Metadata, neve
           title: result.operation
             ? `${result.operationID}: ${result.operation.stage}/${result.operation.status}`
             : `${result.operationID}: no operation checkpoint`,
-          output: JSON.stringify(result, null, 2),
+          output: [
+            formatOperationStatusDashboard(result),
+            "<operation_status_json>",
+            JSON.stringify(result, null, 2),
+            "</operation_status_json>",
+          ].join("\n"),
           metadata: {
             operationID: result.operationID,
             root: result.root,

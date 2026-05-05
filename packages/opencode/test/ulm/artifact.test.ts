@@ -3,6 +3,7 @@ import fs from "fs/promises"
 import os from "os"
 import path from "path"
 import {
+  formatOperationStatusDashboard,
   lintReport,
   readOperationStatus,
   renderReport,
@@ -184,6 +185,59 @@ describe("ULM artifact ledger", () => {
     expect(status.operation?.stage).toBe("validation")
     expect(status.findings.total).toBe(0)
     expect(status.lastEvents).toHaveLength(1)
+  })
+
+  test("formats a compact operation status dashboard", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "validation",
+      status: "running",
+      riskLevel: "high",
+      summary: "Validation running.",
+      nextActions: ["Promote confirmed findings"],
+      blockers: ["Waiting on VPN window"],
+      activeTasks: ["task-recon-1"],
+    })
+    await writeEvidence(worktree, {
+      operationID: "school",
+      evidenceID: "ev-1",
+      title: "IdP policy export",
+      kind: "file",
+      summary: "MFA policy export.",
+      path: "evidence/raw/idp-policy.json",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "report_ready",
+      severity: "high",
+      confidence: 0.9,
+      affectedAssets: ["IdP"],
+      evidence: [{ id: "ev-1", path: "evidence/raw/idp-policy.json" }],
+      description: "MFA is not enforced for administrators.",
+      impact: "Administrator takeover is more likely after password compromise.",
+      remediation: "Require phishing-resistant MFA for privileged accounts.",
+    })
+    await writeRuntimeSummary(worktree, {
+      operationID: "school",
+      modelCalls: { total: 3, byModel: { "gpt-5.5": 2, "gpt-5.4-mini": 1 } },
+      usage: { totalTokens: 4200, costUSD: 0.75, remainingUSD: 9.25 },
+      backgroundTasks: [
+        { id: "task-recon-1", agent: "recon", status: "running", summary: "Enumerating login surface." },
+      ],
+    })
+
+    const dashboard = formatOperationStatusDashboard(await readOperationStatus(worktree, "school"))
+    expect(dashboard).toContain("school - validation/running")
+    expect(dashboard).toContain("risk: high")
+    expect(dashboard).toContain("findings: 1 total")
+    expect(dashboard).toContain("evidence: 1 total")
+    expect(dashboard).toContain("runtime: 3 calls, 4200 tokens, $0.75")
+    expect(dashboard).toContain("models: gpt-5.5=2, gpt-5.4-mini=1")
+    expect(dashboard).toContain("- task-recon-1 running (recon)")
+    expect(dashboard).toContain("blockers:")
   })
 
   test("renders final report deliverables", async () => {
