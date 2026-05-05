@@ -608,6 +608,8 @@ describe("tool.task", () => {
         const listed = yield* listDef.execute({ status: "stale" }, ctx)
         expect(listed.output).toContain(taskSession.id)
         expect(listed.output).toContain("restartable: true")
+        expect(listed.output).toContain('"prompt":"continue validating the stale operation lane"')
+        expect(listed.output).toContain('"subagent_type":"validator"')
         return yield* statusDef.execute({ task_id: taskSession.id }, ctx)
       }).pipe(Effect.provide(Layer.fresh(BackgroundJob.layer)))
 

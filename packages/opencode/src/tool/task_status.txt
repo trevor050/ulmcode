@@ -1,3 +1,3 @@
 Check the status of a task subagent.
 
-Use this after launching `task` with `background: true`, after interruptions, or when resuming a long operation. Set `wait` to true when you need the result before continuing. A `stale` result means the task was persisted as running, but the process no longer owns the running fiber; restart or replace that lane before trusting the operation state.
+Use this after launching `task` with `background: true`, after interruptions, or when resuming a long operation. Set `wait` to true when you need the result before continuing. A `stale` result means the task was persisted as running, but the process no longer owns the running fiber; when `restart_args` are present, pass them directly to `task` to continue that lane in the background before trusting the operation state.

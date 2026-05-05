@@ -1,6 +1,7 @@
 import * as Tool from "./tool"
 import DESCRIPTION from "./task_list.txt"
 import { BackgroundJob } from "@/background/job"
+import { taskRestartArgs } from "./task_restart_args"
 import { Effect, Schema } from "effect"
 
 export const Parameters = Schema.Struct({
@@ -31,17 +32,18 @@ export const TaskListTool = Tool.define<typeof Parameters, Metadata, BackgroundJ
             title: `${items.length} background task${items.length === 1 ? "" : "s"}`,
             output: items.length
               ? items
-                  .map((job) =>
-                    [
+                  .map((job) => {
+                    const restartArgs = taskRestartArgs(job)
+                    return [
                       `task_id: ${job.id}`,
                       `type: ${job.type}`,
                       `status: ${job.status}`,
                       ...(typeof job.metadata?.operationID === "string" ? [`operation_id: ${job.metadata.operationID}`] : []),
-                      ...(job.status === "stale" && typeof job.metadata?.prompt === "string" ? ["restartable: true"] : []),
+                      ...(restartArgs ? ["restartable: true", `restart_args: ${JSON.stringify(restartArgs)}`] : []),
                       ...(job.title ? [`title: ${job.title}`] : []),
                       ...(job.completedAt ? [`completed_at: ${new Date(job.completedAt).toISOString()}`] : []),
-                    ].join("\n"),
-                  )
+                    ].join("\n")
+                  })
                   .join("\n\n")
               : "No background tasks found.",
             metadata: {

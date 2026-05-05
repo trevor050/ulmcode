@@ -6,6 +6,7 @@ import { MessageV2 } from "@/session/message-v2"
 import { SessionStatus } from "@/session/status"
 import { PositiveInt } from "@/util/schema"
 import { BackgroundJob } from "@/background/job"
+import { taskRestartArgs } from "./task_restart_args"
 import { Effect, Option, Schema } from "effect"
 
 const DEFAULT_TIMEOUT = 60_000
@@ -42,7 +43,7 @@ function jobResult(job: BackgroundJob.Info): InspectResult {
   if (job.status === "running") return { state: "running", text: "Task is still running." }
   if (job.status === "completed") return { state: "completed", text: job.output ?? "" }
   if (job.status === "stale") {
-    const restartArgs = restartArgsFor(job)
+    const restartArgs = taskRestartArgs(job)
     return {
       state: "stale",
       text: [
@@ -54,27 +55,6 @@ function jobResult(job: BackgroundJob.Info): InspectResult {
     }
   }
   return { state: "error", text: job.error ?? `Task ${job.status}.` }
-}
-
-function stringMetadata(job: BackgroundJob.Info, key: string) {
-  const value = job.metadata?.[key]
-  return typeof value === "string" && value ? value : undefined
-}
-
-function restartArgsFor(job: BackgroundJob.Info) {
-  const prompt = stringMetadata(job, "prompt")
-  const subagentType = stringMetadata(job, "subagent_type")
-  const description = stringMetadata(job, "description") ?? job.title
-  if (!prompt || !subagentType || !description) return undefined
-  return {
-    task_id: job.id,
-    background: true,
-    description,
-    prompt,
-    subagent_type: subagentType,
-    operationID: stringMetadata(job, "operationID"),
-    command: stringMetadata(job, "command"),
-  }
 }
 
 export const TaskStatusTool = Tool.define<typeof Parameters, Metadata, Session.Service | SessionStatus.Service | BackgroundJob.Service>(
