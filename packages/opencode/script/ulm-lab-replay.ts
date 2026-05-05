@@ -29,6 +29,10 @@ type LabManifest = {
   evidence: Array<Omit<EvidenceInput, "operationID">>
   findings: Array<Omit<FindingInput, "operationID">>
   runtime?: Omit<RuntimeSummaryInput, "operationID">
+  report?: {
+    targetPages?: number
+    minOutlineWordsPerPage?: number
+  }
   expected?: {
     reportableFindings?: number
     evidence?: number
@@ -84,7 +88,7 @@ for (const finding of lab.findings) {
 await writeReportOutline(worktree, {
   operationID: lab.operationID,
   audience: "mixed",
-  targetPages: 40,
+  targetPages: lab.report?.targetPages ?? 2,
   includeAppendix: true,
 })
 
@@ -112,7 +116,11 @@ const runtime = await writeRuntimeSummary(worktree, {
   ],
 })
 
-const finalLint = await lintReport(worktree, lab.operationID, { finalHandoff: true })
+const finalLint = await lintReport(worktree, lab.operationID, {
+  finalHandoff: true,
+  requireOutlineBudget: true,
+  minOutlineWordsPerPage: lab.report?.minOutlineWordsPerPage ?? 80,
+})
 assert(finalLint.ok, `final handoff lint failed: ${finalLint.gaps.join("; ")}`)
 
 const status = await readOperationStatus(worktree, lab.operationID)

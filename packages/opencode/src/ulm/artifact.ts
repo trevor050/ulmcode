@@ -1242,9 +1242,13 @@ export async function writeEvidence(worktree: string, input: EvidenceInput): Pro
 }
 
 async function readReportText(root: string) {
-  for (const candidate of ["report.md", "report.html"]) {
+  for (const candidate of [
+    path.join("reports", "report.md"),
+    path.join("reports", "report.html"),
+    path.join("deliverables", "final", "report.html"),
+  ]) {
     try {
-      return await fs.readFile(path.join(root, "reports", candidate), "utf8")
+      return await fs.readFile(path.join(root, candidate), "utf8")
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
     }
