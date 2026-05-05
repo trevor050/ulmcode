@@ -263,7 +263,13 @@ export type RuntimeUsageMessage = {
   agent?: string
   modelID?: string
   providerID?: string
+  summary?: boolean
   cost?: number
+  parts?: Array<{
+    type?: string
+    auto?: boolean
+    overflow?: boolean
+  }>
   tokens?: {
     total?: number
     input?: number
@@ -455,7 +461,8 @@ export function summarizeRuntimeUsage(messages: RuntimeUsageMessage[]) {
 
 function mergeRuntimeUsage(input: RuntimeSummaryInput) {
   const derived = input.sessionMessages?.length ? summarizeRuntimeUsage(input.sessionMessages) : undefined
-  if (!derived) return input
+  const compaction = input.compaction ?? deriveRuntimeCompaction(input.sessionMessages ?? [])
+  if (!derived) return compaction ? { ...input, compaction } : input
   const usage = input.usage
     ? {
         ...derived.usage,
@@ -471,6 +478,26 @@ function mergeRuntimeUsage(input: RuntimeSummaryInput) {
     ...input,
     modelCalls: input.modelCalls ?? derived.modelCalls,
     usage,
+    compaction,
+  }
+}
+
+function compactionPressure(count: number): "low" | "moderate" | "high" | "critical" {
+  if (count >= 8) return "critical"
+  if (count >= 4) return "high"
+  if (count >= 2) return "moderate"
+  return "low"
+}
+
+function deriveRuntimeCompaction(messages: RuntimeUsageMessage[]): RuntimeSummaryInput["compaction"] | undefined {
+  const count = messages.reduce(
+    (total, message) => total + (message.parts ?? []).filter((part) => part.type === "compaction").length,
+    0,
+  )
+  if (!count) return undefined
+  return {
+    count,
+    pressure: compactionPressure(count),
   }
 }
 

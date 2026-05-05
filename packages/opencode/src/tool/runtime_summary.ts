@@ -96,7 +96,20 @@ export const RuntimeSummaryTool = Tool.define<typeof Parameters, Metadata, Sessi
           const result = yield* Effect.tryPromise(() =>
             writeRuntimeSummary(worktree, {
               ...params,
-              sessionMessages: [...ctx.messages, ...childMessages].map((message) => message.info),
+              sessionMessages: [...ctx.messages, ...childMessages].map((message) => ({
+                role: message.info.role,
+                agent: message.info.agent,
+                modelID: message.info.role === "assistant" ? message.info.modelID : message.info.model?.modelID,
+                providerID: message.info.role === "assistant" ? message.info.providerID : message.info.model?.providerID,
+                cost: message.info.role === "assistant" ? message.info.cost : undefined,
+                tokens: message.info.role === "assistant" ? message.info.tokens : undefined,
+                summary: message.info.role === "assistant" ? message.info.summary : undefined,
+                parts: message.parts.map((part) => ({
+                  type: part.type,
+                  auto: part.type === "compaction" ? part.auto : undefined,
+                  overflow: part.type === "compaction" ? part.overflow : undefined,
+                })),
+              })),
             }),
           ).pipe(Effect.orDie)
           return {

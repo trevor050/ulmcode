@@ -481,6 +481,30 @@ describe("ULM artifact ledger", () => {
     expect(record.usage.byAgent.recon.costUSD).toBe(0.15)
   })
 
+  test("derives compaction pressure from session messages when compaction is not provided", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "validation",
+      status: "running",
+      summary: "Validation is still running.",
+    })
+
+    const result = await writeRuntimeSummary(worktree, {
+      operationID: "school",
+      sessionMessages: [
+        { role: "user", parts: [{ type: "compaction", auto: true, overflow: true }] },
+        { role: "assistant", summary: true },
+        { role: "user", parts: [{ type: "compaction", auto: true }] },
+      ],
+    })
+
+    const record = JSON.parse(await fs.readFile(result.json, "utf8"))
+    expect(record.compaction.count).toBe(2)
+    expect(record.compaction.pressure).toBe("moderate")
+  })
+
   test("writes execution-ready operation plans with subagent policy", async () => {
     const worktree = await tmpdir()
     await writeOperationCheckpoint(worktree, {

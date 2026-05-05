@@ -127,6 +127,22 @@ describe("tool.runtime_summary", () => {
               providerID: "openai",
               time: { created: Date.now(), completed: Date.now() },
             } as any)
+            const compaction = yield* sessions.updateMessage({
+              id: MessageID.ascending(),
+              role: "user",
+              sessionID: child.id,
+              agent: "recon",
+              model: { providerID: "openai", modelID: "gpt-5.4-mini" },
+              time: { created: Date.now() },
+            } as any)
+            yield* sessions.updatePart({
+              id: "prt_compaction" as any,
+              messageID: compaction.id,
+              sessionID: child.id,
+              type: "compaction",
+              auto: true,
+              overflow: true,
+            } as any)
 
             const tool = yield* RuntimeSummaryTool
             const def = yield* tool.init()
@@ -169,6 +185,8 @@ describe("tool.runtime_summary", () => {
             expect(record.usage.totalTokens).toBe(2500)
             expect(record.usage.byAgent.pentest.totalTokens).toBe(1500)
             expect(record.usage.byAgent.recon.totalTokens).toBe(1000)
+            expect(record.compaction.count).toBe(1)
+            expect(record.compaction.pressure).toBe("low")
           }).pipe(Effect.provide(layer)),
         ),
     })
