@@ -1,0 +1,6 @@
+services:
+  k12-family-messaging-cross-class-broadcast:
+    build:
+      context: ./service
+    ports:
+      - "8092:8080"

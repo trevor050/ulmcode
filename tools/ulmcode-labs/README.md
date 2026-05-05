@@ -24,6 +24,9 @@ Bundled labs:
 - `k12-assignment-submission-impersonation`: client-supplied student owner lets one student submit work as another.
 - `k12-attendance-bulk-update-csrf`: cross-site attendance bulk update accepted with ambient teacher cookies.
 - `k12-transcript-export-overexposure`: teacher transcript export can request sensitive student fields.
+- `k12-lms-payment-webhook-replay`: stale unsigned payment webhook replay can alter student fee balances.
+- `k12-family-messaging-cross-class-broadcast`: client-supplied class id lets a teacher broadcast to another class's guardians.
+- `k12-third-party-integration-token-leak`: exposed vendor OAuth token grants roster preview and sync access.
 
 The labs include tiny intentionally weak HTTP services under `service/`. Probe them without Docker:
 
@@ -46,4 +49,7 @@ docker compose -f tools/ulmcode-labs/k12-sis-webhook-signature-bypass/docker-com
 docker compose -f tools/ulmcode-labs/k12-assignment-submission-impersonation/docker-compose.yml up --build
 docker compose -f tools/ulmcode-labs/k12-attendance-bulk-update-csrf/docker-compose.yml up --build
 docker compose -f tools/ulmcode-labs/k12-transcript-export-overexposure/docker-compose.yml up --build
+docker compose -f tools/ulmcode-labs/k12-lms-payment-webhook-replay/docker-compose.yml up --build
+docker compose -f tools/ulmcode-labs/k12-family-messaging-cross-class-broadcast/docker-compose.yml up --build
+docker compose -f tools/ulmcode-labs/k12-third-party-integration-token-leak/docker-compose.yml up --build
 ```

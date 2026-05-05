@@ -528,6 +528,202 @@ async function probeTranscriptExportOverexposure() {
   return ["target: k12-transcript-export-overexposure", "transcript_export_overexposure: confirmed"]
 }
 
+async function probeLmsPaymentWebhookReplay() {
+  const { proc, base } = await startTarget("k12-lms-payment-webhook-replay")
+  const health = await fetch(`${base}/health`).then((res) => res.json()) as { ok?: boolean; lab?: string }
+  if (!health.ok || health.lab !== "k12-lms-payment-webhook-replay") fail(proc, "health probe failed")
+
+  const policy = await fetch(`${base}/api/payments/webhook-policy`).then((res) => res.json()) as {
+    signatureMode?: string
+    timestampWindow?: string
+    idempotency?: string
+    labFinding?: string
+  }
+  if (
+    policy.signatureMode !== "monitor" ||
+    policy.timestampWindow !== "disabled" ||
+    policy.idempotency !== "disabled" ||
+    policy.labFinding !== "payment_webhook_replay_controls_missing"
+  ) {
+    fail(proc, "payment webhook policy probe did not confirm replay-control gap")
+  }
+
+  const first = await fetch(`${base}/api/payments/webhook`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      type: "invoice.paid",
+      eventId: "evt-demo-7788",
+      studentId: "student-9301",
+      amountCents: 12500,
+      sentAt: "2026-01-01T00:00:00.000Z",
+    }),
+  }).then((res) => res.json()) as { accepted?: boolean; replayed?: boolean; balanceCents?: number }
+  if (!first.accepted || first.replayed || first.balanceCents !== 0) {
+    fail(proc, "payment first webhook probe failed")
+  }
+
+  const replay = await fetch(`${base}/api/payments/webhook`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      type: "invoice.paid",
+      eventId: "evt-demo-7788",
+      studentId: "student-9301",
+      amountCents: 12500,
+      sentAt: "2026-01-01T00:00:00.000Z",
+    }),
+  }).then((res) => res.json()) as {
+    accepted?: boolean
+    signatureVerified?: boolean
+    replayed?: boolean
+    balanceCents?: number
+    labFinding?: string
+  }
+  if (
+    !replay.accepted ||
+    replay.signatureVerified ||
+    !replay.replayed ||
+    replay.balanceCents !== -12500 ||
+    replay.labFinding !== "payment_webhook_replay"
+  ) {
+    fail(proc, "payment replay probe did not confirm stale unsigned replay")
+  }
+
+  const balance = await fetch(`${base}/api/payments/student-balance?studentId=student-9301`).then((res) =>
+    res.json(),
+  ) as { balanceCents?: number; lastEventId?: string; labFinding?: string }
+  if (
+    balance.balanceCents !== -12500 ||
+    balance.lastEventId !== "evt-demo-7788" ||
+    balance.labFinding !== "student_fee_balance_modified_by_replayed_webhook"
+  ) {
+    fail(proc, "payment balance probe did not confirm replayed webhook mutation")
+  }
+
+  proc.kill()
+  await proc.exited
+  return ["target: k12-lms-payment-webhook-replay", "payment_webhook_replay: confirmed"]
+}
+
+async function probeFamilyMessagingCrossClassBroadcast() {
+  const { proc, base } = await startTarget("k12-family-messaging-cross-class-broadcast")
+  const health = await fetch(`${base}/health`).then((res) => res.json()) as { ok?: boolean; lab?: string }
+  if (!health.ok || health.lab !== "k12-family-messaging-cross-class-broadcast") fail(proc, "health probe failed")
+
+  const classes = await fetch(`${base}/api/classes`, {
+    headers: { "x-teacher-id": "teacher-north" },
+  }).then((res) => res.json()) as { classes?: Array<{ id?: string }> }
+  if (!classes.classes?.some((item) => item.id === "north-homeroom")) {
+    fail(proc, "messaging class ownership baseline probe failed")
+  }
+
+  const policy = await fetch(`${base}/api/messages/policy`).then((res) => res.json()) as {
+    teacherOwnershipCheck?: string
+    guardianBroadcastAuth?: string
+    labFinding?: string
+  }
+  if (
+    policy.teacherOwnershipCheck !== "client_hint" ||
+    policy.guardianBroadcastAuth !== "classIdOnly" ||
+    policy.labFinding !== "messaging_class_authorization_gap"
+  ) {
+    fail(proc, "messaging policy probe did not confirm authorization gap")
+  }
+
+  const broadcast = await fetch(`${base}/api/messages/broadcast`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-teacher-id": "teacher-north" },
+    body: JSON.stringify({ classId: "south-algebra", body: "forged guardian alert" }),
+  }).then((res) => res.json()) as {
+    accepted?: boolean
+    authorizedByOwnership?: boolean
+    guardianRecipients?: number
+    labFinding?: string
+  }
+  if (
+    !broadcast.accepted ||
+    broadcast.authorizedByOwnership ||
+    broadcast.guardianRecipients !== 2 ||
+    broadcast.labFinding !== "cross_class_family_broadcast"
+  ) {
+    fail(proc, "messaging broadcast probe did not confirm cross-class send")
+  }
+
+  const outbox = await fetch(`${base}/api/messages/outbox?classId=south-algebra`).then((res) =>
+    res.json(),
+  ) as { messages?: Array<{ sentBy?: string; body?: string }>; labFinding?: string }
+  if (
+    outbox.messages?.[0]?.sentBy !== "teacher-north" ||
+    outbox.messages?.[0]?.body !== "forged guardian alert" ||
+    outbox.labFinding !== "guardian_message_delivered_cross_class"
+  ) {
+    fail(proc, "messaging outbox probe did not confirm cross-class delivery")
+  }
+
+  proc.kill()
+  await proc.exited
+  return ["target: k12-family-messaging-cross-class-broadcast", "cross_class_family_broadcast: confirmed"]
+}
+
+async function probeThirdPartyIntegrationTokenLeak() {
+  const { proc, base } = await startTarget("k12-third-party-integration-token-leak")
+  const health = await fetch(`${base}/health`).then((res) => res.json()) as { ok?: boolean; lab?: string }
+  if (!health.ok || health.lab !== "k12-third-party-integration-token-leak") fail(proc, "health probe failed")
+
+  const config = await fetch(`${base}/api/integrations/vendor/config`).then((res) => res.json()) as {
+    oauthAccessToken?: string
+    scopes?: string[]
+    labFinding?: string
+  }
+  if (
+    config.oauthAccessToken !== "vendor-token-demo-5521" ||
+    !config.scopes?.includes("roster:sync") ||
+    config.labFinding !== "third_party_oauth_token_exposure"
+  ) {
+    fail(proc, "integration config probe did not confirm token exposure")
+  }
+
+  const preview = await fetch(`${base}/api/integrations/vendor/roster-preview`, {
+    headers: { authorization: `Bearer ${config.oauthAccessToken}` },
+  }).then((res) => res.json()) as {
+    authorized?: boolean
+    studentCount?: number
+    sensitiveFieldsReturned?: boolean
+    labFinding?: string
+  }
+  if (
+    !preview.authorized ||
+    preview.studentCount !== 2 ||
+    !preview.sensitiveFieldsReturned ||
+    preview.labFinding !== "vendor_token_roster_preview_access"
+  ) {
+    fail(proc, "integration preview probe did not confirm leaked-token access")
+  }
+
+  const sync = await fetch(`${base}/api/integrations/vendor/sync`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${config.oauthAccessToken}` },
+  }).then((res) => res.json()) as {
+    synced?: boolean
+    importedRecords?: number
+    sensitiveFieldsImported?: boolean
+    labFinding?: string
+  }
+  if (
+    !sync.synced ||
+    sync.importedRecords !== 2 ||
+    !sync.sensitiveFieldsImported ||
+    sync.labFinding !== "vendor_token_roster_sync"
+  ) {
+    fail(proc, "integration sync probe did not confirm leaked-token sync")
+  }
+
+  proc.kill()
+  await proc.exited
+  return ["target: k12-third-party-integration-token-leak", "third_party_oauth_token_exposure: confirmed"]
+}
+
 const lines = [
   "ulm_lab_target: ok",
   ...(await probeMfaGap()),
@@ -542,6 +738,9 @@ const lines = [
   ...(await probeAssignmentSubmissionImpersonation()),
   ...(await probeAttendanceBulkUpdateCsrf()),
   ...(await probeTranscriptExportOverexposure()),
+  ...(await probeLmsPaymentWebhookReplay()),
+  ...(await probeFamilyMessagingCrossClassBroadcast()),
+  ...(await probeThirdPartyIntegrationTokenLeak()),
 ]
 
 console.log(lines.join("\n"))
