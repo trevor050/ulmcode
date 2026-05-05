@@ -1142,6 +1142,7 @@ export type Config = {
   enabled_providers?: Array<string>
   model?: string
   small_model?: string
+  max_retries?: number
   default_agent?: string
   username?: string
   mode?: {
@@ -6558,6 +6559,94 @@ export type TuiControlResponseResponses = {
 }
 
 export type TuiControlResponseResponse = TuiControlResponseResponses[keyof TuiControlResponseResponses]
+
+export type UlmOperationListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    eventLimit?: string
+  }
+  url: "/ulm/operation"
+}
+
+export type UlmOperationListResponses = {
+  /**
+   * ULMCode operation status list
+   */
+  200: Array<unknown>
+}
+
+export type UlmOperationListResponse = UlmOperationListResponses[keyof UlmOperationListResponses]
+
+export type UlmOperationStatusData = {
+  body?: never
+  path: {
+    operationID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+    eventLimit?: string
+  }
+  url: "/ulm/operation/{operationID}/status"
+}
+
+export type UlmOperationStatusResponses = {
+  /**
+   * ULMCode operation status
+   */
+  200: unknown
+}
+
+export type UlmOperationResumeData = {
+  body?: never
+  path: {
+    operationID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+    eventLimit?: string
+    staleAfterMinutes?: string
+  }
+  url: "/ulm/operation/{operationID}/resume"
+}
+
+export type UlmOperationResumeResponses = {
+  /**
+   * ULMCode operation resume brief
+   */
+  200: unknown
+}
+
+export type UlmOperationAuditData = {
+  body?: never
+  path: {
+    operationID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+    eventLimit?: string
+    staleAfterMinutes?: string
+    minWords?: string
+    requireOutlineBudget?: "true" | "false"
+    minOutlineWordsPerPage?: string
+    requireFindingSections?: "true" | "false"
+    minFindingWords?: string
+    finalHandoff?: "true" | "false"
+  }
+  url: "/ulm/operation/{operationID}/audit"
+}
+
+export type UlmOperationAuditResponses = {
+  /**
+   * ULMCode operation audit
+   */
+  200: unknown
+}
 
 export type ExperimentalWorkspaceAdapterListData = {
   body?: never

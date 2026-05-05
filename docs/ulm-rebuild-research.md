@@ -46,6 +46,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `operation_stage_gate` writes durable per-stage JSON/markdown gate artifacts and blocks advancement when required stage evidence is missing or validation still has unresolved candidate findings.
 - `operation_audit` writes durable JSON/markdown audit artifacts that combine restart health and final handoff lint, giving long runs a hard final readiness gate.
 - `opencode ulm list`, `opencode ulm status <operationID>`, `opencode ulm resume <operationID>`, `opencode ulm gate <operationID>`, and `opencode ulm audit <operationID>` expose operation discovery, dashboards, restart briefs, stage gates, and final audits directly from the CLI, with JSON output for automation.
+- `/ulm/operation`, `/ulm/operation/:operationID/status`, `/resume`, and `/audit` now expose the same ULM operation dashboard data through the instance HttpApi and generated JS SDK for TUI/plugin consumers.
 - `operation_plan` records execution-ready phase order, success criteria, subagent/no-subagent policy, assumptions, and report closeout.
 - Native ULM agents now cover primary operation control, recon, attack-path mapping, validation, evidence normalization, report writing, and adversarial report review with prompts written around durable artifacts and gate tools instead of the old swarm prompts.
 - `evidence_record` writes durable evidence JSON plus optional raw text, so findings can cite recorded artifacts instead of chat-only claims.
@@ -91,6 +92,6 @@ Source checked on 2026-05-05 from `~/.config/opencode` without copying secrets.
 
 - True automatic background job execution resume across process restart. Metadata is persisted, listable, stale-aware, and operation-recoverable with `operation_recover`, but in-flight fibers are not automatically restarted after process death without an operator/model context.
 - Full operation-wide cost/token extraction into budgets. `runtime_summary` now derives current-session, child-session, and persisted background-job-session assistant usage, compaction counts, and background job status, and `operation_resume` flags exhausted recorded budgets; it still cannot recover cost/transcript data once the underlying session ledger is missing.
-- Full interactive TUI operation dashboard. Tool output and `opencode ulm ...` now provide compact dashboards, but there is not yet a dedicated interactive TUI route.
+- Full interactive TUI operation dashboard. Tool output, `opencode ulm ...`, and HttpApi/SDK ULM operation routes now provide dashboard data, but there is not yet a dedicated interactive TUI screen.
 - Broader vulnerable-target lab catalog. The catalog now has weak-MFA, roster-IDOR, gradebook mass-assignment, storage/config leak, student-search injection, password-reset token leakage, and guardian invite-code takeover scenarios with Docker Compose support, but still needs more reporting-quality cases.
 - Full vendored plugin source. The isolated profile records plugin dependencies and routing, but does not vendor third-party plugin code into this repo.

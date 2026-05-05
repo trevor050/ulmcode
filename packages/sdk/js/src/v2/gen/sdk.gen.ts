@@ -195,6 +195,10 @@ import type {
   TuiSelectSessionResponses,
   TuiShowToastResponses,
   TuiSubmitPromptResponses,
+  UlmOperationAuditResponses,
+  UlmOperationListResponses,
+  UlmOperationResumeResponses,
+  UlmOperationStatusResponses,
   V2SessionCompactResponses,
   V2SessionContextResponses,
   V2SessionListErrors,
@@ -4692,6 +4696,165 @@ export class Tui extends HeyApiClient {
   }
 }
 
+export class Operation extends HeyApiClient {
+  /**
+   * List ULM operations
+   *
+   * List ULMCode operations with compact dashboard state.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      eventLimit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "eventLimit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<UlmOperationListResponses, unknown, ThrowOnError>({
+      url: "/ulm/operation",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get ULM operation status
+   *
+   * Read one ULMCode operation dashboard payload.
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters: {
+      operationID: string
+      directory?: string
+      workspace?: string
+      eventLimit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "operationID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "eventLimit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<UlmOperationStatusResponses, unknown, ThrowOnError>({
+      url: "/ulm/operation/{operationID}/status",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get ULM operation resume brief
+   *
+   * Build a restart/compaction resume brief for one ULMCode operation.
+   */
+  public resume<ThrowOnError extends boolean = false>(
+    parameters: {
+      operationID: string
+      directory?: string
+      workspace?: string
+      eventLimit?: string
+      staleAfterMinutes?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "operationID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "eventLimit" },
+            { in: "query", key: "staleAfterMinutes" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<UlmOperationResumeResponses, unknown, ThrowOnError>({
+      url: "/ulm/operation/{operationID}/resume",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Audit ULM operation handoff
+   *
+   * Run ULMCode final readiness checks for one operation.
+   */
+  public audit<ThrowOnError extends boolean = false>(
+    parameters: {
+      operationID: string
+      directory?: string
+      workspace?: string
+      eventLimit?: string
+      staleAfterMinutes?: string
+      minWords?: string
+      requireOutlineBudget?: "true" | "false"
+      minOutlineWordsPerPage?: string
+      requireFindingSections?: "true" | "false"
+      minFindingWords?: string
+      finalHandoff?: "true" | "false"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "operationID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "eventLimit" },
+            { in: "query", key: "staleAfterMinutes" },
+            { in: "query", key: "minWords" },
+            { in: "query", key: "requireOutlineBudget" },
+            { in: "query", key: "minOutlineWordsPerPage" },
+            { in: "query", key: "requireFindingSections" },
+            { in: "query", key: "minFindingWords" },
+            { in: "query", key: "finalHandoff" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<UlmOperationAuditResponses, unknown, ThrowOnError>({
+      url: "/ulm/operation/{operationID}/audit",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Ulm extends HeyApiClient {
+  private _operation?: Operation
+  get operation(): Operation {
+    return (this._operation ??= new Operation({ client: this.client }))
+  }
+}
+
 export class OpencodeClient extends HeyApiClient {
   public static readonly __registry = new HeyApiRegistry<OpencodeClient>()
 
@@ -4833,5 +4996,10 @@ export class OpencodeClient extends HeyApiClient {
   private _tui?: Tui
   get tui(): Tui {
     return (this._tui ??= new Tui({ client: this.client }))
+  }
+
+  private _ulm?: Ulm
+  get ulm(): Ulm {
+    return (this._ulm ??= new Ulm({ client: this.client }))
   }
 }
