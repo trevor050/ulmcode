@@ -1371,6 +1371,32 @@ function wrapPdfLine(input: string, width = 86) {
   return lines.length ? lines : [""]
 }
 
+function decodeHtmlText(input: string) {
+  return input
+    .replaceAll("&amp;", "&")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&#39;", "'")
+}
+
+function htmlToPdfLines(input: string) {
+  const body = /<body[^>]*>([\s\S]*?)<\/body>/i.exec(input)?.[1] ?? input
+  return decodeHtmlText(
+    body
+      .replace(/<style[\s\S]*?<\/style>/gi, "\n")
+      .replace(/<script[\s\S]*?<\/script>/gi, "\n")
+      .replace(/<\/(h1|h2|h3|p|tr|table|section)>/gi, "\n")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/t[dh]>/gi, " | ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/[ \t]+/g, " "),
+  )
+    .split(/\r?\n/)
+    .map((line) => line.trim().replace(/\s+\|\s*$/g, ""))
+    .filter(Boolean)
+}
+
 function findingCounts(findings: FindingRecord[]) {
   return Object.fromEntries(FINDING_STATES.map((state) => [state, findings.filter((item) => item.state === state).length])) as Record<
     FindingState,
@@ -1385,52 +1411,56 @@ function buildPdf(input: {
   reportable: FindingRecord[]
   nonReportable: FindingRecord[]
   evidence: EvidenceRecord[]
+  reportHtml?: string
 }) {
-  const lines = [
-    input.title,
-    `Operation: ${input.operationID}`,
-    `Stage: ${input.operation?.stage ?? "unknown"} | Status: ${input.operation?.status ?? "unknown"}`,
-    "",
-    "Executive Summary",
-    input.operation?.summary ?? "No operation summary has been recorded.",
-    "",
-    "Scope And Methodology",
-    input.operation?.objective ?? "No objective has been recorded.",
-    "",
-    "Findings",
-    ...(input.reportable.length
-      ? input.reportable.flatMap((finding) => [
-          `${finding.severity.toUpperCase()}: ${finding.title}`,
-          `ID: ${finding.findingID} | State: ${finding.state} | Confidence: ${finding.confidence}`,
-          `Affected Assets: ${finding.affectedAssets.join(", ")}`,
-          `Description: ${finding.description}`,
-          `Impact: ${finding.impact ?? "Not recorded."}`,
-          `Remediation: ${finding.remediation ?? "Not recorded."}`,
-          `Evidence: ${finding.evidence.map((item) => item.path ?? item.id).join(", ")}`,
-          "",
-        ])
-      : ["No validated or report-ready findings were recorded."]),
-    "",
-    "Evidence Index",
-    ...(input.evidence.length
-      ? input.evidence.flatMap((item) => [
-          `${item.evidenceID}: ${item.title}`,
-          `Kind: ${item.kind} | Path: ${item.path ?? "not recorded"}`,
-          `Summary: ${item.summary}`,
-          "",
-        ])
-      : ["No evidence records were recorded."]),
-    "",
-    "Non-Reportable Findings",
-    ...(input.nonReportable.length
-      ? input.nonReportable.flatMap((finding) => [
-          `${finding.findingID}: ${finding.title}`,
-          `State: ${finding.state} | Severity: ${finding.severity} | Confidence: ${finding.confidence}`,
-          `Reason retained: not promoted to validated/report-ready state at handoff.`,
-          "",
-        ])
-      : ["No rejected, candidate, or needs-validation findings were recorded."]),
-  ].flatMap((line) => wrapPdfLine(line))
+  const sourceLines = input.reportHtml
+    ? htmlToPdfLines(input.reportHtml)
+    : [
+        input.title,
+        `Operation: ${input.operationID}`,
+        `Stage: ${input.operation?.stage ?? "unknown"} | Status: ${input.operation?.status ?? "unknown"}`,
+        "",
+        "Executive Summary",
+        input.operation?.summary ?? "No operation summary has been recorded.",
+        "",
+        "Scope And Methodology",
+        input.operation?.objective ?? "No objective has been recorded.",
+        "",
+        "Findings",
+        ...(input.reportable.length
+          ? input.reportable.flatMap((finding) => [
+              `${finding.severity.toUpperCase()}: ${finding.title}`,
+              `ID: ${finding.findingID} | State: ${finding.state} | Confidence: ${finding.confidence}`,
+              `Affected Assets: ${finding.affectedAssets.join(", ")}`,
+              `Description: ${finding.description}`,
+              `Impact: ${finding.impact ?? "Not recorded."}`,
+              `Remediation: ${finding.remediation ?? "Not recorded."}`,
+              `Evidence: ${finding.evidence.map((item) => item.path ?? item.id).join(", ")}`,
+              "",
+            ])
+          : ["No validated or report-ready findings were recorded."]),
+        "",
+        "Evidence Index",
+        ...(input.evidence.length
+          ? input.evidence.flatMap((item) => [
+              `${item.evidenceID}: ${item.title}`,
+              `Kind: ${item.kind} | Path: ${item.path ?? "not recorded"}`,
+              `Summary: ${item.summary}`,
+              "",
+            ])
+          : ["No evidence records were recorded."]),
+        "",
+        "Non-Reportable Findings",
+        ...(input.nonReportable.length
+          ? input.nonReportable.flatMap((finding) => [
+              `${finding.findingID}: ${finding.title}`,
+              `State: ${finding.state} | Severity: ${finding.severity} | Confidence: ${finding.confidence}`,
+              `Reason retained: not promoted to validated/report-ready state at handoff.`,
+              "",
+            ])
+          : ["No rejected, candidate, or needs-validation findings were recorded."]),
+      ]
+  const lines = sourceLines.flatMap((line) => wrapPdfLine(line))
 
   const pages = Array.from({ length: Math.max(1, Math.ceil(lines.length / 44)) }, (_, index) =>
     lines.slice(index * 44, index * 44 + 44),
@@ -2314,7 +2344,7 @@ export async function renderReport(worktree: string, input: ReportRenderInput): 
   const readmePath = path.join(finalDir, "README.md")
   const manifestPath = path.join(finalDir, "manifest.json")
   await fs.writeFile(htmlPath, html)
-  await fs.writeFile(pdfPath, buildPdf({ title, operationID, operation, reportable, nonReportable, evidence }))
+  await fs.writeFile(pdfPath, buildPdf({ title, operationID, operation, reportable, nonReportable, evidence, reportHtml: html }))
   await fs.writeFile(readmePath, finalReadme({ title, operationID, operation, reportable, nonReportable, evidence }))
   await writeJson(manifestPath, {
     operationID,
