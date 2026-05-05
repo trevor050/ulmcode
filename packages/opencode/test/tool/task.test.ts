@@ -524,6 +524,59 @@ describe("tool.task", () => {
     }),
   )
 
+  it.instance("background job metadata updates survive BackgroundJob service reload", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const id = `tool_${crypto.randomUUID().replaceAll("-", "")}`
+      yield* Effect.addFinalizer(() => storage.remove(["background_job", id]).pipe(Effect.ignore))
+
+      const startAndUpdate = Effect.gen(function* () {
+        const jobs = yield* BackgroundJob.Service
+        yield* jobs.start({
+          id,
+          type: "task",
+          title: "runtime snapshot task",
+          metadata: { operationID: "school" },
+          run: Effect.succeed("runtime output"),
+        })
+        expect((yield* jobs.wait({ id })).info?.status).toBe("completed")
+        return yield* jobs.updateMetadata(id, {
+          runtimeUsage: { totalTokens: 123 },
+        })
+      }).pipe(Effect.provide(Layer.fresh(BackgroundJob.layer)))
+
+      const updatePersistedOnly = Effect.gen(function* () {
+        const jobs = yield* BackgroundJob.Service
+        return yield* jobs.updateMetadata(id, {
+          runtimeMessages: [{ role: "assistant", agent: "validator", modelID: "gpt-5.5", providerID: "openai" }],
+        })
+      }).pipe(Effect.provide(Layer.fresh(BackgroundJob.layer)))
+
+      const reloadAndGet = Effect.gen(function* () {
+        const jobs = yield* BackgroundJob.Service
+        return yield* jobs.get(id)
+      }).pipe(Effect.provide(Layer.fresh(BackgroundJob.layer)))
+
+      const activeUpdate = yield* startAndUpdate
+      expect(activeUpdate?.metadata?.operationID).toBe("school")
+      expect(activeUpdate?.metadata?.runtimeUsage).toEqual({ totalTokens: 123 })
+
+      const persistedUpdate = yield* updatePersistedOnly
+      expect(persistedUpdate?.metadata?.operationID).toBe("school")
+      expect(persistedUpdate?.metadata?.runtimeUsage).toEqual({ totalTokens: 123 })
+      expect(persistedUpdate?.metadata?.runtimeMessages).toEqual([
+        { role: "assistant", agent: "validator", modelID: "gpt-5.5", providerID: "openai" },
+      ])
+
+      const reloaded = yield* reloadAndGet
+      expect(reloaded?.metadata?.operationID).toBe("school")
+      expect(reloaded?.metadata?.runtimeUsage).toEqual({ totalTokens: 123 })
+      expect(reloaded?.metadata?.runtimeMessages).toEqual([
+        { role: "assistant", agent: "validator", modelID: "gpt-5.5", providerID: "openai" },
+      ])
+    }),
+  )
+
   it.instance("task_status reads completed background metadata after BackgroundJob service reload", () =>
     Effect.gen(function* () {
       const { chat, assistant } = yield* seed()

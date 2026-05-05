@@ -49,6 +49,7 @@ export type WaitResult = {
 export interface Interface {
   readonly list: () => Effect.Effect<Info[]>
   readonly get: (id: string) => Effect.Effect<Info | undefined>
+  readonly updateMetadata: (id: string, metadata: Record<string, unknown>) => Effect.Effect<Info | undefined>
   readonly start: (input: StartInput) => Effect.Effect<Info>
   readonly wait: (input: WaitInput) => Effect.Effect<WaitResult>
   readonly cancel: (id: string) => Effect.Effect<Info | undefined>
@@ -146,6 +147,30 @@ export const layer = Layer.effect(
       return snapshot(job)
     })
 
+    const updateMetadata: Interface["updateMetadata"] = Effect.fn("BackgroundJob.updateMetadata")(function* (id, metadata) {
+      const job = (yield* InstanceState.get(state)).jobs.get(id)
+      if (job) {
+        job.info.metadata = {
+          ...(job.info.metadata ?? {}),
+          ...metadata,
+        }
+        const info = snapshot(job)
+        yield* persist(info)
+        return info
+      }
+      const persisted = yield* getPersisted(id)
+      if (!persisted) return
+      const info = {
+        ...persisted,
+        metadata: {
+          ...(persisted.metadata ?? {}),
+          ...metadata,
+        },
+      }
+      yield* persist(info)
+      return orphaned(info)
+    })
+
     const start: Interface["start"] = Effect.fn("BackgroundJob.start")(function* (input) {
       const s = yield* InstanceState.get(state)
       const id = input.id ?? Identifier.ascending("tool")
@@ -203,7 +228,7 @@ export const layer = Layer.effect(
       return info
     })
 
-    return Service.of({ list, get, start, wait, cancel })
+    return Service.of({ list, get, updateMetadata, start, wait, cancel })
   }),
 )
 

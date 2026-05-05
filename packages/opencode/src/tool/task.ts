@@ -13,6 +13,7 @@ import { BackgroundJob } from "@/background/job"
 import { Cause, Effect, Exit, Option, Schema, Scope, Stream } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { Instance } from "@/project/instance"
+import { summarizeRuntimeUsage, type RuntimeUsageMessage } from "@/ulm/artifact"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -82,6 +83,23 @@ function currentWorktree() {
     return Instance.worktree
   } catch {
     return undefined
+  }
+}
+
+function runtimeUsageMessage(message: MessageV2.WithParts): RuntimeUsageMessage {
+  return {
+    role: message.info.role,
+    agent: message.info.agent,
+    modelID: message.info.role === "assistant" ? message.info.modelID : message.info.model?.modelID,
+    providerID: message.info.role === "assistant" ? message.info.providerID : message.info.model?.providerID,
+    cost: message.info.role === "assistant" ? message.info.cost : undefined,
+    tokens: message.info.role === "assistant" ? message.info.tokens : undefined,
+    summary: message.info.role === "assistant" ? message.info.summary : undefined,
+    parts: message.parts.map((part) => ({
+      type: part.type,
+      auto: part.type === "compaction" ? part.auto : undefined,
+      overflow: part.type === "compaction" ? part.overflow : undefined,
+    })),
   }
 }
 
@@ -281,6 +299,19 @@ export const TaskTool = Tool.define(
             ...(worktree ? { worktree } : {}),
           },
           run: runTask().pipe(
+            Effect.flatMap((text) =>
+              Effect.gen(function* () {
+                const messages = yield* sessions.messages({ sessionID: nextSession.id }).pipe(
+                  Effect.catch(() => Effect.succeed<MessageV2.WithParts[]>([])),
+                )
+                const runtimeMessages = messages.map(runtimeUsageMessage)
+                yield* jobs.updateMetadata(nextSession.id, {
+                  runtimeMessages,
+                  runtimeUsage: summarizeRuntimeUsage(runtimeMessages),
+                })
+                return text
+              }),
+            ),
             Effect.matchCauseEffect({
               onSuccess: (text) => inject("completed", text).pipe(Effect.as(text)),
               onFailure: (cause) => {

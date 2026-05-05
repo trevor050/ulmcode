@@ -7,7 +7,7 @@ import { BackgroundJob } from "@/background/job"
 import { SessionID, type SessionID as SessionIDT } from "@/session/schema"
 import type { MessageV2 } from "@/session/message-v2"
 import { taskRestartArgs } from "./task_restart_args"
-import { writeRuntimeSummary } from "@/ulm/artifact"
+import { writeRuntimeSummary, type RuntimeUsageMessage } from "@/ulm/artifact"
 
 const ModelCalls = Schema.Struct({
   total: Schema.optional(Schema.Number),
@@ -124,11 +124,36 @@ function collectBackgroundJobMessages(
   })
 }
 
+function runtimeMessages(job: BackgroundJob.Info) {
+  const value = job.metadata?.runtimeMessages
+  return Array.isArray(value) ? (value as RuntimeUsageMessage[]) : []
+}
+
 function uniqueMessages(messages: MessageV2.WithParts[]) {
   const seen = new Set<string>()
   const result: MessageV2.WithParts[] = []
   for (const message of messages) {
     const key = `${message.info.sessionID}:${message.info.id}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(message)
+  }
+  return result
+}
+
+function uniqueRuntimeMessages(messages: RuntimeUsageMessage[]) {
+  const seen = new Set<string>()
+  const result: RuntimeUsageMessage[] = []
+  for (const message of messages) {
+    const key = JSON.stringify([
+      message.role,
+      message.agent,
+      message.providerID,
+      message.modelID,
+      message.cost,
+      message.tokens,
+      message.summary,
+    ])
     if (seen.has(key)) continue
     seen.add(key)
     result.push(message)
@@ -184,6 +209,12 @@ export const RuntimeSummaryTool = Tool.define<typeof Parameters, Metadata, Sessi
           const backgroundJobItems = relevantBackgroundJobs(params.operationID, jobItems)
           const childMessages = yield* collectChildMessages(session, ctx.sessionID)
           const backgroundMessages = yield* collectBackgroundJobMessages(session, backgroundJobItems)
+          const backgroundSessionIDs = new Set(backgroundMessages.map((message) => message.info.sessionID))
+          const metadataRuntimeMessages = backgroundJobItems.flatMap((job) => {
+            const sessionID = jobSessionID(job)
+            if (sessionID && backgroundSessionIDs.has(sessionID)) return []
+            return runtimeMessages(job)
+          })
           const sessionMessages = uniqueMessages([...ctx.messages, ...childMessages, ...backgroundMessages])
           const backgroundTasks =
             params.backgroundTasks ??
@@ -198,20 +229,23 @@ export const RuntimeSummaryTool = Tool.define<typeof Parameters, Metadata, Sessi
             writeRuntimeSummary(worktree, {
               ...params,
               backgroundTasks,
-              sessionMessages: sessionMessages.map((message) => ({
-                role: message.info.role,
-                agent: message.info.agent,
-                modelID: message.info.role === "assistant" ? message.info.modelID : message.info.model?.modelID,
-                providerID: message.info.role === "assistant" ? message.info.providerID : message.info.model?.providerID,
-                cost: message.info.role === "assistant" ? message.info.cost : undefined,
-                tokens: message.info.role === "assistant" ? message.info.tokens : undefined,
-                summary: message.info.role === "assistant" ? message.info.summary : undefined,
-                parts: message.parts.map((part) => ({
-                  type: part.type,
-                  auto: part.type === "compaction" ? part.auto : undefined,
-                  overflow: part.type === "compaction" ? part.overflow : undefined,
+              sessionMessages: uniqueRuntimeMessages([
+                ...sessionMessages.map((message) => ({
+                  role: message.info.role,
+                  agent: message.info.agent,
+                  modelID: message.info.role === "assistant" ? message.info.modelID : message.info.model?.modelID,
+                  providerID: message.info.role === "assistant" ? message.info.providerID : message.info.model?.providerID,
+                  cost: message.info.role === "assistant" ? message.info.cost : undefined,
+                  tokens: message.info.role === "assistant" ? message.info.tokens : undefined,
+                  summary: message.info.role === "assistant" ? message.info.summary : undefined,
+                  parts: message.parts.map((part) => ({
+                    type: part.type,
+                    auto: part.type === "compaction" ? part.auto : undefined,
+                    overflow: part.type === "compaction" ? part.overflow : undefined,
+                  })),
                 })),
-              })),
+                ...metadataRuntimeMessages,
+              ]),
             }),
           ).pipe(Effect.orDie)
           return {
