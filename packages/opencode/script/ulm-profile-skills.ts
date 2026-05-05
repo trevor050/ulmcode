@@ -114,7 +114,16 @@ for (const needle of ["Shell Non-Interactive Strategy", "GIT_TERMINAL_PROMPT", "
   if (!shellStrategy.includes(needle)) throw new Error(`shell strategy is missing ${needle}`)
 }
 
-for (const command of ["btw.md", "ship.md", "review.md", "handoff.md"]) {
+for (const command of [
+  "btw.md",
+  "commit-msg.md",
+  "explain-diff.md",
+  "frontend-polish.md",
+  "handoff.md",
+  "review.md",
+  "ship.md",
+  "test-plan.md",
+]) {
   if (!commandFiles.some((file) => path.basename(file) === command)) {
     throw new Error(`profile commands missing ${command}`)
   }
