@@ -10,6 +10,7 @@ import {
   writeFinding,
   writeOperationCheckpoint,
   writeReportOutline,
+  writeRuntimeSummary,
 } from "@/ulm/artifact"
 
 async function tmpdir() {
@@ -151,5 +152,33 @@ describe("ULM artifact ledger", () => {
     expect(await fs.readFile(result.pdf, "utf8")).toStartWith("%PDF-")
     expect(JSON.parse(await fs.readFile(result.manifest, "utf8")).findings).toEqual(["weak-mfa-coverage"])
     expect((await readOperationStatus(worktree, "school")).reports.pdf).toBe(true)
+  })
+
+  test("writes runtime summaries for long operation handoff", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "validation",
+      status: "running",
+      summary: "Validation is still running.",
+      nextActions: ["Finish exploit reproduction", "Promote confirmed findings"],
+      activeTasks: ["task-recon-1"],
+    })
+
+    const result = await writeRuntimeSummary(worktree, {
+      operationID: "school",
+      modelCalls: { total: 12, byModel: { "gpt-5.5": 8, "gpt-5.4-mini": 4 } },
+      compaction: { count: 2, pressure: "moderate", lastSummary: "Earlier recon was compacted." },
+      fetches: { total: 9, repeatedTargets: ["https://example.edu/login"] },
+      backgroundTasks: [
+        { id: "task-recon-1", agent: "recon", status: "running", summary: "Enumerating login surface." },
+      ],
+      notes: ["Continue from operation_status before launching new lanes."],
+    })
+
+    expect(JSON.parse(await fs.readFile(result.json, "utf8")).modelCalls.byModel["gpt-5.5"]).toBe(8)
+    expect(await fs.readFile(result.markdown, "utf8")).toContain("task-recon-1")
+    expect((await readOperationStatus(worktree, "school")).runtimeSummary).toBe(true)
   })
 })

@@ -111,6 +111,7 @@ const table = sqliteTable("session", {
 - `finding_record` is the evidence-backed finding state tool; validated/report-ready findings require evidence refs.
 - `report_outline` creates a long-form report page budget before drafting; `report_lint` can require a report file and minimum word count to catch sparse deliverables.
 - `report_render` publishes print-ready HTML, a lightweight PDF, and a manifest to `.ulmcode/operations/<id>/deliverables/final/`.
+- `runtime_summary` writes `.ulmcode/operations/<id>/deliverables/runtime-summary.json` and `.md` for long-run handoff, including model-call split, compaction pressure, repeated fetches, background task state, notes, and canonical artifact paths.
 - `task` supports `background: true`; poll the returned `task_id` with `task_status` for long-running subagent lanes.
 - Background task metadata is persisted under storage key `background_job/<task_id>` so `task_status` can recover terminal output after a service reload; cancellation must interrupt the captured fiber before/while marking the job cancelled.
 - The bundled isolated profile lives in `tools/ulmcode-profile`; validate it with `tools/ulmcode-profile/test-profile.sh`.

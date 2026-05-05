@@ -117,6 +117,7 @@ export type OperationStatusSummary = {
     html: boolean
     pdf: boolean
   }
+  runtimeSummary: boolean
   lastEvents: unknown[]
 }
 
@@ -132,6 +133,50 @@ export type ReportRenderResult = {
   manifest: string
   finalDir: string
   findings: number
+}
+
+export type RuntimeSummaryInput = {
+  operationID: string
+  modelCalls?: {
+    total?: number
+    byModel?: Record<string, number>
+  }
+  compaction?: {
+    count?: number
+    pressure?: "low" | "moderate" | "high" | "critical"
+    lastSummary?: string
+  }
+  fetches?: {
+    total?: number
+    repeatedTargets?: string[]
+  }
+  backgroundTasks?: Array<{
+    id: string
+    agent?: string
+    status: "running" | "completed" | "failed" | "cancelled" | "stale" | "unknown"
+    summary?: string
+  }>
+  notes?: string[]
+}
+
+export type RuntimeSummaryRecord = RuntimeSummaryInput & {
+  operationID: string
+  generatedAt: string
+  operation?: Pick<OperationRecord, "stage" | "status" | "summary" | "nextActions" | "blockers" | "activeTasks">
+  artifacts: {
+    root: string
+    status: string
+    events: string
+    findings: string
+    final: string
+  }
+}
+
+export type RuntimeSummaryResult = {
+  operationID: string
+  json: string
+  markdown: string
+  finalDir: string
 }
 
 export function slug(input: string, fallback: string) {
@@ -228,6 +273,61 @@ function statusMarkdown(record: OperationRecord) {
     ...(record.evidence.length
       ? record.evidence.map((item) => `- ${item.id}${item.path ? ` (${item.path})` : ""}: ${item.summary ?? ""}`)
       : ["- none recorded"]),
+    "",
+  ].join("\n")
+}
+
+function runtimeSummaryMarkdown(record: RuntimeSummaryRecord) {
+  const byModel = Object.entries(record.modelCalls?.byModel ?? {})
+  const tasks = record.backgroundTasks ?? []
+  return [
+    `# Runtime Summary: ${record.operationID}`,
+    "",
+    `- generated: ${record.generatedAt}`,
+    `- stage: ${record.operation?.stage ?? "unknown"}`,
+    `- status: ${record.operation?.status ?? "unknown"}`,
+    `- model_calls_total: ${record.modelCalls?.total ?? 0}`,
+    `- compactions: ${record.compaction?.count ?? 0}`,
+    `- compaction_pressure: ${record.compaction?.pressure ?? "low"}`,
+    `- fetches_total: ${record.fetches?.total ?? 0}`,
+    "",
+    "## Current Summary",
+    record.operation?.summary ?? "No operation summary recorded.",
+    "",
+    "## Next Actions",
+    ...(record.operation?.nextActions?.length
+      ? record.operation.nextActions.map((item) => `- ${item}`)
+      : ["- none recorded"]),
+    "",
+    "## Blockers",
+    ...(record.operation?.blockers?.length
+      ? record.operation.blockers.map((item) => `- ${item}`)
+      : ["- none recorded"]),
+    "",
+    "## Background Tasks",
+    ...(tasks.length
+      ? tasks.map(
+          (task) =>
+            `- ${task.id}: ${task.status}${task.agent ? ` (${task.agent})` : ""} - ${task.summary ?? ""}`,
+        )
+      : ["- none recorded"]),
+    "",
+    "## Model Split",
+    ...(byModel.length ? byModel.map(([model, count]) => `- ${model}: ${count}`) : ["- none recorded"]),
+    "",
+    "## Repeated Fetch Targets",
+    ...(record.fetches?.repeatedTargets?.length
+      ? record.fetches.repeatedTargets.map((target) => `- ${target}`)
+      : ["- none recorded"]),
+    "",
+    "## Notes",
+    ...(record.notes?.length ? record.notes.map((note) => `- ${note}`) : ["- none recorded"]),
+    "",
+    "## Artifact Paths",
+    `- status: ${record.artifacts.status}`,
+    `- events: ${record.artifacts.events}`,
+    `- findings: ${record.artifacts.findings}`,
+    `- final: ${record.artifacts.final}`,
     "",
   ].join("\n")
 }
@@ -513,8 +613,46 @@ export async function readOperationStatus(
         (await exists(path.join(root, "deliverables", "final", "report.html"))),
       pdf: await exists(path.join(root, "deliverables", "final", "report.pdf")),
     },
+    runtimeSummary: await exists(path.join(root, "deliverables", "runtime-summary.json")),
     lastEvents: await readJsonlTail(path.join(root, "events.jsonl"), options.eventLimit ?? 5),
   }
+}
+
+export async function writeRuntimeSummary(
+  worktree: string,
+  input: RuntimeSummaryInput,
+): Promise<RuntimeSummaryResult> {
+  const operationID = slug(input.operationID, "operation")
+  const root = operationPath(worktree, operationID)
+  const operation = await readJson<OperationRecord>(path.join(root, "operation.json"))
+  const finalDir = path.join(root, "deliverables")
+  const record: RuntimeSummaryRecord = {
+    ...input,
+    operationID,
+    generatedAt: new Date().toISOString(),
+    operation: operation
+      ? {
+          stage: operation.stage,
+          status: operation.status,
+          summary: operation.summary,
+          nextActions: operation.nextActions,
+          blockers: operation.blockers,
+          activeTasks: operation.activeTasks,
+        }
+      : undefined,
+    artifacts: {
+      root,
+      status: path.join(root, "status.md"),
+      events: path.join(root, "events.jsonl"),
+      findings: path.join(root, "findings"),
+      final: path.join(root, "deliverables", "final"),
+    },
+  }
+  const json = path.join(finalDir, "runtime-summary.json")
+  const markdown = path.join(finalDir, "runtime-summary.md")
+  await writeJson(json, record)
+  await fs.writeFile(markdown, runtimeSummaryMarkdown(record))
+  return { operationID, json, markdown, finalDir }
 }
 
 export async function lintReport(
