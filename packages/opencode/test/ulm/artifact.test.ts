@@ -395,6 +395,7 @@ describe("ULM artifact ledger", () => {
       backgroundTasks: [
         { id: "task-recon-1", agent: "recon", status: "running", summary: "Enumerating login surface." },
       ],
+      notes: ["runtime blind spot: background task task-old has no readable session ledger."],
     })
 
     const dashboard = formatOperationStatusDashboard(await readOperationStatus(worktree, "school"))
@@ -405,6 +406,8 @@ describe("ULM artifact ledger", () => {
     expect(dashboard).toContain("runtime: 3 calls, 4200 tokens, $0.75")
     expect(dashboard).toContain("models: gpt-5.5=2, gpt-5.4-mini=1")
     expect(dashboard).toContain("- task-recon-1 running (recon)")
+    expect(dashboard).toContain("runtime_notes:")
+    expect(dashboard).toContain("- runtime blind spot: background task task-old has no readable session ledger.")
     expect(dashboard).toContain("blockers:")
   })
 

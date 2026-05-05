@@ -658,6 +658,7 @@ export function formatOperationStatusDashboard(status: OperationStatusSummary) {
     status.runtimeSummary ? "runtime" : undefined,
   ].filter((item): item is string => !!item)
   const background = status.runtime?.backgroundTasks ?? []
+  const runtimeNotes = status.runtime?.notes ?? []
   return [
     `# ${status.operationID} - ${operation?.stage ?? "unknown"}/${operation?.status ?? "unknown"}`,
     "",
@@ -693,6 +694,9 @@ export function formatOperationStatusDashboard(status: OperationStatusSummary) {
             }${task.restartArgs ? `; restart_args: ${JSON.stringify(task.restartArgs)}` : ""}`,
         )
       : ["- none recorded"]),
+    "",
+    "runtime_notes:",
+    ...listLines(runtimeNotes, "none recorded"),
     "",
   ].join("\n")
 }
