@@ -932,6 +932,7 @@ export async function renderReport(worktree: string, input: ReportRenderInput): 
   const root = operationPath(worktree, operationID)
   const operation = await readJson<OperationRecord>(path.join(root, "operation.json"))
   const findings = await readFindings(root)
+  const evidence = await readEvidenceRecords(root)
   const reportable = findings.filter((finding) => finding.state === "report_ready" || finding.state === "validated")
   const title = input.title ?? operation?.objective ?? `ULMCode Operation ${operationID}`
   const finalDir = path.join(root, "deliverables", "final")
@@ -1012,9 +1013,17 @@ export async function renderReport(worktree: string, input: ReportRenderInput): 
     title,
     generatedAt: new Date().toISOString(),
     artifacts: {
+      status: path.join(root, "status.md"),
+      operationPlan: path.join(root, "plans", "operation-plan.json"),
       html: htmlPath,
       pdf: pdfPath,
       reportOutline: path.join(root, "reports", "report-outline.md"),
+      evidence: path.join(root, "evidence"),
+      runtimeSummary: path.join(root, "deliverables", "runtime-summary.json"),
+    },
+    counts: {
+      findings: reportable.length,
+      evidence: evidence.length,
     },
     findings: reportable.map((finding) => finding.findingID),
   })

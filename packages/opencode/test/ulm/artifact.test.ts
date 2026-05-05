@@ -195,6 +195,29 @@ describe("ULM artifact ledger", () => {
       status: "complete",
       summary: "Testing identified one report-ready finding.",
     })
+    await writeOperationPlan(worktree, {
+      operationID: "school",
+      assumptions: ["Testing is authorized."],
+      phases: [
+        {
+          stage: "reporting",
+          objective: "Finalize report.",
+          actions: ["Render deliverables"],
+          successCriteria: ["Manifest includes handoff artifacts"],
+          subagents: ["report-writer"],
+          noSubagents: ["risk acceptance"],
+        },
+      ],
+      reportingCloseout: ["Run report_render"],
+    })
+    await writeEvidence(worktree, {
+      operationID: "school",
+      evidenceID: "ev-1",
+      title: "IdP policy export",
+      kind: "file",
+      summary: "MFA policy export.",
+      path: "evidence/raw/idp-policy.json",
+    })
     await writeFinding(worktree, {
       operationID: "school",
       title: "Weak MFA coverage",
@@ -211,7 +234,10 @@ describe("ULM artifact ledger", () => {
     const result = await renderReport(worktree, { operationID: "school", title: "Assessment Report" })
     expect(await fs.readFile(result.html, "utf8")).toContain("Weak MFA coverage")
     expect(await fs.readFile(result.pdf, "utf8")).toStartWith("%PDF-")
-    expect(JSON.parse(await fs.readFile(result.manifest, "utf8")).findings).toEqual(["weak-mfa-coverage"])
+    const manifest = JSON.parse(await fs.readFile(result.manifest, "utf8"))
+    expect(manifest.findings).toEqual(["weak-mfa-coverage"])
+    expect(manifest.artifacts.operationPlan).toContain("operation-plan.json")
+    expect(manifest.counts.evidence).toBe(1)
     expect((await readOperationStatus(worktree, "school")).reports.pdf).toBe(true)
   })
 
