@@ -1,0 +1,223 @@
+{
+  "id": "k12-district-portal-chained-exposure",
+  "operationID": "k12-district-portal-chained-exposure",
+  "objective": "Replay a synthetic authorized K-12 district portal assessment with multiple report-ready findings across administrator MFA and cross-district student export controls.",
+  "assumptions": [
+    "The lab uses synthetic evidence only.",
+    "No real district portal, SIS, or student system is contacted.",
+    "Administrators, students, exports, and audit records are intentionally fake."
+  ],
+  "plan": {
+    "phases": [
+      {
+        "stage": "recon",
+        "objective": "Map district portal authentication and data export boundaries.",
+        "actions": [
+          "Review the synthetic administrator session policy",
+          "Record a baseline admin login response",
+          "Identify export fields and tenant scoping behavior"
+        ],
+        "successCriteria": [
+          "Authentication policy, login, and export controls are recorded as evidence"
+        ],
+        "subagents": [
+          "recon"
+        ],
+        "noSubagents": [
+          "district risk prioritization stays with the primary operator"
+        ]
+      },
+      {
+        "stage": "validation",
+        "objective": "Validate multiple independent portal weaknesses in one operation.",
+        "actions": [
+          "Authenticate to the synthetic admin portal without MFA",
+          "Export all student fields across district tenant boundaries",
+          "Fetch audit logs to confirm sensitive export activity is not elevated"
+        ],
+        "successCriteria": [
+          "Two report-ready findings cite distinct evidence sets and remediation paths"
+        ],
+        "subagents": [
+          "validator",
+          "evidence"
+        ],
+        "noSubagents": [
+          "final severity and sequencing decisions stay with the primary operator"
+        ]
+      },
+      {
+        "stage": "reporting",
+        "objective": "Render final handoff artifacts with multi-finding report coverage.",
+        "actions": [
+          "Run report_lint",
+          "Run report_render",
+          "Run runtime_summary"
+        ],
+        "successCriteria": [
+          "Final handoff lint and audit pass with two reportable findings"
+        ],
+        "subagents": [
+          "report-writer",
+          "report-reviewer"
+        ],
+        "noSubagents": [
+          "client-facing delivery approval is manual"
+        ]
+      }
+    ],
+    "reportingCloseout": [
+      "Run report_lint",
+      "Run report_render",
+      "Run runtime_summary"
+    ]
+  },
+  "report": {
+    "targetPages": 5,
+    "minOutlineWordsPerPage": 80,
+    "minOutlineSectionWords": 15
+  },
+  "evidence": [
+    {
+      "evidenceID": "ev-district-session-policy",
+      "title": "Synthetic district admin session policy",
+      "kind": "http_response",
+      "summary": "The admin session policy marks MFA as optional for district administrators.",
+      "url": "http://127.0.0.1/api/admin/session-policy",
+      "content": "{\"adminMfa\":\"optional\",\"stepUpForExports\":false,\"labFinding\":\"district_admin_mfa_optional\"}"
+    },
+    {
+      "evidenceID": "ev-district-admin-login",
+      "title": "Synthetic district admin login without MFA",
+      "kind": "http_response",
+      "summary": "A district administrator login succeeded without an MFA challenge.",
+      "url": "http://127.0.0.1/api/admin/login",
+      "content": "{\"authenticated\":true,\"role\":\"district-admin\",\"mfaRequired\":false,\"session\":\"district-admin-session\",\"labFinding\":\"district_admin_login_without_mfa\"}"
+    },
+    {
+      "evidenceID": "ev-student-export-policy",
+      "title": "Synthetic district student export policy",
+      "kind": "http_response",
+      "summary": "The export policy allows include=all and reports tenant filtering as disabled.",
+      "url": "http://127.0.0.1/api/admin/export-policy",
+      "content": "{\"includeAllAllowed\":true,\"tenantFilter\":\"disabled\",\"sensitiveFields\":[\"iepFlag\",\"guardianEmail\",\"disciplineNote\"],\"labFinding\":\"student_export_policy_overbroad\"}"
+    },
+    {
+      "evidenceID": "ev-cross-district-export",
+      "title": "Synthetic cross-district student export",
+      "kind": "http_response",
+      "summary": "The export returned students from two districts and sensitive fields under a single district-admin session.",
+      "url": "http://127.0.0.1/api/admin/students/export?include=all",
+      "content": "{\"authorized\":true,\"districts\":[\"north\",\"south\"],\"sensitiveFieldsReturned\":true,\"recordCount\":2,\"labFinding\":\"cross_district_student_export\"}"
+    },
+    {
+      "evidenceID": "ev-export-audit-gap",
+      "title": "Synthetic export audit log lacks elevated event",
+      "kind": "http_response",
+      "summary": "The sensitive cross-district export was logged as a normal report view instead of an elevated data export event.",
+      "url": "http://127.0.0.1/api/admin/audit/export-events",
+      "content": "{\"events\":[{\"type\":\"report_view\",\"severity\":\"info\",\"actor\":\"district-admin\"}],\"elevatedExportAlert\":false,\"labFinding\":\"sensitive_export_audit_gap\"}"
+    }
+  ],
+  "findings": [
+    {
+      "findingID": "district-admin-mfa-optional",
+      "title": "District administrator login does not require MFA",
+      "state": "report_ready",
+      "severity": "high",
+      "confidence": 0.9,
+      "affectedAssets": [
+        "District admin portal",
+        "Administrator session policy",
+        "Student data export workflow"
+      ],
+      "evidence": [
+        {
+          "id": "ev-district-session-policy",
+          "path": "evidence/raw/ev-district-session-policy.txt"
+        },
+        {
+          "id": "ev-district-admin-login",
+          "path": "evidence/raw/ev-district-admin-login.txt"
+        }
+      ],
+      "description": "The synthetic district portal allows district administrators to authenticate without an MFA challenge, including before sensitive export actions.",
+      "impact": "A stolen administrator password could provide access to district-wide student data and administrative workflows without a second factor.",
+      "remediation": "Require phishing-resistant MFA for all district administrators, enforce step-up authentication before sensitive exports, and alert on privileged logins without MFA context."
+    },
+    {
+      "findingID": "cross-district-student-export",
+      "title": "Student export returns sensitive fields across district tenants",
+      "state": "report_ready",
+      "severity": "critical",
+      "confidence": 0.9,
+      "affectedAssets": [
+        "District student export API",
+        "Tenant authorization layer",
+        "Student support and guardian data"
+      ],
+      "evidence": [
+        {
+          "id": "ev-student-export-policy",
+          "path": "evidence/raw/ev-student-export-policy.txt"
+        },
+        {
+          "id": "ev-cross-district-export",
+          "path": "evidence/raw/ev-cross-district-export.txt"
+        },
+        {
+          "id": "ev-export-audit-gap",
+          "path": "evidence/raw/ev-export-audit-gap.txt"
+        }
+      ],
+      "description": "The synthetic export endpoint accepts include=all and returns sensitive student fields from multiple district tenants without enforcing tenant scoping.",
+      "impact": "A compromised or overprivileged district-admin session could export sensitive student support data, guardian contact information, and discipline notes outside the intended tenant boundary.",
+      "remediation": "Enforce tenant scoping server-side, restrict sensitive fields by explicit purpose and role, require step-up approval for bulk exports, and emit elevated audit events for sensitive export activity."
+    }
+  ],
+  "runtime": {
+    "sessionMessages": [
+      {
+        "role": "assistant",
+        "agent": "pentest",
+        "modelID": "gpt-5.5",
+        "providerID": "openai",
+        "cost": 0.82,
+        "tokens": {
+          "input": 2100,
+          "output": 980,
+          "reasoning": 620,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "role": "assistant",
+        "agent": "validator",
+        "modelID": "gpt-5.4-mini",
+        "providerID": "openai",
+        "cost": 0.24,
+        "tokens": {
+          "input": 980,
+          "output": 420,
+          "reasoning": 210,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      }
+    ]
+  },
+  "expected": {
+    "reportableFindings": 2,
+    "evidence": 5,
+    "dashboardIncludes": [
+      "# k12-district-portal-chained-exposure - handoff/complete",
+      "risk: high",
+      "findings: 2 total"
+    ]
+  }
+}

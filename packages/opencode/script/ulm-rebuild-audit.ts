@@ -62,6 +62,25 @@ async function labManifestIDs() {
     .sort()
 }
 
+async function labManifests() {
+  const labsRoot = path.join(repoRoot, "tools", "ulmcode-labs")
+  const entries = await fs.readdir(labsRoot, { withFileTypes: true })
+  return (
+    await Promise.all(
+      entries
+        .filter((entry) => entry.isDirectory())
+        .map(async (entry) => {
+          const manifest = path.join(labsRoot, entry.name, "manifest.json")
+          try {
+            return JSON.parse(await fs.readFile(manifest, "utf8")) as { id?: string; findings?: unknown[] }
+          } catch {
+            return undefined
+          }
+        }),
+    )
+  ).filter((manifest): manifest is { id?: string; findings?: unknown[] } => manifest !== undefined)
+}
+
 async function auditUpstream() {
   const right = await run(["git", "rev-list", "--right-only", "--count", "HEAD...upstream/dev"])
   assert(right === "0", `branch is behind upstream/dev by ${right} commits`)
@@ -176,6 +195,7 @@ async function auditLabCatalog() {
     "minOutlineSectionWords",
   ])
   const labs = await labManifestIDs()
+  const manifests = await labManifests()
   for (const id of [
     "k12-login-mfa-gap",
     "k12-lms-payment-webhook-replay",
@@ -185,6 +205,10 @@ async function auditLabCatalog() {
     assert(labs.includes(id), `lab catalog missing ${id}`)
   }
   assert(labs.length >= 15, `expected at least 15 bundled labs, found ${labs.length}`)
+  assert(
+    manifests.some((manifest) => (manifest.findings?.length ?? 0) >= 2),
+    "expected at least one bundled multi-finding lab",
+  )
   for (const id of labs) {
     assert(await exists(`tools/ulmcode-labs/${id}/service/server.js`), `${id}: service/server.js is missing`)
     assert(await exists(`tools/ulmcode-labs/${id}/docker-compose.yml`), `${id}: docker-compose.yml is missing`)

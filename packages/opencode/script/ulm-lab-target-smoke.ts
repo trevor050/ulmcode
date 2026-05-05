@@ -724,6 +724,94 @@ async function probeThirdPartyIntegrationTokenLeak() {
   return ["target: k12-third-party-integration-token-leak", "third_party_oauth_token_exposure: confirmed"]
 }
 
+async function probeDistrictPortalChainedExposure() {
+  const { proc, base } = await startTarget("k12-district-portal-chained-exposure")
+  const health = await fetch(`${base}/health`).then((res) => res.json()) as { ok?: boolean; lab?: string }
+  if (!health.ok || health.lab !== "k12-district-portal-chained-exposure") fail(proc, "health probe failed")
+
+  const policy = await fetch(`${base}/api/admin/session-policy`).then((res) => res.json()) as {
+    adminMfa?: string
+    stepUpForExports?: boolean
+    labFinding?: string
+  }
+  if (
+    policy.adminMfa !== "optional" ||
+    policy.stepUpForExports ||
+    policy.labFinding !== "district_admin_mfa_optional"
+  ) {
+    fail(proc, "district session policy probe did not confirm optional MFA")
+  }
+
+  const login = await fetch(`${base}/api/admin/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: "district-admin@example.test", password: "lab-password" }),
+  }).then((res) => res.json()) as {
+    authenticated?: boolean
+    mfaRequired?: boolean
+    session?: string
+    labFinding?: string
+  }
+  if (
+    !login.authenticated ||
+    login.mfaRequired ||
+    login.session !== "district-admin-session" ||
+    login.labFinding !== "district_admin_login_without_mfa"
+  ) {
+    fail(proc, "district admin login probe did not confirm login without MFA")
+  }
+
+  const exportPolicy = await fetch(`${base}/api/admin/export-policy`).then((res) => res.json()) as {
+    includeAllAllowed?: boolean
+    tenantFilter?: string
+    sensitiveFields?: string[]
+    labFinding?: string
+  }
+  if (
+    !exportPolicy.includeAllAllowed ||
+    exportPolicy.tenantFilter !== "disabled" ||
+    !exportPolicy.sensitiveFields?.includes("disciplineNote") ||
+    exportPolicy.labFinding !== "student_export_policy_overbroad"
+  ) {
+    fail(proc, "district export policy probe did not confirm overbroad export policy")
+  }
+
+  const exportResult = await fetch(`${base}/api/admin/students/export?include=all`, {
+    headers: { authorization: `Bearer ${login.session}` },
+  }).then((res) => res.json()) as {
+    authorized?: boolean
+    districts?: string[]
+    sensitiveFieldsReturned?: boolean
+    recordCount?: number
+    labFinding?: string
+  }
+  if (
+    !exportResult.authorized ||
+    exportResult.recordCount !== 2 ||
+    !exportResult.districts?.includes("south") ||
+    !exportResult.sensitiveFieldsReturned ||
+    exportResult.labFinding !== "cross_district_student_export"
+  ) {
+    fail(proc, "district export probe did not confirm cross-district sensitive export")
+  }
+
+  const audit = await fetch(`${base}/api/admin/audit/export-events`).then((res) => res.json()) as {
+    elevatedExportAlert?: boolean
+    labFinding?: string
+  }
+  if (audit.elevatedExportAlert || audit.labFinding !== "sensitive_export_audit_gap") {
+    fail(proc, "district export audit probe did not confirm missing elevated audit event")
+  }
+
+  proc.kill()
+  await proc.exited
+  return [
+    "target: k12-district-portal-chained-exposure",
+    "district_admin_login_without_mfa: confirmed",
+    "cross_district_student_export: confirmed",
+  ]
+}
+
 const lines = [
   "ulm_lab_target: ok",
   ...(await probeMfaGap()),
@@ -741,6 +829,7 @@ const lines = [
   ...(await probeLmsPaymentWebhookReplay()),
   ...(await probeFamilyMessagingCrossClassBroadcast()),
   ...(await probeThirdPartyIntegrationTokenLeak()),
+  ...(await probeDistrictPortalChainedExposure()),
 ]
 
 console.log(lines.join("\n"))
