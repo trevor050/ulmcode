@@ -470,6 +470,7 @@ describe("ULM artifact ledger", () => {
     expect(markdown).toContain("health: attention_required")
     expect(markdown).toContain("task-recon-1 running (recon) - Enumerating login surface.")
     expect(markdown).toContain("operation_status")
+    expect(markdown).toContain("task_list operationID=school")
   })
 
   test("marks stale running operations and tasks in resume briefs", async () => {

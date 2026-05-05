@@ -692,6 +692,12 @@ export async function buildOperationResumeBrief(
 export function formatOperationResumeBrief(brief: OperationResumeBrief) {
   const checkpoint = brief.checkpoint
   const background = brief.runtime?.backgroundTasks ?? []
+  const toolHints = [
+    brief.recommendedTools.includes("operation_status") ? `operation_status operationID=${brief.operationID}` : undefined,
+    brief.recommendedTools.includes("operation_resume") ? `operation_resume operationID=${brief.operationID}` : undefined,
+    brief.recommendedTools.includes("task_list") ? `task_list operationID=${brief.operationID}` : undefined,
+    ...background.map((task) => `task_status task_id=${task.id}`),
+  ].filter((item): item is string => item !== undefined)
   return [
     `# Resume ${brief.operationID}`,
     "",
@@ -708,6 +714,9 @@ export function formatOperationResumeBrief(brief: OperationResumeBrief) {
     "",
     "recommended_tools:",
     ...listLines(brief.recommendedTools, "none"),
+    "",
+    "tool_hints:",
+    ...listLines(toolHints, "none"),
     "",
     "next_actions:",
     ...listLines(checkpoint?.nextActions, "none recorded"),

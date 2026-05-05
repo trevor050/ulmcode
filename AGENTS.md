@@ -108,7 +108,7 @@ const table = sqliteTable("session", {
 - Native ULM operation artifacts are written under `.ulmcode/operations/<operation-id>/`.
 - `operation_checkpoint` is the durable heartbeat/stage ledger tool.
 - `operation_plan` writes `plans/operation-plan.json` and `.md`; use it before broad execution to capture ordered phases, actions, success criteria, subagent/no-subagent policy, assumptions, and reporting closeout.
-- `operation_resume` is the first post-compaction/restart recovery tool. It emits health gaps, recommended follow-up tools, active/background tasks, and a continuation prompt before raw JSON inside `<operation_resume_json>` tags. Use `staleAfterMinutes` for unattended runs so old checkpoints and stale background jobs become explicit health gaps.
+- `operation_resume` is the first post-compaction/restart recovery tool. It emits health gaps, recommended follow-up tools, operation-scoped tool hints, active/background tasks, and a continuation prompt before raw JSON inside `<operation_resume_json>` tags. Use `staleAfterMinutes` for unattended runs so old checkpoints and stale background jobs become explicit health gaps.
 - `operation_status` is the post-compaction/interruption resume reader for ledgers, finding counts, reports, runtime budget/task rollups, and recent events. It prints a compact dashboard first, then the full JSON inside `<operation_status_json>` tags.
 - `evidence_record` writes durable evidence JSON plus optional raw text under `evidence/`; findings should cite evidence IDs/paths from this tool rather than chat-only observations.
 - `finding_record` is the evidence-backed finding state tool; validated/report-ready findings require evidence refs.
