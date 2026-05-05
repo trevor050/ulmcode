@@ -107,10 +107,13 @@ async function auditOperationRuntime() {
   const operationResume = await read("packages/opencode/src/tool/operation_resume.ts")
   const todoService = await read("packages/opencode/src/session/todo.ts")
   const commandService = await read("packages/opencode/src/command/index.ts")
+  const configService = await read("packages/opencode/src/config/config.ts")
   const observability = await read("packages/core/src/effect/observability.ts")
   const promptPaste = await read("packages/opencode/src/cli/cmd/tui/component/prompt/paste.ts")
   const projectService = await read("packages/opencode/src/project/project.ts")
   const providerTransform = await read("packages/opencode/src/provider/transform.ts")
+  const sseRepair = await read("packages/opencode/src/provider/sse-repair.ts")
+  const providerService = await read("packages/opencode/src/provider/provider.ts")
   const codexPlugin = await read("packages/opencode/src/plugin/codex.ts")
   const codexTests = await read("packages/opencode/test/plugin/codex.test.ts")
   const pluginTypes = await read("packages/plugin/src/index.ts")
@@ -144,6 +147,7 @@ async function auditOperationRuntime() {
     'todo.status === "in_progress"',
   ])
   requireText("packages/opencode/src/command/index.ts", commandService, ["CLEAR_TASKS", "CLEAR_TASKS_ZH", "todowrite"])
+  requireText("packages/opencode/src/config/config.ts", configService, ["enable_sse_json_repair"])
   requireText("packages/core/src/effect/observability.ts", observability, [
     "OTEL_SERVICE_NAME",
     "service.version",
@@ -165,6 +169,11 @@ async function auditOperationRuntime() {
     "MAX_DEPTH",
     "sanitizeMoonshot",
     "additionalProperties: true",
+  ])
+  requireText("packages/opencode/src/provider/sse-repair.ts", sseRepair, ["repairSSEEvent", "jsonrepair", "text/event-stream"])
+  requireText("packages/opencode/src/provider/provider.ts", providerService, [
+    "cfg.experimental?.enable_sse_json_repair === true",
+    "repairSSE(res)",
   ])
   requireText("packages/opencode/src/plugin/codex.ts", codexPlugin, [
     "requireRefreshToken",
@@ -264,6 +273,7 @@ async function auditProfileRouting() {
     '"model": "openai/gpt-5.5-fast"',
     '"small_model": "openai/gpt-5.4-mini-fast"',
     '"default_agent": "pentest"',
+    '"enable_sse_json_repair": true',
     "__ULMCODE_PROFILE_DIR__/plugins/shell-strategy/shell_strategy.md",
   ])
   requireText("tools/ulmcode-profile/oh-my-openagent.jsonc", omoConfig, [
