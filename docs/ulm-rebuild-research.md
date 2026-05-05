@@ -39,6 +39,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `runtime_summary` records model-call split, token/cost budget rollups, per-agent usage, compaction pressure, repeated fetches, background task state, notes, and canonical artifact paths. If model/token/cost fields are omitted, the tool derives them from the current session's assistant message ledger and persisted child subagent sessions; explicit fields remain manual overrides.
 - `task` supports `background: true`; `task_status` polls running subagents; `task_list` recovers persisted background job metadata.
 - `tools/ulmcode-profile` provides an isolated K-12 pentest profile, compact skill pack, plugin dependency manifest, and Oh My OpenAgent routing file.
+- `bun run --cwd packages/opencode test:ulm-smoke` exercises a synthetic ULM lifecycle outside the unit-test helpers: operation plan, evidence, finding, report outline, final render, runtime summary, final handoff lint, and status dashboard.
 
 ## Current Local OpenCode Inventory
 

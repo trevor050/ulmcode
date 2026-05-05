@@ -19,3 +19,5 @@ grep -q '"oh-my-openagent"' "$PROFILE_DIR/package.json"
 grep -q '"report-writer"' "$PROFILE_DIR/oh-my-openagent.jsonc"
 grep -q 'finalHandoff: true' "$PROFILE_DIR/commands/ulm-final-handoff.md"
 sh -n "$PROFILE_DIR/scripts/install-profile.sh"
+test -f "$PROFILE_DIR/../../packages/opencode/script/ulm-lifecycle-smoke.ts"
+(cd "$PROFILE_DIR/../../packages/opencode" && bun run test:ulm-smoke >/dev/null)

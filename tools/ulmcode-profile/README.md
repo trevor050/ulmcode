@@ -10,6 +10,8 @@ tools/ulmcode-profile/scripts/install-profile.sh
 
 The installer writes `~/.config/ulmcode/opencode.json`, copies compact skills and ULM commands, installs the profile npm manifest, writes both root and `.opencode/` Oh My OpenAgent routing files, and creates `~/.config/ulmcode/ulmcode-launch.sh`.
 
+`test-profile.sh` also runs the package-level ULM lifecycle smoke command, which creates a synthetic operation, records evidence/finding artifacts, renders final HTML/PDF/manifest outputs, writes a runtime summary, and requires final handoff lint to pass.
+
 ## Runtime Defaults
 
 - `pentest` is the default primary agent.
