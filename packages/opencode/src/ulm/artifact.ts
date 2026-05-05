@@ -119,6 +119,19 @@ export type OperationStatusSummary = {
   lastEvents: unknown[]
 }
 
+export type ReportRenderInput = {
+  operationID: string
+  title?: string
+}
+
+export type ReportRenderResult = {
+  operationID: string
+  html: string
+  manifest: string
+  finalDir: string
+  findings: number
+}
+
 export function slug(input: string, fallback: string) {
   const value = input
     .trim()
@@ -215,6 +228,15 @@ function statusMarkdown(record: OperationRecord) {
       : ["- none recorded"]),
     "",
   ].join("\n")
+}
+
+function escapeHtml(input: string) {
+  return input
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;")
 }
 
 export async function writeOperationCheckpoint(worktree: string, input: OperationCheckpointInput) {
@@ -441,5 +463,102 @@ export async function lintReport(
     checkedAt: new Date().toISOString(),
     gaps,
     counts,
+  }
+}
+
+export async function renderReport(worktree: string, input: ReportRenderInput): Promise<ReportRenderResult> {
+  const operationID = slug(input.operationID, "operation")
+  const root = operationPath(worktree, operationID)
+  const operation = await readJson<OperationRecord>(path.join(root, "operation.json"))
+  const findings = await readFindings(root)
+  const reportable = findings.filter((finding) => finding.state === "report_ready" || finding.state === "validated")
+  const title = input.title ?? operation?.objective ?? `ULMCode Operation ${operationID}`
+  const finalDir = path.join(root, "deliverables", "final")
+  const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${escapeHtml(title)}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #111; margin: 48px; line-height: 1.55; }
+    h1, h2, h3 { line-height: 1.15; }
+    h1 { font-size: 34px; margin-bottom: 8px; }
+    h2 { border-top: 1px solid #ccc; padding-top: 24px; margin-top: 32px; }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }
+    th { background: #f2f2f2; }
+    .meta { color: #555; }
+    .finding { page-break-inside: avoid; }
+    @media print { body { margin: 0.65in; } }
+  </style>
+</head>
+<body>
+  <h1>${escapeHtml(title)}</h1>
+  <p class="meta">Operation: ${escapeHtml(operationID)} | Stage: ${escapeHtml(operation?.stage ?? "unknown")} | Status: ${escapeHtml(operation?.status ?? "unknown")}</p>
+  <h2>Executive Summary</h2>
+  <p>${escapeHtml(operation?.summary ?? "No operation summary has been recorded.")}</p>
+  <h2>Scope And Methodology</h2>
+  <p>${escapeHtml(operation?.objective ?? "No objective has been recorded.")}</p>
+  <h2>Findings Summary</h2>
+  <table>
+    <thead><tr><th>ID</th><th>Severity</th><th>Title</th><th>State</th><th>Evidence</th></tr></thead>
+    <tbody>
+      ${reportable
+        .map(
+          (finding) =>
+            `<tr><td>${escapeHtml(finding.findingID)}</td><td>${escapeHtml(finding.severity)}</td><td>${escapeHtml(
+              finding.title,
+            )}</td><td>${escapeHtml(finding.state)}</td><td>${escapeHtml(
+              finding.evidence.map((item) => item.path ?? item.id).join(", "),
+            )}</td></tr>`,
+        )
+        .join("\n")}
+    </tbody>
+  </table>
+  <h2>Detailed Findings</h2>
+  ${
+    reportable.length
+      ? reportable
+          .map(
+            (finding) => `<section class="finding">
+    <h3>${escapeHtml(finding.title)}</h3>
+    <p><strong>Severity:</strong> ${escapeHtml(finding.severity)} | <strong>Confidence:</strong> ${finding.confidence}</p>
+    <p><strong>Affected Assets:</strong> ${escapeHtml(finding.affectedAssets.join(", "))}</p>
+    <p><strong>Description:</strong> ${escapeHtml(finding.description)}</p>
+    <p><strong>Impact:</strong> ${escapeHtml(finding.impact ?? "Not recorded.")}</p>
+    <p><strong>Remediation:</strong> ${escapeHtml(finding.remediation ?? "Not recorded.")}</p>
+    <p><strong>Evidence:</strong> ${escapeHtml(finding.evidence.map((item) => item.path ?? item.id).join(", "))}</p>
+  </section>`,
+          )
+          .join("\n")
+      : "<p>No validated or report-ready findings were recorded.</p>"
+  }
+  <h2>Known Unknowns And Blockers</h2>
+  <ul>${(operation?.blockers?.length ? operation.blockers : ["No blockers recorded."])
+    .map((item) => `<li>${escapeHtml(item)}</li>`)
+    .join("")}</ul>
+</body>
+</html>
+`
+  await fs.mkdir(finalDir, { recursive: true })
+  const htmlPath = path.join(finalDir, "report.html")
+  const manifestPath = path.join(finalDir, "manifest.json")
+  await fs.writeFile(htmlPath, html)
+  await writeJson(manifestPath, {
+    operationID,
+    title,
+    generatedAt: new Date().toISOString(),
+    artifacts: {
+      html: htmlPath,
+      reportOutline: path.join(root, "reports", "report-outline.md"),
+    },
+    findings: reportable.map((finding) => finding.findingID),
+  })
+  return {
+    operationID,
+    html: htmlPath,
+    manifest: manifestPath,
+    finalDir,
+    findings: reportable.length,
   }
 }

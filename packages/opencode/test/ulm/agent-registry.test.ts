@@ -29,5 +29,6 @@ describe("ULM native surface", () => {
       expect(ids).toContain("finding_record")
       expect(ids).toContain("report_lint")
       expect(ids).toContain("report_outline")
+      expect(ids).toContain("report_render")
     }))
 })

@@ -18,6 +18,7 @@ import { OperationStatusTool } from "./operation_status"
 import { FindingRecordTool } from "./finding_record"
 import { ReportLintTool } from "./report_lint"
 import { ReportOutlineTool } from "./report_outline"
+import { ReportRenderTool } from "./report_render"
 import * as Tool from "./tool"
 import { Config } from "@/config/config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
@@ -129,6 +130,7 @@ export const layer: Layer.Layer<
     const findingRecord = yield* FindingRecordTool
     const reportLint = yield* ReportLintTool
     const reportOutline = yield* ReportOutlineTool
+    const reportRender = yield* ReportRenderTool
     const agent = yield* Agent.Service
 
     const state = yield* InstanceState.make<State>(
@@ -228,6 +230,7 @@ export const layer: Layer.Layer<
           findingRecord: Tool.init(findingRecord),
           reportLint: Tool.init(reportLint),
           reportOutline: Tool.init(reportOutline),
+          reportRender: Tool.init(reportRender),
           patch: Tool.init(patchtool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
@@ -256,6 +259,7 @@ export const layer: Layer.Layer<
             tool.findingRecord,
             tool.reportLint,
             tool.reportOutline,
+            tool.reportRender,
             tool.patch,
             ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [tool.lsp] : []),
             ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [tool.plan] : []),

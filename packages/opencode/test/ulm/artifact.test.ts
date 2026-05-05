@@ -5,6 +5,7 @@ import path from "path"
 import {
   lintReport,
   readOperationStatus,
+  renderReport,
   validateFinding,
   writeFinding,
   writeOperationCheckpoint,
@@ -121,5 +122,32 @@ describe("ULM artifact ledger", () => {
     expect(status.operation?.stage).toBe("validation")
     expect(status.findings.total).toBe(0)
     expect(status.lastEvents).toHaveLength(1)
+  })
+
+  test("renders final report deliverables", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "handoff",
+      status: "complete",
+      summary: "Testing identified one report-ready finding.",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "report_ready",
+      severity: "high",
+      confidence: 0.9,
+      affectedAssets: ["IdP"],
+      evidence: [{ id: "ev-1", path: "evidence/raw/idp-policy.json" }],
+      description: "MFA is not enforced for administrators.",
+      impact: "Administrator takeover is more likely after password compromise.",
+      remediation: "Require phishing-resistant MFA for privileged accounts.",
+    })
+
+    const result = await renderReport(worktree, { operationID: "school", title: "Assessment Report" })
+    expect(await fs.readFile(result.html, "utf8")).toContain("Weak MFA coverage")
+    expect(JSON.parse(await fs.readFile(result.manifest, "utf8")).findings).toEqual(["weak-mfa-coverage"])
   })
 })
