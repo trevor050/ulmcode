@@ -109,6 +109,7 @@ async function auditOperationRuntime() {
   const commandService = await read("packages/opencode/src/command/index.ts")
   const observability = await read("packages/core/src/effect/observability.ts")
   const promptPaste = await read("packages/opencode/src/cli/cmd/tui/component/prompt/paste.ts")
+  const projectService = await read("packages/opencode/src/project/project.ts")
   const v2ModelGroup = await read("packages/opencode/src/server/routes/instance/httpapi/groups/v2/model.ts")
   const v2ModelHandler = await read("packages/opencode/src/server/routes/instance/httpapi/handlers/v2/model.ts")
   const sdk = await read("packages/sdk/js/src/v2/gen/sdk.gen.ts")
@@ -147,6 +148,10 @@ async function auditOperationRuntime() {
     "displayOffsetToStringIndex",
     "expandPromptTextParts",
     "Bun.stringWidth",
+  ])
+  requireText("packages/opencode/src/project/project.ts", projectService, [
+    "isBareRepo ? sandbox",
+    "readCachedProjectId(common)",
   ])
   requireText("packages/opencode/src/server/routes/instance/httpapi/groups/v2/model.ts", v2ModelGroup, [
     "v2.model.list",
