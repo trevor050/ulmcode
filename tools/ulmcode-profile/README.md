@@ -12,6 +12,8 @@ The installer writes `~/.config/ulmcode/opencode.json`, copies compact skills an
 
 `test-profile.sh` also runs the package-level ULM lifecycle smoke command, which creates a synthetic operation, records evidence/finding artifacts, renders final HTML/PDF/manifest outputs, writes a runtime summary, and requires final handoff lint to pass.
 
+It also runs the bundled lab replay command against `tools/ulmcode-labs/k12-login-mfa-gap/manifest.json`, proving the manifest-driven replay harness can turn a lab scenario into final ULM artifacts.
+
 ## Runtime Defaults
 
 - `pentest` is the default primary agent.

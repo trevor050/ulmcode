@@ -21,3 +21,5 @@ grep -q 'finalHandoff: true' "$PROFILE_DIR/commands/ulm-final-handoff.md"
 sh -n "$PROFILE_DIR/scripts/install-profile.sh"
 test -f "$PROFILE_DIR/../../packages/opencode/script/ulm-lifecycle-smoke.ts"
 (cd "$PROFILE_DIR/../../packages/opencode" && bun run test:ulm-smoke >/dev/null)
+test -f "$PROFILE_DIR/../../packages/opencode/script/ulm-lab-replay.ts"
+(cd "$PROFILE_DIR/../../packages/opencode" && bun run test:ulm-lab >/dev/null)

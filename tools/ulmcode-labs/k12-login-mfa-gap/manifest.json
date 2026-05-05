@@ -1,0 +1,147 @@
+{
+  "id": "k12-login-mfa-gap",
+  "operationID": "k12-login-mfa-gap",
+  "objective": "Replay a synthetic authorized K-12 login policy assessment with weak privileged MFA coverage.",
+  "assumptions": [
+    "The lab uses synthetic evidence only.",
+    "No real external target is contacted."
+  ],
+  "plan": {
+    "phases": [
+      {
+        "stage": "recon",
+        "objective": "Classify the login policy evidence.",
+        "actions": [
+          "Load the synthetic IdP policy export",
+          "Identify privileged MFA enforcement gaps"
+        ],
+        "successCriteria": [
+          "Policy evidence is recorded with a durable evidence ID"
+        ],
+        "subagents": [
+          "recon"
+        ],
+        "noSubagents": [
+          "scope and authorization decisions stay with the primary operator"
+        ]
+      },
+      {
+        "stage": "validation",
+        "objective": "Promote confirmed policy weakness to a report-ready finding.",
+        "actions": [
+          "Validate the synthetic control gap against the recorded policy export",
+          "Record affected assets and remediation"
+        ],
+        "successCriteria": [
+          "A report-ready finding cites recorded evidence"
+        ],
+        "subagents": [
+          "validator"
+        ],
+        "noSubagents": [
+          "final risk acceptance stays with the primary operator"
+        ]
+      },
+      {
+        "stage": "reporting",
+        "objective": "Render final handoff artifacts.",
+        "actions": [
+          "Run report_lint",
+          "Run report_render",
+          "Run runtime_summary"
+        ],
+        "successCriteria": [
+          "Final handoff lint passes"
+        ],
+        "subagents": [
+          "report-writer"
+        ],
+        "noSubagents": [
+          "client-facing delivery approval is manual"
+        ]
+      }
+    ],
+    "reportingCloseout": [
+      "Run report_lint",
+      "Run report_render",
+      "Run runtime_summary"
+    ]
+  },
+  "evidence": [
+    {
+      "evidenceID": "ev-idp-policy",
+      "title": "Synthetic IdP policy export",
+      "kind": "command_output",
+      "summary": "Privileged MFA is optional in the synthetic policy export.",
+      "command": "idpctl policy export --json",
+      "content": "{\"privilegedMfa\":\"optional\",\"studentMfa\":\"not_applicable\",\"source\":\"lab\"}"
+    }
+  ],
+  "findings": [
+    {
+      "findingID": "weak-privileged-mfa",
+      "title": "Weak privileged MFA coverage",
+      "state": "report_ready",
+      "severity": "high",
+      "confidence": 0.92,
+      "affectedAssets": [
+        "IdP",
+        "Administrator accounts"
+      ],
+      "evidence": [
+        {
+          "id": "ev-idp-policy",
+          "path": "evidence/raw/synthetic-idp-policy-export.txt"
+        }
+      ],
+      "description": "The synthetic policy export shows privileged MFA is optional for administrator accounts.",
+      "impact": "Administrator account compromise is more likely after password theft or phishing.",
+      "remediation": "Require phishing-resistant MFA for all privileged accounts and alert on downgrade attempts."
+    }
+  ],
+  "runtime": {
+    "sessionMessages": [
+      {
+        "role": "assistant",
+        "agent": "pentest",
+        "modelID": "gpt-5.5",
+        "providerID": "openai",
+        "cost": 0.35,
+        "tokens": {
+          "input": 1000,
+          "output": 500,
+          "reasoning": 300,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "role": "assistant",
+        "agent": "report-writer",
+        "modelID": "gpt-5.5",
+        "providerID": "openai",
+        "cost": 0.28,
+        "tokens": {
+          "input": 800,
+          "output": 700,
+          "reasoning": 200,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      }
+    ]
+  },
+  "expected": {
+    "reportableFindings": 1,
+    "evidence": 1,
+    "dashboardIncludes": [
+      "# k12-login-mfa-gap - handoff/complete",
+      "risk: high",
+      "findings: 1 total"
+    ]
+  }
+}
