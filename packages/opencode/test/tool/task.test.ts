@@ -10,6 +10,7 @@ import type { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
+import { TaskListTool } from "@/tool/task_list"
 import { TaskStatusTool } from "@/tool/task_status"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
@@ -558,6 +559,43 @@ describe("tool.task", () => {
 
       expect(polledAfterReload.metadata.state).toBe("completed")
       expect(polledAfterReload.output).toContain("persisted status output")
+    }),
+  )
+
+  it.instance("task_list enumerates persisted background jobs", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const storage = yield* Storage.Service
+      const jobs = yield* BackgroundJob.Service
+      const id = `tool_${crypto.randomUUID().replaceAll("-", "")}`
+      yield* Effect.addFinalizer(() => storage.remove(["background_job", id]).pipe(Effect.ignore))
+      yield* jobs.start({
+        id,
+        type: "task",
+        title: "enumerable background task",
+        run: Effect.succeed("listed output"),
+      })
+      expect((yield* jobs.wait({ id })).info?.status).toBe("completed")
+
+      const tool = yield* TaskListTool
+      const def = yield* tool.init()
+      const listed = yield* def.execute(
+        { status: "completed" },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: {},
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(listed.output).toContain(id)
+      expect(listed.output).toContain("enumerable background task")
+      expect(listed.metadata.count).toBeGreaterThanOrEqual(1)
     }),
   )
 
