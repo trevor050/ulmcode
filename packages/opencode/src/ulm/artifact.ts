@@ -90,6 +90,18 @@ export type ReportLintResult = {
   }
 }
 
+export type ReportOutlineInput = {
+  operationID: string
+  audience?: "technical" | "executive" | "board" | "mixed"
+  targetPages?: number
+  includeAppendix?: boolean
+}
+
+export type ReportLintOptions = {
+  requireReport?: boolean
+  minWords?: number
+}
+
 export function slug(input: string, fallback: string) {
   const value = input
     .trim()
@@ -229,7 +241,94 @@ export async function writeFinding(worktree: string, input: FindingInput) {
   return { root, record }
 }
 
-export async function lintReport(worktree: string, operationID: string): Promise<ReportLintResult> {
+async function readFindings(root: string) {
+  let findings: FindingRecord[] = []
+  try {
+    const files = await fs.readdir(path.join(root, "findings"))
+    findings = (
+      await Promise.all(
+        files
+          .filter((file) => file.endsWith(".json"))
+          .map((file) => readJson<FindingRecord>(path.join(root, "findings", file))),
+      )
+    ).filter((item): item is FindingRecord => Boolean(item))
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+  }
+  return findings
+}
+
+async function readReportText(root: string) {
+  for (const candidate of ["report.md", "report.html"]) {
+    try {
+      return await fs.readFile(path.join(root, "reports", candidate), "utf8")
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+    }
+  }
+  return undefined
+}
+
+export async function writeReportOutline(worktree: string, input: ReportOutlineInput) {
+  const root = operationPath(worktree, input.operationID)
+  const operation = await readJson<OperationRecord>(path.join(root, "operation.json"))
+  const findings = await readFindings(root)
+  const reportReady = findings.filter((item) => item.state === "report_ready" || item.state === "validated")
+  const targetPages = input.targetPages ?? 40
+  const audience = input.audience ?? "mixed"
+  const appendix = input.includeAppendix ?? true
+  const sections: Array<[string, number]> = [
+    ["Executive Summary", 3],
+    ["Scope, Authorization, and Methodology", 3],
+    ["Environment Overview", 4],
+    ["Attack Path Narrative", 5],
+    ["Findings Detail", Math.max(10, reportReady.length * 3)],
+    ["Risk Register and Prioritized Roadmap", 4],
+    ["Validation Limits and Known Unknowns", 2],
+    ["Evidence Map", 3],
+    ...(appendix ? [["Appendix: Raw Evidence Index", 6] as [string, number]] : []),
+  ]
+  const allocated = sections.reduce((sum, [, pages]) => sum + pages, 0)
+  const multiplier = targetPages > allocated ? targetPages / allocated : 1
+  const body = [
+    `# Report Outline: ${operation?.operationID ?? slug(input.operationID, "operation")}`,
+    "",
+    `- audience: ${audience}`,
+    `- target_pages: ${targetPages}`,
+    `- objective: ${operation?.objective ?? "unknown"}`,
+    `- reportable_findings: ${reportReady.length}`,
+    "",
+    "## Page Budget",
+    ...sections.map(([title, pages]) => `- ${title}: ${Math.max(1, Math.round(pages * multiplier))} pages`),
+    "",
+    "## Required Finding Coverage",
+    ...(reportReady.length
+      ? reportReady.map(
+          (finding) =>
+            `- ${finding.findingID}: ${finding.title} (${finding.severity}) - evidence: ${finding.evidence
+              .map((item) => item.id)
+              .join(", ")}`,
+        )
+      : ["- No validated/report-ready findings yet. Report writer must not invent them."]),
+    "",
+    "## Report Writer Contract",
+    "- Every finding section must include affected assets, evidence, impact, remediation, confidence, and validation limits.",
+    "- Every evidence claim must cite a stored evidence id or path.",
+    "- Sparse sections should be expanded with methodology, observations, validation detail, and remediation sequencing, not filler.",
+    "- Known unknowns and rejected findings belong in the report when they affect decision-making.",
+    "",
+  ].join("\n")
+  const file = path.join(root, "reports", "report-outline.md")
+  await fs.mkdir(path.dirname(file), { recursive: true })
+  await fs.writeFile(file, body)
+  return { root, file, targetPages, reportReady: reportReady.length }
+}
+
+export async function lintReport(
+  worktree: string,
+  operationID: string,
+  options: ReportLintOptions = {},
+): Promise<ReportLintResult> {
   const root = operationPath(worktree, operationID)
   const gaps: string[] = []
   const operation = await readJson<OperationRecord>(path.join(root, "operation.json"))
@@ -238,17 +337,7 @@ export async function lintReport(worktree: string, operationID: string): Promise
     gaps.push("handoff stage must be marked complete before final report handoff")
   }
 
-  let findings: FindingRecord[] = []
-  try {
-    const files = await fs.readdir(path.join(root, "findings"))
-    findings = (
-      await Promise.all(
-        files.filter((file) => file.endsWith(".json")).map((file) => readJson<FindingRecord>(path.join(root, "findings", file))),
-      )
-    ).filter((item): item is FindingRecord => Boolean(item))
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
-  }
+  const findings = await readFindings(root)
 
   for (const finding of findings) {
     for (const gap of validateFinding(finding)) gaps.push(`${finding.findingID}: ${gap}`)
@@ -265,6 +354,13 @@ export async function lintReport(worktree: string, operationID: string): Promise
   }
   if (counts.findings === 0) gaps.push("no findings were recorded")
   if (counts.reportReady === 0 && counts.validated === 0) gaps.push("no validated or report-ready findings exist")
+
+  const report = await readReportText(root)
+  if (options.requireReport && !report) gaps.push("reports/report.md or reports/report.html is required")
+  if (report && options.minWords) {
+    const words = report.trim().split(/\s+/).filter(Boolean).length
+    if (words < options.minWords) gaps.push(`report is too sparse: ${words} words, expected at least ${options.minWords}`)
+  }
 
   return {
     operationID: slug(operationID, "operation"),

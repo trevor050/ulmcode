@@ -6,6 +6,12 @@ import { lintReport } from "@/ulm/artifact"
 
 export const Parameters = Schema.Struct({
   operationID: Schema.String,
+  requireReport: Schema.optional(Schema.Boolean).annotate({
+    description: "Require reports/report.md or reports/report.html to exist.",
+  }),
+  minWords: Schema.optional(Schema.Number).annotate({
+    description: "Minimum word count for the report when a report file exists.",
+  }),
 })
 
 type Metadata = {
@@ -21,7 +27,12 @@ export const ReportLintTool = Tool.define<typeof Parameters, Metadata, never>(
     parameters: Parameters,
     execute: (params: Schema.Schema.Type<typeof Parameters>) =>
       Effect.gen(function* () {
-        const result = yield* Effect.tryPromise(() => lintReport(Instance.worktree, params.operationID)).pipe(Effect.orDie)
+        const result = yield* Effect.tryPromise(() =>
+          lintReport(Instance.worktree, params.operationID, {
+            requireReport: params.requireReport,
+            minWords: params.minWords,
+          }),
+        ).pipe(Effect.orDie)
         return {
           title: result.ok ? "report lint passed" : `${result.gaps.length} report gaps`,
           output: JSON.stringify(result, null, 2),
