@@ -133,6 +133,7 @@ const table = sqliteTable("session", {
 - Core process handles resolve exit state on `exit` as well as `close`, and SIGKILL escalation does not wait forever for a close event. Preserve this, shell cleanup can otherwise hang after orphaned pipe holders.
 - `Npm.add` resolves cached non-registry plugin specs from the cached install root `package.json`; do not assume `npm-package-arg` can infer names for tarballs/git/file specs.
 - `/global/event` has a shared 1024-event SSE replay ring in `server/sse-replay.ts` / `server/global-event-replay.ts`. Both legacy Hono and Effect HttpApi global event routes should continue honoring `Last-Event-ID`; do not regress reconnect catch-up for long operations.
+- ULM artifact writers await best-effort `operation.updated` publication after durable writes. Keep that ordering; fire-and-forget publication can race persistent TUI dashboards and tests after enriched event payloads read disk state.
 - Config caching tracks file fingerprints for global and instance config. Keep `Config.invalidate()` usable without an instance context; instance config should refresh from fingerprints on the next read.
 - TUI plugins can intercept prompt keydown events with `api.input.intercept(handler)`. Handlers return `true` to consume the event and are automatically disposed with the plugin scope.
 - Queued user messages should be cancelled with `session.deleteMessage(..., force: "true")`, not `session.abort`; abort is for the active run and should not be used to discard a queued prompt.

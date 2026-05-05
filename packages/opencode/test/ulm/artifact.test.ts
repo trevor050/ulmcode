@@ -810,6 +810,43 @@ describe("ULM artifact ledger", () => {
     expect(record.usage.byAgent.recon.costUSD).toBe(0.15)
   })
 
+  test("computes remaining runtime budget from derived usage", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "validation",
+      status: "running",
+      summary: "Validation is still running.",
+    })
+
+    const result = await writeRuntimeSummary(worktree, {
+      operationID: "school",
+      usage: { budgetUSD: 1 },
+      sessionMessages: [
+        {
+          role: "assistant",
+          agent: "validator",
+          modelID: "gpt-5.5",
+          providerID: "openai",
+          cost: 0.37,
+          tokens: {
+            input: 500,
+            output: 150,
+            reasoning: 100,
+            cache: { read: 0, write: 0 },
+          },
+        },
+      ],
+    })
+
+    const record = JSON.parse(await fs.readFile(result.json, "utf8"))
+    expect(record.usage.costUSD).toBe(0.37)
+    expect(record.usage.budgetUSD).toBe(1)
+    expect(record.usage.remainingUSD).toBe(0.63)
+    expect(await fs.readFile(result.markdown, "utf8")).toContain("- remaining_usd: 0.63")
+  })
+
   test("derives compaction pressure from session messages when compaction is not provided", async () => {
     const worktree = await tmpdir()
     await writeOperationCheckpoint(worktree, {
