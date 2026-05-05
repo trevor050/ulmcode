@@ -3,6 +3,8 @@ import {
   parseJwtClaims,
   extractAccountIdFromClaims,
   extractAccountId,
+  refreshTokenOrPrevious,
+  requireRefreshToken,
   type IdTokenClaims,
 } from "../../src/plugin/codex"
 
@@ -118,6 +120,42 @@ describe("plugin.codex", () => {
           refresh_token: "rt",
         }),
       ).toBe("acc-123")
+    })
+  })
+
+  describe("refresh token handling", () => {
+    test("requires refresh_token for initial OAuth success payloads", () => {
+      expect(() =>
+        requireRefreshToken({
+          id_token: createTestJwt({}),
+          access_token: createTestJwt({}),
+        }),
+      ).toThrow("Token response missing refresh_token")
+    })
+
+    test("preserves existing refresh_token when a refresh response omits one", () => {
+      expect(
+        refreshTokenOrPrevious(
+          {
+            id_token: createTestJwt({}),
+            access_token: createTestJwt({}),
+          },
+          "rt_existing",
+        ),
+      ).toBe("rt_existing")
+    })
+
+    test("uses rotated refresh_token when a refresh response includes one", () => {
+      expect(
+        refreshTokenOrPrevious(
+          {
+            id_token: createTestJwt({}),
+            access_token: createTestJwt({}),
+            refresh_token: "rt_rotated",
+          },
+          "rt_existing",
+        ),
+      ).toBe("rt_rotated")
     })
   })
 })

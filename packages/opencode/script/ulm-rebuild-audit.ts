@@ -111,6 +111,8 @@ async function auditOperationRuntime() {
   const promptPaste = await read("packages/opencode/src/cli/cmd/tui/component/prompt/paste.ts")
   const projectService = await read("packages/opencode/src/project/project.ts")
   const providerTransform = await read("packages/opencode/src/provider/transform.ts")
+  const codexPlugin = await read("packages/opencode/src/plugin/codex.ts")
+  const codexTests = await read("packages/opencode/test/plugin/codex.test.ts")
   const v2ModelGroup = await read("packages/opencode/src/server/routes/instance/httpapi/groups/v2/model.ts")
   const v2ModelHandler = await read("packages/opencode/src/server/routes/instance/httpapi/handlers/v2/model.ts")
   const sdk = await read("packages/sdk/js/src/v2/gen/sdk.gen.ts")
@@ -158,6 +160,16 @@ async function auditOperationRuntime() {
     "providerExecuted",
     "isClientToolPart",
     "tool-result",
+  ])
+  requireText("packages/opencode/src/plugin/codex.ts", codexPlugin, [
+    "requireRefreshToken",
+    "refreshTokenOrPrevious",
+    "currentAuth.refresh = refresh",
+  ])
+  requireText("packages/opencode/test/plugin/codex.test.ts", codexTests, [
+    "preserves existing refresh_token",
+    "uses rotated refresh_token",
+    "requires refresh_token for initial OAuth",
   ])
   requireText("packages/opencode/src/server/routes/instance/httpapi/groups/v2/model.ts", v2ModelGroup, [
     "v2.model.list",
