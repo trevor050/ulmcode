@@ -1,0 +1,6 @@
+services:
+  k12-lti-shared-secret-leak:
+    build:
+      context: ./service
+    ports:
+      - "8087:8080"

