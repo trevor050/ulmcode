@@ -112,5 +112,6 @@ const table = sqliteTable("session", {
 - `report_outline` creates a long-form report page budget before drafting; `report_lint` can require a report file and minimum word count to catch sparse deliverables.
 - `report_render` publishes print-ready HTML and a manifest to `.ulmcode/operations/<id>/deliverables/final/`.
 - `task` supports `background: true`; poll the returned `task_id` with `task_status` for long-running subagent lanes.
+- Background task metadata is persisted under storage key `background_job/<task_id>` so `task_status` can recover terminal output after a service reload; cancellation must interrupt the captured fiber before/while marking the job cancelled.
 - The bundled isolated profile lives in `tools/ulmcode-profile`; validate it with `tools/ulmcode-profile/test-profile.sh`.
 - Invoking the package as `ulmcode` sets `OPENCODE_APP_NAME=ulmcode`; core global paths then use the `ulmcode` app name.
