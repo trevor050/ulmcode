@@ -806,14 +806,20 @@ function resumeToolRecommendations(status: OperationStatusSummary, gaps: string[
 
 function resumeContinuationPrompt(status: OperationStatusSummary, recommendedTools: string[]) {
   const operation = status.operation
+  const hasRestartableStaleTasks = (status.runtime?.backgroundTasks ?? []).some(
+    (task) => task.status === "stale" && task.restartArgs,
+  )
+  const recovery = hasRestartableStaleTasks
+    ? ` Restart restartable stale lanes first with operation_resume operationID=${status.operationID} recoverStaleTasks=true or operation_recover operationID=${status.operationID}; do not launch duplicate replacement lanes until recovery is checked.`
+    : ""
   if (!operation) {
     return `Resume ULMCode operation ${status.operationID}. First recreate or inspect the missing operation checkpoint, then use ${recommendedTools.join(
       ", ",
-    )}.`
+    )}.${recovery}`
   }
   const nextActions = operation.nextActions.length ? operation.nextActions.join("; ") : "no next actions recorded"
   const blockers = operation.blockers.length ? ` Blockers: ${operation.blockers.join("; ")}.` : ""
-  return `Resume ULMCode operation ${status.operationID} from ${operation.stage}/${operation.status}. First use ${recommendedTools[0]} to refresh disk state, then continue: ${nextActions}.${blockers}`
+  return `Resume ULMCode operation ${status.operationID} from ${operation.stage}/${operation.status}. First use ${recommendedTools[0]} to refresh disk state, then continue: ${nextActions}.${recovery}${blockers}`
 }
 
 export async function buildOperationResumeBrief(

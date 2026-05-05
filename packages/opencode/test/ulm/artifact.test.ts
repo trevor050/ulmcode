@@ -793,6 +793,7 @@ describe("ULM artifact ledger", () => {
     expect(formatOperationResumeBrief(brief)).toContain("operation_recover operationID=school")
     expect(formatOperationResumeBrief(brief)).toContain("task_restart task_id=task-recon-1")
     expect(formatOperationResumeBrief(brief)).toContain('"prompt":"resume recon lane"')
+    expect(brief.continuationPrompt).toContain("recoverStaleTasks=true")
   })
 
   test("marks exhausted operation budgets in resume briefs", async () => {
