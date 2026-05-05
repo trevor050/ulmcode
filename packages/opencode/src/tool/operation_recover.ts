@@ -1,8 +1,10 @@
 import * as Tool from "./tool"
 import DESCRIPTION from "./operation_recover.txt"
 import { BackgroundJob } from "@/background/job"
+import { Instance } from "@/project/instance"
 import { taskRestartArgs } from "./task_restart_args"
 import { TaskTool } from "./task"
+import { readOperationStatus, writeOperationCheckpoint } from "@/ulm/artifact"
 import { Effect, Schema } from "effect"
 
 export const Parameters = Schema.Struct({
@@ -20,11 +22,25 @@ type Metadata = {
   restarted: number
   skipped: number
   dryRun: boolean
+  checkpointUpdated: boolean
 }
 
 function operationID(job: BackgroundJob.Info) {
   const value = job.metadata?.operationID
   return typeof value === "string" && value ? value : undefined
+}
+
+function metadataWorktree(job: BackgroundJob.Info) {
+  const value = job.metadata?.worktree
+  return typeof value === "string" && value ? value : undefined
+}
+
+function currentWorktree() {
+  try {
+    return Instance.worktree
+  } catch {
+    return undefined
+  }
 }
 
 function recoverableStatus(status: BackgroundJob.Status) {
@@ -59,6 +75,32 @@ export const OperationRecoverTool = Tool.define(
               results.push([`task_id: ${item.job.id}`, `previous_status: ${item.job.status}`, restarted.output].join("\n"))
             }
           }
+          const checkpointUpdated = yield* Effect.gen(function* () {
+            if (dryRun || restartable.length === 0) return false
+            const worktree = currentWorktree() ?? restartable.map((item) => metadataWorktree(item.job)).find(Boolean)
+            if (!worktree) return false
+            const status = yield* Effect.tryPromise(() => readOperationStatus(worktree, params.operationID)).pipe(
+              Effect.catch(() => Effect.succeed(undefined)),
+            )
+            if (!status?.operation) return false
+            const operation = status.operation
+            yield* Effect.tryPromise(() =>
+              writeOperationCheckpoint(worktree, {
+                operationID: operation.operationID,
+                objective: operation.objective,
+                stage: operation.stage,
+                status: "running",
+                summary: `Recovered ${restartable.length} background lane${restartable.length === 1 ? "" : "s"} for continued operation execution.`,
+                nextActions: [...new Set([...operation.nextActions, "Poll recovered background lanes with task_status"])],
+                blockers: operation.blockers,
+                riskLevel: operation.riskLevel,
+                activeTasks: [...new Set([...operation.activeTasks, ...restartable.map((item) => item.job.id)])],
+                evidence: operation.evidence,
+                notes: operation.notes,
+              }),
+            ).pipe(Effect.orDie)
+            return true
+          })
 
           return {
             title: dryRun ? `Recover ${params.operationID}: dry run` : `Recover ${params.operationID}`,
@@ -73,13 +115,16 @@ export const OperationRecoverTool = Tool.define(
                       ].join("\n"),
                     )
                     .join("\n\n")
-                : results.join("\n\n")
+                : [results.join("\n\n"), checkpointUpdated ? "operation_checkpoint: updated" : undefined]
+                    .filter((item): item is string => item !== undefined)
+                    .join("\n\n")
               : "No restartable background tasks found for this operation.",
             metadata: {
               operationID: params.operationID,
               restarted: dryRun ? 0 : restartable.length,
               skipped,
               dryRun,
+              checkpointUpdated,
             },
           }
         }).pipe(Effect.orDie),

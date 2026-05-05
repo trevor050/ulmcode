@@ -16,11 +16,12 @@ import { TaskRestartTool } from "@/tool/task_restart"
 import { TaskStatusTool } from "@/tool/task_status"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
-import { disposeAllInstances } from "../fixture/fixture"
+import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { Bus } from "@/bus"
 import { BackgroundJob } from "@/background/job"
 import { Storage } from "@/storage/storage"
+import { readOperationStatus, writeOperationCheckpoint } from "@/ulm/artifact"
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -776,6 +777,18 @@ describe("tool.task", () => {
       const jobs = yield* BackgroundJob.Service
       const schoolTask = yield* sessions.create({ parentID: chat.id, title: "school stale lane" })
       const otherTask = yield* sessions.create({ parentID: chat.id, title: "other stale lane" })
+      const worktree = (yield* TestInstance).directory
+      yield* Effect.promise(() =>
+        writeOperationCheckpoint(worktree, {
+          operationID: "school",
+          objective: "Recover stale school validation lanes",
+          stage: "validation",
+          status: "running",
+          summary: "Validation lane was running before reload.",
+          nextActions: ["Recover stale validation lane"],
+          activeTasks: [schoolTask.id],
+        }),
+      )
       yield* Effect.addFinalizer(() =>
         Effect.all([schoolTask.id, otherTask.id].map((id) => storage.remove(["background_job", id]).pipe(Effect.ignore))).pipe(
           Effect.ignore,
@@ -793,6 +806,7 @@ describe("tool.task", () => {
           description: "school stale lane",
           prompt: "recover school validation",
           operationID: "school",
+          worktree,
         },
         run: Effect.never,
       })
@@ -832,16 +846,21 @@ describe("tool.task", () => {
         )
         const school = yield* jobsAfterReload.wait({ id: schoolTask.id })
         const other = yield* jobsAfterReload.get(otherTask.id)
-        return { result, school, other }
+        const status = yield* Effect.promise(() => readOperationStatus(worktree, "school"))
+        return { result, school, other, status }
       }).pipe(Effect.provide(Layer.fresh(BackgroundJob.layer)))
 
       expect(recovered.result.metadata.operationID).toBe("school")
       expect(recovered.result.metadata.restarted).toBe(1)
       expect(recovered.result.metadata.skipped).toBe(0)
+      expect(recovered.result.metadata.checkpointUpdated).toBe(true)
       expect(recovered.result.output).toContain(`task_id: ${schoolTask.id}`)
+      expect(recovered.result.output).toContain("operation_checkpoint: updated")
       expect(recovered.school.info?.status).toBe("completed")
       expect(recovered.school.info?.output).toBe("recovered school output")
       expect(recovered.other?.status).toBe("stale")
+      expect(recovered.status.operation?.summary).toContain("Recovered 1 background lane")
+      expect(recovered.status.operation?.nextActions).toContain("Poll recovered background lanes with task_status")
     }),
   )
 

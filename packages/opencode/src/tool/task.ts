@@ -12,6 +12,7 @@ import { TuiEvent } from "@/cli/cmd/tui/event"
 import { BackgroundJob } from "@/background/job"
 import { Cause, Effect, Exit, Option, Schema, Scope, Stream } from "effect"
 import { EffectBridge } from "@/effect/bridge"
+import { Instance } from "@/project/instance"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -74,6 +75,14 @@ function backgroundMessage(input: { sessionID: SessionID; description: string; s
 function errorText(error: unknown) {
   if (error instanceof Error) return error.message
   return String(error)
+}
+
+function currentWorktree() {
+  try {
+    return Instance.worktree
+  } catch {
+    return undefined
+  }
 }
 
 export const TaskTool = Tool.define(
@@ -255,6 +264,7 @@ export const TaskTool = Tool.define(
           yield* resumeParent({ userID: message.info.id, state }).pipe(Effect.ignore, Effect.forkIn(scope))
         })
 
+        const worktree = currentWorktree()
         yield* jobs.start({
           id: nextSession.id,
           type: id,
@@ -268,6 +278,7 @@ export const TaskTool = Tool.define(
             prompt: params.prompt,
             ...(params.command ? { command: params.command } : {}),
             ...(params.operationID ? { operationID: params.operationID } : {}),
+            ...(worktree ? { worktree } : {}),
           },
           run: runTask().pipe(
             Effect.matchCauseEffect({
