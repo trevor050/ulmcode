@@ -107,6 +107,7 @@ async function auditOperationRuntime() {
   const operationResume = await read("packages/opencode/src/tool/operation_resume.ts")
   const todoService = await read("packages/opencode/src/session/todo.ts")
   const commandService = await read("packages/opencode/src/command/index.ts")
+  const observability = await read("packages/core/src/effect/observability.ts")
   const v2ModelGroup = await read("packages/opencode/src/server/routes/instance/httpapi/groups/v2/model.ts")
   const v2ModelHandler = await read("packages/opencode/src/server/routes/instance/httpapi/handlers/v2/model.ts")
   const sdk = await read("packages/sdk/js/src/v2/gen/sdk.gen.ts")
@@ -136,6 +137,11 @@ async function auditOperationRuntime() {
     'todo.status === "in_progress"',
   ])
   requireText("packages/opencode/src/command/index.ts", commandService, ["CLEAR_TASKS", "CLEAR_TASKS_ZH", "todowrite"])
+  requireText("packages/core/src/effect/observability.ts", observability, [
+    "OTEL_SERVICE_NAME",
+    "service.version",
+    "deployment.environment.name",
+  ])
   requireText("packages/opencode/src/server/routes/instance/httpapi/groups/v2/model.ts", v2ModelGroup, [
     "v2.model.list",
     "InstanceContextMiddleware",
