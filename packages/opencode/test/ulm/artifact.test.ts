@@ -322,6 +322,70 @@ describe("ULM artifact ledger", () => {
     expect(status.runtime?.backgroundTasks?.[0]?.id).toBe("task-recon-1")
   })
 
+  test("derives runtime usage from assistant messages when usage is not provided", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "validation",
+      status: "running",
+      summary: "Validation is still running.",
+    })
+
+    const result = await writeRuntimeSummary(worktree, {
+      operationID: "school",
+      sessionMessages: [
+        {
+          role: "assistant",
+          agent: "pentest",
+          modelID: "gpt-5.5",
+          providerID: "openai",
+          cost: 1.25,
+          tokens: {
+            input: 3000,
+            output: 1200,
+            reasoning: 500,
+            cache: { read: 200, write: 100 },
+          },
+        },
+        {
+          role: "assistant",
+          agent: "recon",
+          modelID: "gpt-5.4-mini",
+          providerID: "openai",
+          cost: 0.15,
+          tokens: {
+            total: 1800,
+            input: 1000,
+            output: 600,
+            reasoning: 100,
+            cache: { read: 100, write: 0 },
+          },
+        },
+        {
+          role: "user",
+          agent: "user",
+        },
+      ],
+      compaction: { count: 0, pressure: "low" },
+    })
+
+    const record = JSON.parse(await fs.readFile(result.json, "utf8"))
+    expect(record.modelCalls.total).toBe(2)
+    expect(record.modelCalls.byModel["gpt-5.5"]).toBe(1)
+    expect(record.modelCalls.byModel["gpt-5.4-mini"]).toBe(1)
+    expect(record.usage.inputTokens).toBe(4000)
+    expect(record.usage.outputTokens).toBe(1800)
+    expect(record.usage.reasoningTokens).toBe(600)
+    expect(record.usage.cacheReadTokens).toBe(300)
+    expect(record.usage.cacheWriteTokens).toBe(100)
+    expect(record.usage.totalTokens).toBe(6500)
+    expect(record.usage.costUSD).toBe(1.4)
+    expect(record.usage.byAgent.pentest.calls).toBe(1)
+    expect(record.usage.byAgent.pentest.totalTokens).toBe(4700)
+    expect(record.usage.byAgent.recon.costUSD).toBe(0.15)
+  })
+
   test("writes execution-ready operation plans with subagent policy", async () => {
     const worktree = await tmpdir()
     await writeOperationCheckpoint(worktree, {

@@ -68,9 +68,15 @@ export const RuntimeSummaryTool = Tool.define<typeof Parameters, Metadata, never
   Effect.succeed({
     description: DESCRIPTION,
     parameters: Parameters,
-    execute: (params: Schema.Schema.Type<typeof Parameters>) =>
+    execute: (params: Schema.Schema.Type<typeof Parameters>, ctx) =>
       Effect.gen(function* () {
-        const result = yield* Effect.tryPromise(() => writeRuntimeSummary(Instance.worktree, params)).pipe(Effect.orDie)
+        const worktree = Instance.worktree
+        const result = yield* Effect.tryPromise(() =>
+          writeRuntimeSummary(worktree, {
+            ...params,
+            sessionMessages: ctx.messages.map((message) => message.info),
+          }),
+        ).pipe(Effect.orDie)
         return {
           title: "Wrote ULMCode runtime summary",
           output: [

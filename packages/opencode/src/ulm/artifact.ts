@@ -191,6 +191,7 @@ export type ReportRenderResult = {
 
 export type RuntimeSummaryInput = {
   operationID: string
+  sessionMessages?: RuntimeUsageMessage[]
   modelCalls?: {
     total?: number
     byModel?: Record<string, number>
@@ -230,6 +231,24 @@ export type RuntimeSummaryInput = {
     summary?: string
   }>
   notes?: string[]
+}
+
+export type RuntimeUsageMessage = {
+  role?: string
+  agent?: string
+  modelID?: string
+  providerID?: string
+  cost?: number
+  tokens?: {
+    total?: number
+    input?: number
+    output?: number
+    reasoning?: number
+    cache?: {
+      read?: number
+      write?: number
+    }
+  }
 }
 
 export type RuntimeSummaryRecord = RuntimeSummaryInput & {
@@ -350,6 +369,83 @@ async function exists(file: string) {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return false
     throw error
+  }
+}
+
+function finite(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0
+}
+
+function roundUsage(value: number) {
+  return Number(value.toFixed(6))
+}
+
+function derivedTotal(tokens: RuntimeUsageMessage["tokens"]) {
+  if (!tokens) return 0
+  if (tokens.total !== undefined) return finite(tokens.total)
+  return finite(tokens.input) + finite(tokens.output) + finite(tokens.reasoning)
+}
+
+export function summarizeRuntimeUsage(messages: RuntimeUsageMessage[]) {
+  const modelCalls: NonNullable<RuntimeSummaryInput["modelCalls"]> = { total: 0, byModel: {} }
+  const usage: NonNullable<RuntimeSummaryInput["usage"]> = {
+    inputTokens: 0,
+    outputTokens: 0,
+    reasoningTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    totalTokens: 0,
+    costUSD: 0,
+    byAgent: {},
+  }
+
+  for (const message of messages) {
+    if (message.role !== "assistant") continue
+    const model = message.modelID ?? "unknown"
+    const agent = message.agent ?? "unknown"
+    const tokens = message.tokens
+    const totalTokens = derivedTotal(tokens)
+    const cost = finite(message.cost)
+
+    modelCalls.total = (modelCalls.total ?? 0) + 1
+    modelCalls.byModel![model] = (modelCalls.byModel![model] ?? 0) + 1
+    usage.inputTokens = (usage.inputTokens ?? 0) + finite(tokens?.input)
+    usage.outputTokens = (usage.outputTokens ?? 0) + finite(tokens?.output)
+    usage.reasoningTokens = (usage.reasoningTokens ?? 0) + finite(tokens?.reasoning)
+    usage.cacheReadTokens = (usage.cacheReadTokens ?? 0) + finite(tokens?.cache?.read)
+    usage.cacheWriteTokens = (usage.cacheWriteTokens ?? 0) + finite(tokens?.cache?.write)
+    usage.totalTokens = (usage.totalTokens ?? 0) + totalTokens
+    usage.costUSD = roundUsage((usage.costUSD ?? 0) + cost)
+
+    const agentUsage = usage.byAgent![agent] ?? { calls: 0, totalTokens: 0, costUSD: 0 }
+    usage.byAgent![agent] = {
+      calls: (agentUsage.calls ?? 0) + 1,
+      totalTokens: (agentUsage.totalTokens ?? 0) + totalTokens,
+      costUSD: roundUsage((agentUsage.costUSD ?? 0) + cost),
+    }
+  }
+
+  return { modelCalls, usage }
+}
+
+function mergeRuntimeUsage(input: RuntimeSummaryInput) {
+  const derived = input.sessionMessages?.length ? summarizeRuntimeUsage(input.sessionMessages) : undefined
+  if (!derived) return input
+  const usage = input.usage
+    ? {
+        ...derived.usage,
+        ...input.usage,
+        byAgent: {
+          ...(derived.usage.byAgent ?? {}),
+          ...(input.usage.byAgent ?? {}),
+        },
+      }
+    : derived.usage
+
+  return {
+    ...input,
+    modelCalls: input.modelCalls ?? derived.modelCalls,
+    usage,
   }
 }
 
@@ -955,12 +1051,14 @@ export async function writeRuntimeSummary(
   worktree: string,
   input: RuntimeSummaryInput,
 ): Promise<RuntimeSummaryResult> {
-  const operationID = slug(input.operationID, "operation")
+  const resolvedInput = mergeRuntimeUsage(input)
+  const operationID = slug(resolvedInput.operationID, "operation")
   const root = operationPath(worktree, operationID)
   const operation = await readJson<OperationRecord>(path.join(root, "operation.json"))
   const finalDir = path.join(root, "deliverables")
   const record: RuntimeSummaryRecord = {
-    ...input,
+    ...resolvedInput,
+    sessionMessages: undefined,
     operationID,
     generatedAt: new Date().toISOString(),
     operation: operation
