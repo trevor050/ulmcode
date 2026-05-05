@@ -1,0 +1,15 @@
+{
+  "id": "provider-tool-chaos-contract",
+  "capability": "provider_tool_chaos",
+  "tier": "fast",
+  "objective": "Track provider, stream, and tool-failure recovery as explicit harness coverage.",
+  "checks": [
+    "SSE repair helper exists",
+    "Provider service can enable SSE repair",
+    "Task runtime summaries record tool usage"
+  ],
+  "acceptance": [
+    "The scorecard reports provider_tool_chaos coverage",
+    "Chaos variants can add malformed stream and outage drills under the same capability"
+  ]
+}

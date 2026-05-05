@@ -73,3 +73,5 @@ test -f "$PROFILE_DIR/../../packages/opencode/script/ulm-lab-target-smoke.ts"
 (cd "$PROFILE_DIR/../../packages/opencode" && bun run test:ulm-lab-target >/dev/null)
 test -f "$PROFILE_DIR/../../packages/opencode/script/ulm-rebuild-audit.ts"
 (cd "$PROFILE_DIR/../../packages/opencode" && bun run test:ulm-rebuild-audit >/dev/null)
+test -f "$PROFILE_DIR/../../packages/opencode/script/ulm-harness-run.ts"
+(cd "$PROFILE_DIR/../../packages/opencode" && bun run test:ulm-harness:fast >/dev/null)

@@ -1,0 +1,17 @@
+{
+  "requiredCapabilities": [
+    "model_loop_eval",
+    "restart_resume_chaos",
+    "installed_profile_runtime",
+    "ulm_ci_gate",
+    "longitudinal_scorecard",
+    "prompt_agent_regression",
+    "provider_tool_chaos",
+    "dashboard_api_e2e",
+    "deep_lab_target",
+    "adversarial_report_quality"
+  ],
+  "minimumPassingScenarios": 10,
+  "maximumMissingCapabilities": 0,
+  "maximumFailedScenarios": 0
+}

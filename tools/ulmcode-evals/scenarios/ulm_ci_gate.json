@@ -1,0 +1,15 @@
+{
+  "id": "ulm-ci-contract",
+  "capability": "ulm_ci_gate",
+  "tier": "fast",
+  "objective": "Make ULM-specific verification a named CI surface instead of an incidental package test.",
+  "checks": [
+    "Dedicated ULM harness workflow exists",
+    "Profile verifier runs in CI",
+    "Fast harness runs in CI"
+  ],
+  "acceptance": [
+    "The scorecard reports ulm_ci_gate coverage",
+    "The workflow uploads harness artifacts on failure"
+  ]
+}

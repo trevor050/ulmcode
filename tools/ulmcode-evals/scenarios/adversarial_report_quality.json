@@ -1,0 +1,15 @@
+{
+  "id": "adversarial-report-quality-contract",
+  "capability": "adversarial_report_quality",
+  "tier": "fast",
+  "objective": "Block weak final reports by making sparse and missing-section lint behavior required harness coverage.",
+  "checks": [
+    "Report lint supports outline section requirements",
+    "Report lint supports final handoff mode",
+    "Artifact tests cover sparse and missing outline sections"
+  ],
+  "acceptance": [
+    "The scorecard reports adversarial_report_quality coverage",
+    "Sparse or unsupported report regressions fail before final handoff"
+  ]
+}
