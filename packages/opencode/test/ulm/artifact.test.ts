@@ -894,6 +894,62 @@ describe("ULM artifact ledger", () => {
     expect(await fs.readFile(gate.files.markdown, "utf8")).toContain("validation has no validated")
   })
 
+  test("stage gates block exhausted runtime budgets", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "validation",
+      status: "running",
+      summary: "Validation is reviewing evidence.",
+      nextActions: ["Continue validation"],
+    })
+    await writeOperationPlan(worktree, {
+      operationID: "school",
+      phases: [
+        {
+          stage: "validation",
+          objective: "Validate candidate weaknesses.",
+          actions: ["Check evidence", "Promote confirmed findings"],
+          successCriteria: ["Confirmed findings cite evidence"],
+          subagents: ["validator"],
+          noSubagents: ["risk acceptance stays with primary operator"],
+        },
+      ],
+      reportingCloseout: ["Run report_lint", "Run report_render", "Run runtime_summary"],
+    })
+    await writeEvidence(worktree, {
+      operationID: "school",
+      evidenceID: "ev-1",
+      title: "Policy export",
+      kind: "file",
+      summary: "MFA policy export.",
+      path: "evidence/raw/policy.json",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "report_ready",
+      severity: "high",
+      confidence: 0.9,
+      affectedAssets: ["IdP"],
+      evidence: [{ id: "ev-1", path: "evidence/raw/policy.json" }],
+      description: "MFA is not enforced for administrators.",
+      impact: "Administrator takeover is more likely after password compromise.",
+      remediation: "Require phishing-resistant MFA for privileged accounts.",
+    })
+    await writeRuntimeSummary(worktree, {
+      operationID: "school",
+      usage: { totalTokens: 12_500, costUSD: 12.4, budgetUSD: 10, remainingUSD: -2.4 },
+    })
+
+    const gate = await buildOperationStageGate(worktree, "school", { stage: "validation" })
+
+    expect(gate.ok).toBe(false)
+    expect(gate.gaps).toContain("runtime budget exhausted: spent $12.4 of $10")
+    expect(gate.recommendedTools).toContain("runtime_summary")
+  })
+
   test("handoff stage gate forwards strict outline section gates", async () => {
     const worktree = await tmpdir()
     await writeOperationCheckpoint(worktree, {

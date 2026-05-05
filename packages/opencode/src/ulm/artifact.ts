@@ -726,18 +726,12 @@ function minutesSince(value: string | undefined, now: Date) {
   return Math.max(0, Math.floor((now.getTime() - time) / 60_000))
 }
 
-function resumeGaps(status: OperationStatusSummary, options: OperationResumeOptions = {}) {
+function runtimeHealthGaps(status: OperationStatusSummary) {
   const gaps: string[] = []
-  const operation = status.operation
   const usage = status.runtime?.usage
   const costUSD = usage?.costUSD
   const budgetUSD = usage?.budgetUSD
   const remainingUSD = usage?.remainingUSD
-  const staleAfter = options.staleAfterMinutes
-  const now = new Date(options.now ?? Date.now())
-  if (!operation) gaps.push("operation checkpoint is missing")
-  if (!status.plans.operation) gaps.push("operation plan is missing")
-  if (!status.runtimeSummary) gaps.push("runtime summary is missing")
   if (
     budgetUSD !== undefined &&
     costUSD !== undefined &&
@@ -752,6 +746,18 @@ function resumeGaps(status: OperationStatusSummary, options: OperationResumeOpti
       gaps.push(`runtime usage blind spot recorded: ${note}`)
     }
   }
+  return gaps
+}
+
+function resumeGaps(status: OperationStatusSummary, options: OperationResumeOptions = {}) {
+  const gaps: string[] = []
+  const operation = status.operation
+  const staleAfter = options.staleAfterMinutes
+  const now = new Date(options.now ?? Date.now())
+  if (!operation) gaps.push("operation checkpoint is missing")
+  if (!status.plans.operation) gaps.push("operation plan is missing")
+  if (!status.runtimeSummary) gaps.push("runtime summary is missing")
+  gaps.push(...runtimeHealthGaps(status))
   if (operation?.status === "running" && staleAfter !== undefined) {
     const age = minutesSince(operation.time.updated, now)
     if (age !== undefined && age >= staleAfter) {
@@ -1077,7 +1083,16 @@ function stageGateToolRecommendations(stage: Stage, gaps: string[]) {
   if (gaps.some((gap) => gap.includes("outline"))) tools.push("report_outline")
   if (gaps.some((gap) => gap.includes("draft report") || gap.includes("report section"))) tools.push("report_lint")
   if (gaps.some((gap) => gap.includes("deliverables/final"))) tools.push("report_render")
-  if (gaps.some((gap) => gap.includes("runtime-summary"))) tools.push("runtime_summary")
+  if (
+    gaps.some(
+      (gap) =>
+        gap.includes("runtime-summary") ||
+        gap.startsWith("runtime budget exhausted") ||
+        gap.startsWith("runtime usage blind spot recorded"),
+    )
+  ) {
+    tools.push("runtime_summary")
+  }
   if (stage === "handoff") tools.push("operation_audit")
   return unique(tools)
 }
@@ -1100,6 +1115,7 @@ async function stageGateGaps(
         : "operation is blocked without recorded blockers",
     )
   }
+  gaps.push(...runtimeHealthGaps(status))
   if (stage === "recon" && status.evidence.total === 0) gaps.push("recon has no recorded evidence")
   if (stage === "mapping") {
     if (status.evidence.total === 0) gaps.push("mapping has no recorded evidence")
