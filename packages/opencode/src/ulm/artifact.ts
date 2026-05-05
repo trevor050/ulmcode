@@ -115,6 +115,7 @@ export type OperationStatusSummary = {
     outline: boolean
     markdown: boolean
     html: boolean
+    pdf: boolean
   }
   lastEvents: unknown[]
 }
@@ -507,7 +508,10 @@ export async function readOperationStatus(
     reports: {
       outline: await exists(path.join(root, "reports", "report-outline.md")),
       markdown: await exists(path.join(root, "reports", "report.md")),
-      html: await exists(path.join(root, "reports", "report.html")),
+      html:
+        (await exists(path.join(root, "reports", "report.html"))) ||
+        (await exists(path.join(root, "deliverables", "final", "report.html"))),
+      pdf: await exists(path.join(root, "deliverables", "final", "report.pdf")),
     },
     lastEvents: await readJsonlTail(path.join(root, "events.jsonl"), options.eventLimit ?? 5),
   }
