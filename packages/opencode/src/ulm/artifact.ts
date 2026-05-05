@@ -164,6 +164,9 @@ export type ReportLintOptions = {
   minWords?: number
   requireOutlineBudget?: boolean
   minOutlineWordsPerPage?: number
+  requireOutlineSections?: boolean
+  minOutlineSectionWords?: number
+  minOutlineSectionWordsPerPage?: number
   requireFindingSections?: boolean
   minFindingWords?: number
   finalHandoff?: boolean
@@ -947,7 +950,12 @@ function lintToolRecommendations(gaps: string[]) {
   if (gaps.some((gap) => gap.includes("evidence"))) {
     tools.push("evidence_record")
   }
-  if (gaps.some((gap) => gap.includes("outline budget") || gap.includes("report-outline.md"))) {
+  if (
+    gaps.some(
+      (gap) =>
+        gap.includes("outline budget") || gap.includes("report-outline.md") || gap.includes("outline section"),
+    )
+  ) {
     tools.push("report_outline")
   }
   return tools
@@ -991,6 +999,9 @@ export async function buildOperationAudit(
     minWords: options.minWords,
     requireOutlineBudget: options.requireOutlineBudget,
     minOutlineWordsPerPage: options.minOutlineWordsPerPage,
+    requireOutlineSections: options.requireOutlineSections,
+    minOutlineSectionWords: options.minOutlineSectionWords,
+    minOutlineSectionWordsPerPage: options.minOutlineSectionWordsPerPage,
     requireFindingSections: options.requireFindingSections,
     minFindingWords: options.minFindingWords,
     finalHandoff: options.finalHandoff ?? true,
@@ -1654,6 +1665,59 @@ function outlineTargetPages(outline: string | undefined) {
   return Number.isFinite(pages) && pages > 0 ? pages : undefined
 }
 
+type OutlineSectionBudget = {
+  title: string
+  pages: number
+}
+
+function normalizeSectionTitle(value: string) {
+  return plainReportText(value)
+    .toLowerCase()
+    .replace(/&amp;/g, "and")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+}
+
+function outlineSectionBudgets(outline: string | undefined): OutlineSectionBudget[] {
+  if (!outline) return []
+  const pageBudgetHeading = /^##\s+Page Budget\s*$/im.exec(outline)
+  if (pageBudgetHeading?.index === undefined) return []
+  const pageBudgetStart = pageBudgetHeading.index + pageBudgetHeading[0].length
+  const rest = outline.slice(pageBudgetStart)
+  const nextHeading = /^##\s+/im.exec(rest)
+  const pageBudget = nextHeading ? rest.slice(0, nextHeading.index) : rest
+  if (!pageBudget) return []
+  const sections: OutlineSectionBudget[] = []
+  for (const match of pageBudget.matchAll(/^\s*-\s+(.+):\s*(\d+)\s+pages?\b/gim)) {
+    const title = match[1]?.trim()
+    const pages = Number.parseInt(match[2] ?? "", 10)
+    if (title && Number.isFinite(pages) && pages > 0) sections.push({ title, pages })
+  }
+  return sections
+}
+
+function reportSectionForOutlineTitle(report: string, title: string) {
+  const target = normalizeSectionTitle(title)
+  if (!target) return undefined
+  const headings: Array<{ index: number; end: number; text: string }> = []
+
+  for (const match of report.matchAll(/^#{1,6}\s+(.+)$/gim)) {
+    if (match.index === undefined) continue
+    headings.push({ index: match.index, end: match.index + match[0].length, text: match[1] ?? "" })
+  }
+  for (const match of report.matchAll(/<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gim)) {
+    if (match.index === undefined) continue
+    headings.push({ index: match.index, end: match.index + match[0].length, text: match[2] ?? "" })
+  }
+
+  headings.sort((left, right) => left.index - right.index)
+  const headingIndex = headings.findIndex((heading) => normalizeSectionTitle(heading.text).includes(target))
+  if (headingIndex < 0) return undefined
+  const heading = headings[headingIndex]!
+  const next = headings.find((candidate, index) => index > headingIndex && candidate.index > heading.index)
+  return plainReportText(report.slice(heading.end, next?.index ?? report.length))
+}
+
 export async function writeReportOutline(worktree: string, input: ReportOutlineInput) {
   const root = operationPath(worktree, input.operationID)
   const operation = await readJson<OperationRecord>(path.join(root, "operation.json"))
@@ -1908,19 +1972,44 @@ export async function lintReport(
     const words = wordCount(plainReportText(report))
     if (words < options.minWords) gaps.push(`report is too sparse: ${words} words, expected at least ${options.minWords}`)
   }
-  if (options.requireOutlineBudget || options.minOutlineWordsPerPage) {
+  const requireOutlineBudget = options.requireOutlineBudget || options.minOutlineWordsPerPage
+  const requireOutlineSections =
+    options.requireOutlineSections || options.minOutlineSectionWords || options.minOutlineSectionWordsPerPage
+  if (requireOutlineBudget || requireOutlineSections) {
     const outline = await readText(path.join(root, "reports", "report-outline.md"))
-    const targetPages = outlineTargetPages(outline)
-    if (!targetPages) gaps.push("reports/report-outline.md with target_pages is required for outline budget lint")
-    if (!report) gaps.push("report is required for outline budget lint")
-    if (report && targetPages) {
-      const words = wordCount(plainReportText(report))
-      const wordsPerPage = options.minOutlineWordsPerPage ?? 300
-      const expected = targetPages * wordsPerPage
-      if (words < expected) {
-        gaps.push(
-          `report misses outline budget: ${words} words, expected at least ${expected} for ${targetPages} target pages`,
-        )
+    if (requireOutlineBudget) {
+      const targetPages = outlineTargetPages(outline)
+      if (!targetPages) gaps.push("reports/report-outline.md with target_pages is required for outline budget lint")
+      if (!report) gaps.push("report is required for outline budget lint")
+      if (report && targetPages) {
+        const words = wordCount(plainReportText(report))
+        const wordsPerPage = options.minOutlineWordsPerPage ?? 300
+        const expected = targetPages * wordsPerPage
+        if (words < expected) {
+          gaps.push(
+            `report misses outline budget: ${words} words, expected at least ${expected} for ${targetPages} target pages`,
+          )
+        }
+      }
+    }
+    if (requireOutlineSections) {
+      const sections = outlineSectionBudgets(outline)
+      if (!sections.length) gaps.push("reports/report-outline.md Page Budget sections are required for section lint")
+      if (!report) gaps.push("report is required for outline section lint")
+      if (report) {
+        for (const section of sections) {
+          const reportSection = reportSectionForOutlineTitle(report, section.title)
+          if (!reportSection) {
+            gaps.push(`${section.title}: outline section is missing`)
+            continue
+          }
+          const words = wordCount(reportSection)
+          const expected =
+            options.minOutlineSectionWords ?? section.pages * (options.minOutlineSectionWordsPerPage ?? 120)
+          if (words < expected) {
+            gaps.push(`${section.title}: outline section is too sparse: ${words} words, expected at least ${expected}`)
+          }
+        }
       }
     }
   }

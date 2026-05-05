@@ -6,12 +6,12 @@ Close out the ULMCode operation named below.
 
 Process:
 1. call `operation_status`
-2. call `report_lint` with `finalHandoff: true`
+2. call `report_lint` with `finalHandoff: true`; for long reports also pass `requireOutlineBudget: true`, `requireOutlineSections: true`, and `requireFindingSections: true`
 3. if lint gaps exist, fix the missing artifacts or explain the blocker
 4. call `report_render` if final deliverables are missing or stale
 5. call `runtime_summary`
-6. call `report_lint` with `finalHandoff: true` again
-7. call `operation_audit` with `finalHandoff: true`
+6. call `report_lint` with the same final/outline/finding gates again
+7. call `operation_audit` with `finalHandoff: true` and the same outline/finding gates used for final lint
 8. summarize final paths in `deliverables/final/`, audit paths in `deliverables/`, and any residual risk
 
 Do not claim final handoff is ready unless the second `report_lint` and `operation_audit` both return ok.

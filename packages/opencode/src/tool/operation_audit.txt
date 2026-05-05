@@ -2,4 +2,4 @@ Run a ULMCode operation audit and write durable audit artifacts.
 
 Use this before a long-running operation is handed to a human, after an interruption, or when a final handoff claims to be ready. The audit combines the restart health check from `operation_resume` with final handoff linting from `report_lint`, then writes machine-readable and markdown audit files under `.ulmcode/operations/<operation-id>/deliverables/`.
 
-The audit is intentionally strict by default. It requires the operation to be in `handoff/complete`, requires operation-plan, report, rendered deliverables, and runtime-summary artifacts, and returns recommended follow-up tools for every gap.
+The audit is intentionally strict by default. It requires the operation to be in `handoff/complete`, requires operation-plan, report, rendered deliverables, and runtime-summary artifacts, and returns recommended follow-up tools for every gap. For substantial reports, pass the same outline and finding gates you used with `report_lint`, including `requireOutlineBudget`, `requireOutlineSections`, and `requireFindingSections`.
