@@ -25,6 +25,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `#25683` ACP end-turn event draining matters for external harness protocol correctness; adopted locally.
 - `#25670` MCP reconnect-on-transport-error matters for long-running remote tools; adopted locally.
 - `#25694` InstanceRef propagation through `ScopedCache.get` matters for context-safe long-running services; adopted locally.
+- `#25672` process kill escalation and shell exit-code hang fixes matter for unattended cleanup; adopted locally against current `tool/shell.ts`.
 - `#25778` config cache refresh matters for live profile/plugin edits during long runs; adopted locally with direct `getGlobal()` refresh coverage.
 
 ## External Cyber Harness Ideas
@@ -56,6 +57,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - Malformed input for a valid tool is now routed through `invalid` with `type: "known_tool_invalid_input"` and an explicit retry hint, while nonexistent tools use `type: "unknown_tool"`.
 - Anthropic/Vertex-Anthropic normalization now keeps `tool-call` and `tool-result` parts paired when splitting assistant text away from tool blocks, preventing provider rejections about orphaned tool_use IDs.
 - MCP tool execution now classifies transport/stale-session failures, reconnects the named MCP client through a single-flight reconnect path, and retries the tool call once with the fresh client while preserving auth and business errors.
+- Core process spawning now resolves exit waiters on `exit` as well as `close`, stops waiting after forced SIGKILL escalation, and shell execution treats exit-code read errors as terminal instead of hanging the race.
 - `/global/event` now assigns SSE ids to recoverable global events and honors `Last-Event-ID` on reconnect through a 1024-event replay ring, so browser/network reconnects can catch up on missed global operation updates.
 - Config file fingerprints are tracked for cached global and instance config. Changed project/global config files force reload on the next config read; `Config.invalidate()` remains safe outside an instance context.
 - TUI plugins can now register `api.input.intercept(handler)` to observe prompt keydown events before built-in handling. Returning `true` consumes the event, and plugin-scoped registrations clean up on deactivate/dispose.
