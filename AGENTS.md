@@ -127,6 +127,7 @@ const table = sqliteTable("session", {
 - Config caching tracks file fingerprints for global and instance config. Keep `Config.invalidate()` usable without an instance context; instance config should refresh from fingerprints on the next read.
 - TUI plugins can intercept prompt keydown events with `api.input.intercept(handler)`. Handlers return `true` to consume the event and are automatically disposed with the plugin scope.
 - Session cost rollups are served by `Session.cost` / `GET /session/:id/cost`; they include self spend plus all descendant subagent sessions and should 404 for missing root sessions.
+- Session processor does a proactive pre-stream context estimate when compaction is enabled and the model reports a context limit; this prevents subagent runs from hanging on providers that silently accept oversized prompts.
 - The bundled isolated profile lives in `tools/ulmcode-profile`; validate it with `tools/ulmcode-profile/test-profile.sh`. Its installer copies compact skills, ULM slash commands, plugin `package.json`, and both root/`.opencode` Oh My OpenAgent routing files.
 - `bun run --cwd packages/opencode test:ulm-skills` validates bundled ULM profile skills and commands for frontmatter, placeholder-free content, and references to durable ULM tools.
 - `bun run --cwd packages/opencode test:ulm-smoke` runs the synthetic ULM lifecycle smoke: plan, evidence, finding, outline, validation stage gate, final checkpoint, report render, runtime summary, operation audit, final handoff lint, and status/dashboard verification.

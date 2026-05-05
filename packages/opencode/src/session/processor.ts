@@ -10,6 +10,7 @@ import * as Session from "./session"
 import { LLM } from "./llm"
 import { MessageV2 } from "./message-v2"
 import { isOverflow } from "./overflow"
+import { Token } from "@/util/token"
 import { PartID } from "./schema"
 import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
@@ -677,6 +678,22 @@ export const layer: Layer.Layer<
         ctx.shouldBreak = cfg.experimental?.continue_loop_on_deny !== true
 
         return yield* Effect.gen(function* () {
+          const contextLimit = input.model.limit.context
+          if (!ctx.assistantMessage.summary && cfg.compaction?.auto !== false && contextLimit > 0) {
+            const preStreamPayload = JSON.stringify([...(streamInput.system ?? []), ...streamInput.messages])
+            const preStreamTokens = Token.estimate(preStreamPayload)
+            const compactionThreshold = Math.floor(contextLimit * 0.85)
+            if (preStreamTokens >= compactionThreshold) {
+              ctx.needsCompaction = true
+              slog.info("proactive compaction triggered", {
+                estimatedTokens: preStreamTokens,
+                threshold: compactionThreshold,
+                contextLimit,
+              })
+              return "compact"
+            }
+          }
+
           yield* Effect.gen(function* () {
             ctx.currentText = undefined
             ctx.reasoningMap = {}
