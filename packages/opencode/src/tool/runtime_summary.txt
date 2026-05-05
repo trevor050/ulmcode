@@ -1,3 +1,3 @@
 Write a durable runtime handoff summary for a ULMCode operation.
 
-Use this during long autonomous runs, before compaction-heavy handoffs, and before final delivery. The summary records model-call split, compaction pressure, repeated fetches, active background tasks, notes, and canonical artifact paths under `.ulmcode/operations/<operation>/deliverables/`.
+Use this during long autonomous runs, before compaction-heavy handoffs, and before final delivery. The summary records model-call split, token/cost budget rollups, compaction pressure, repeated fetches, active background tasks, notes, and canonical artifact paths under `.ulmcode/operations/<operation>/deliverables/`.

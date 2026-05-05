@@ -9,6 +9,25 @@ const ModelCalls = Schema.Struct({
   byModel: Schema.optional(Schema.Record(Schema.String, Schema.Number)),
 })
 
+const AgentUsage = Schema.Struct({
+  calls: Schema.optional(Schema.Number),
+  totalTokens: Schema.optional(Schema.Number),
+  costUSD: Schema.optional(Schema.Number),
+})
+
+const Usage = Schema.Struct({
+  inputTokens: Schema.optional(Schema.Number),
+  outputTokens: Schema.optional(Schema.Number),
+  reasoningTokens: Schema.optional(Schema.Number),
+  cacheReadTokens: Schema.optional(Schema.Number),
+  cacheWriteTokens: Schema.optional(Schema.Number),
+  totalTokens: Schema.optional(Schema.Number),
+  costUSD: Schema.optional(Schema.Number),
+  budgetUSD: Schema.optional(Schema.Number),
+  remainingUSD: Schema.optional(Schema.Number),
+  byAgent: Schema.optional(Schema.Record(Schema.String, AgentUsage)),
+})
+
 const Compaction = Schema.Struct({
   count: Schema.optional(Schema.Number),
   pressure: Schema.optional(Schema.Literals(["low", "moderate", "high", "critical"])),
@@ -30,6 +49,7 @@ const BackgroundTask = Schema.Struct({
 export const Parameters = Schema.Struct({
   operationID: Schema.String,
   modelCalls: Schema.optional(ModelCalls),
+  usage: Schema.optional(Usage),
   compaction: Schema.optional(Compaction),
   fetches: Schema.optional(Fetches),
   backgroundTasks: Schema.optional(Schema.mutable(Schema.Array(BackgroundTask))),

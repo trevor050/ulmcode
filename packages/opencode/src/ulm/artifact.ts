@@ -186,6 +186,25 @@ export type RuntimeSummaryInput = {
     total?: number
     byModel?: Record<string, number>
   }
+  usage?: {
+    inputTokens?: number
+    outputTokens?: number
+    reasoningTokens?: number
+    cacheReadTokens?: number
+    cacheWriteTokens?: number
+    totalTokens?: number
+    costUSD?: number
+    budgetUSD?: number
+    remainingUSD?: number
+    byAgent?: Record<
+      string,
+      {
+        calls?: number
+        totalTokens?: number
+        costUSD?: number
+      }
+    >
+  }
   compaction?: {
     count?: number
     pressure?: "low" | "moderate" | "high" | "critical"
@@ -357,6 +376,7 @@ function statusMarkdown(record: OperationRecord) {
 
 function runtimeSummaryMarkdown(record: RuntimeSummaryRecord) {
   const byModel = Object.entries(record.modelCalls?.byModel ?? {})
+  const byAgent = Object.entries(record.usage?.byAgent ?? {})
   const tasks = record.backgroundTasks ?? []
   return [
     `# Runtime Summary: ${record.operationID}`,
@@ -365,6 +385,10 @@ function runtimeSummaryMarkdown(record: RuntimeSummaryRecord) {
     `- stage: ${record.operation?.stage ?? "unknown"}`,
     `- status: ${record.operation?.status ?? "unknown"}`,
     `- model_calls_total: ${record.modelCalls?.total ?? 0}`,
+    `- tokens_total: ${record.usage?.totalTokens ?? 0}`,
+    `- cost_usd: ${record.usage?.costUSD ?? 0}`,
+    `- budget_usd: ${record.usage?.budgetUSD ?? "not set"}`,
+    `- remaining_usd: ${record.usage?.remainingUSD ?? "not set"}`,
     `- compactions: ${record.compaction?.count ?? 0}`,
     `- compaction_pressure: ${record.compaction?.pressure ?? "low"}`,
     `- fetches_total: ${record.fetches?.total ?? 0}`,
@@ -392,6 +416,19 @@ function runtimeSummaryMarkdown(record: RuntimeSummaryRecord) {
     "",
     "## Model Split",
     ...(byModel.length ? byModel.map(([model, count]) => `- ${model}: ${count}`) : ["- none recorded"]),
+    "",
+    "## Token And Cost Split",
+    `- input_tokens: ${record.usage?.inputTokens ?? 0}`,
+    `- output_tokens: ${record.usage?.outputTokens ?? 0}`,
+    `- reasoning_tokens: ${record.usage?.reasoningTokens ?? 0}`,
+    `- cache_read_tokens: ${record.usage?.cacheReadTokens ?? 0}`,
+    `- cache_write_tokens: ${record.usage?.cacheWriteTokens ?? 0}`,
+    ...(byAgent.length
+      ? byAgent.map(
+          ([agent, usage]) =>
+            `- ${agent}: ${usage.calls ?? 0} calls, ${usage.totalTokens ?? 0} tokens, $${usage.costUSD ?? 0}`,
+        )
+      : ["- agent split: none recorded"]),
     "",
     "## Repeated Fetch Targets",
     ...(record.fetches?.repeatedTargets?.length

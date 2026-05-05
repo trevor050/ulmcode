@@ -289,6 +289,19 @@ describe("ULM artifact ledger", () => {
     const result = await writeRuntimeSummary(worktree, {
       operationID: "school",
       modelCalls: { total: 12, byModel: { "gpt-5.5": 8, "gpt-5.4-mini": 4 } },
+      usage: {
+        inputTokens: 9000,
+        outputTokens: 3000,
+        reasoningTokens: 1500,
+        totalTokens: 13500,
+        costUSD: 2.45,
+        budgetUSD: 10,
+        remainingUSD: 7.55,
+        byAgent: {
+          pentest: { calls: 5, totalTokens: 8000, costUSD: 1.6 },
+          recon: { calls: 7, totalTokens: 5500, costUSD: 0.85 },
+        },
+      },
       compaction: { count: 2, pressure: "moderate", lastSummary: "Earlier recon was compacted." },
       fetches: { total: 9, repeatedTargets: ["https://example.edu/login"] },
       backgroundTasks: [
@@ -298,7 +311,11 @@ describe("ULM artifact ledger", () => {
     })
 
     expect(JSON.parse(await fs.readFile(result.json, "utf8")).modelCalls.byModel["gpt-5.5"]).toBe(8)
-    expect(await fs.readFile(result.markdown, "utf8")).toContain("task-recon-1")
+    expect(JSON.parse(await fs.readFile(result.json, "utf8")).usage.byAgent.pentest.totalTokens).toBe(8000)
+    const markdown = await fs.readFile(result.markdown, "utf8")
+    expect(markdown).toContain("task-recon-1")
+    expect(markdown).toContain("tokens_total: 13500")
+    expect(markdown).toContain("pentest: 5 calls, 8000 tokens, $1.6")
     expect((await readOperationStatus(worktree, "school")).runtimeSummary).toBe(true)
   })
 
