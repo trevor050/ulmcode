@@ -5,6 +5,7 @@ import { Effect, Schema } from "effect"
 
 export const Parameters = Schema.Struct({
   status: Schema.optional(Schema.Literals(["running", "completed", "error", "cancelled", "stale"])),
+  operationID: Schema.optional(Schema.String),
 })
 
 type Metadata = {
@@ -21,7 +22,11 @@ export const TaskListTool = Tool.define<typeof Parameters, Metadata, BackgroundJ
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>) =>
         Effect.gen(function* () {
-          const items = (yield* jobs.list()).filter((job) => !params.status || job.status === params.status)
+          const items = (yield* jobs.list()).filter((job) => {
+            if (params.status && job.status !== params.status) return false
+            if (params.operationID && job.metadata?.operationID !== params.operationID) return false
+            return true
+          })
           return {
             title: `${items.length} background task${items.length === 1 ? "" : "s"}`,
             output: items.length
@@ -31,6 +36,7 @@ export const TaskListTool = Tool.define<typeof Parameters, Metadata, BackgroundJ
                       `task_id: ${job.id}`,
                       `type: ${job.type}`,
                       `status: ${job.status}`,
+                      ...(typeof job.metadata?.operationID === "string" ? [`operation_id: ${job.metadata.operationID}`] : []),
                       ...(job.title ? [`title: ${job.title}`] : []),
                       ...(job.completedAt ? [`completed_at: ${new Date(job.completedAt).toISOString()}`] : []),
                     ].join("\n"),

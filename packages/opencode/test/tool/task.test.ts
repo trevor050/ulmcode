@@ -471,6 +471,7 @@ describe("tool.task", () => {
           prompt: "look into the cache key path",
           subagent_type: "general",
           background: true,
+          operationID: "school",
         },
         ctx,
       )
@@ -479,6 +480,7 @@ describe("tool.task", () => {
 
       const waited = yield* jobs.wait({ id: result.metadata.sessionId })
       expect(waited.info?.status).toBe("completed")
+      expect(waited.info?.metadata?.operationID).toBe("school")
 
       const polled = yield* statusDef.execute({ task_id: result.metadata.sessionId }, ctx)
       expect(polled.output).toContain("state: completed")
@@ -642,6 +644,58 @@ describe("tool.task", () => {
       expect(listed.output).toContain(id)
       expect(listed.output).toContain("enumerable background task")
       expect(listed.metadata.count).toBeGreaterThanOrEqual(1)
+    }),
+  )
+
+  it.instance("task_list filters persisted background jobs by operationID", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const storage = yield* Storage.Service
+      const jobs = yield* BackgroundJob.Service
+      const operationID = `school-${crypto.randomUUID()}`
+      const schoolID = `tool_${crypto.randomUUID().replaceAll("-", "")}`
+      const otherID = `tool_${crypto.randomUUID().replaceAll("-", "")}`
+      yield* Effect.addFinalizer(() =>
+        Effect.all([schoolID, otherID].map((id) => storage.remove(["background_job", id]).pipe(Effect.ignore))).pipe(
+          Effect.asVoid,
+        ),
+      )
+      yield* jobs.start({
+        id: schoolID,
+        type: "task",
+        title: "school background task",
+        metadata: { operationID },
+        run: Effect.succeed("school output"),
+      })
+      yield* jobs.start({
+        id: otherID,
+        type: "task",
+        title: "other background task",
+        metadata: { operationID: "other" },
+        run: Effect.succeed("other output"),
+      })
+      expect((yield* jobs.wait({ id: schoolID })).info?.status).toBe("completed")
+      expect((yield* jobs.wait({ id: otherID })).info?.status).toBe("completed")
+
+      const tool = yield* TaskListTool
+      const def = yield* tool.init()
+      const listed = yield* def.execute(
+        { operationID },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: {},
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(listed.output).toContain(schoolID)
+      expect(listed.output).not.toContain(otherID)
+      expect(listed.metadata.count).toBe(1)
     }),
   )
 

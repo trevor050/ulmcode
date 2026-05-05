@@ -258,6 +258,90 @@ describe("tool.runtime_summary", () => {
     })
   })
 
+  test("scopes persisted background jobs to the requested operation when operation metadata exists", async () => {
+    await using dir = await tmpdir({ git: true })
+    await provideTestInstance({
+      directory: dir.path,
+      fn: () =>
+        Effect.runPromise(
+          Effect.gen(function* () {
+            const worktree = Instance.worktree
+            yield* Effect.promise(() =>
+              writeOperationCheckpoint(worktree, {
+                operationID: "school",
+                objective: "Authorized school assessment",
+                stage: "validation",
+                status: "running",
+                summary: "Validation is still running.",
+              }),
+            )
+
+            const jobs = yield* BackgroundJob.Service
+            const storage = yield* Storage.Service
+            const schoolID = `tool_${crypto.randomUUID().replaceAll("-", "")}`
+            const otherID = `tool_${crypto.randomUUID().replaceAll("-", "")}`
+            const legacyID = `tool_${crypto.randomUUID().replaceAll("-", "")}`
+            yield* Effect.addFinalizer(() =>
+              Effect.all(
+                [schoolID, otherID, legacyID].map((id) => storage.remove(["background_job", id]).pipe(Effect.ignore)),
+              ).pipe(Effect.asVoid),
+            )
+            yield* jobs.start({
+              id: schoolID,
+              type: "task",
+              title: "school validation",
+              metadata: { operationID: "school", subagent: "validator" },
+              run: Effect.succeed("school done"),
+            })
+            yield* jobs.start({
+              id: otherID,
+              type: "task",
+              title: "other validation",
+              metadata: { operationID: "other", subagent: "validator" },
+              run: Effect.succeed("other done"),
+            })
+            yield* jobs.start({
+              id: legacyID,
+              type: "task",
+              title: "legacy validation",
+              metadata: { subagent: "validator" },
+              run: Effect.succeed("legacy done"),
+            })
+            expect((yield* jobs.wait({ id: schoolID })).info?.status).toBe("completed")
+            expect((yield* jobs.wait({ id: otherID })).info?.status).toBe("completed")
+            expect((yield* jobs.wait({ id: legacyID })).info?.status).toBe("completed")
+
+            const tool = yield* RuntimeSummaryTool
+            const def = yield* tool.init()
+            const result = yield* def.execute(
+              {
+                operationID: "school",
+              },
+              {
+                sessionID: "session-1" as any,
+                messageID: MessageID.ascending(),
+                agent: "build",
+                abort: new AbortController().signal,
+                messages: [],
+                metadata: () => Effect.void,
+                ask: () => Effect.void,
+              },
+            )
+
+            const record = yield* Effect.promise(() => fs.readFile(result.metadata.json, "utf8").then(JSON.parse))
+            expect(record.backgroundTasks).toEqual([
+              {
+                id: schoolID,
+                agent: "validator",
+                status: "completed",
+                summary: "school validation",
+              },
+            ])
+          }).pipe(Effect.scoped, Effect.provide(layer)),
+        ),
+    })
+  })
+
   test("includes persisted background job session usage outside the child tree", async () => {
     await using dir = await tmpdir({ git: true })
     await provideTestInstance({

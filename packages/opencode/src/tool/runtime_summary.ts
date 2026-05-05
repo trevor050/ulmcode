@@ -142,6 +142,21 @@ function backgroundAgent(job: BackgroundJob.Info) {
   return undefined
 }
 
+function backgroundOperationID(job: BackgroundJob.Info) {
+  const operationID = job.metadata?.operationID
+  if (typeof operationID === "string" && operationID) return operationID
+  return undefined
+}
+
+function relevantBackgroundJobs(operationID: string, jobs: BackgroundJob.Info[]) {
+  const scoped = jobs.filter((job) => backgroundOperationID(job) === operationID)
+  if (scoped.length) return scoped
+  return jobs.filter((job) => {
+    const jobOperationID = backgroundOperationID(job)
+    return jobOperationID === undefined || jobOperationID === operationID
+  })
+}
+
 export const RuntimeSummaryTool = Tool.define<typeof Parameters, Metadata, Session.Service | BackgroundJob.Service>(
   "runtime_summary",
   Effect.gen(function* () {
@@ -154,12 +169,13 @@ export const RuntimeSummaryTool = Tool.define<typeof Parameters, Metadata, Sessi
         Effect.gen(function* () {
           const worktree = Instance.worktree
           const jobItems = yield* jobs.list()
+          const backgroundJobItems = relevantBackgroundJobs(params.operationID, jobItems)
           const childMessages = yield* collectChildMessages(session, ctx.sessionID)
-          const backgroundMessages = yield* collectBackgroundJobMessages(session, jobItems)
+          const backgroundMessages = yield* collectBackgroundJobMessages(session, backgroundJobItems)
           const sessionMessages = uniqueMessages([...ctx.messages, ...childMessages, ...backgroundMessages])
           const backgroundTasks =
             params.backgroundTasks ??
-            jobItems.map((job) => ({
+            backgroundJobItems.map((job) => ({
               id: job.id,
               agent: backgroundAgent(job),
               status: backgroundStatus(job.status),

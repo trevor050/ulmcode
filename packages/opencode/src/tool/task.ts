@@ -31,6 +31,9 @@ export const Parameters = Schema.Struct({
       "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
   }),
   command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
+  operationID: Schema.optional(Schema.String).annotate({
+    description: "Optional ULMCode operation ID used to scope persisted background task metadata.",
+  }),
   background: Schema.optional(Schema.Boolean).annotate({
     description: "When true, launch the subagent in the background and return immediately.",
   }),
@@ -168,6 +171,7 @@ export const TaskTool = Tool.define(
       const metadata = {
         sessionId: nextSession.id,
         model,
+        ...(params.operationID ? { operationID: params.operationID } : {}),
         ...(background ? { background: true } : {}),
       }
 
@@ -259,6 +263,7 @@ export const TaskTool = Tool.define(
             parentSessionID: ctx.sessionID,
             sessionID: nextSession.id,
             subagent: next.name,
+            ...(params.operationID ? { operationID: params.operationID } : {}),
           },
           run: runTask().pipe(
             Effect.matchCauseEffect({
