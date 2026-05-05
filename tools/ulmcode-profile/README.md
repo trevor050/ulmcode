@@ -14,7 +14,7 @@ The installer writes `~/.config/ulmcode/opencode.json`, copies compact skills an
 
 The verifier also runs `bun run --cwd packages/opencode test:ulm-skills` so compact skills and commands stay discoverable, placeholder-free, and wired to durable ULM tools.
 
-It also runs the bundled lab replay command against `tools/ulmcode-labs/k12-login-mfa-gap/manifest.json`, proving the manifest-driven replay harness can turn a lab scenario into final ULM artifacts. The same verifier starts and probes the lab target service to confirm the intentionally weak privileged MFA behavior.
+It also runs the bundled lab replay catalog, proving the manifest-driven replay harness can turn each lab scenario into final ULM artifacts with final handoff and report-budget lint. The same verifier starts and probes the bundled lab target services.
 
 ## Runtime Defaults
 
@@ -24,5 +24,6 @@ It also runs the bundled lab replay command against `tools/ulmcode-labs/k12-logi
 - Skills are allowlisted to the bundled K-12 pentest profile.
 - Playwright and pentest MCP are configured, with Vercel and Context7 present but disabled by default.
 - The plugin stack mirrors the current local OpenCode setup: Oh My OpenAgent routing, the Claude Code bridge plugin, Playwright MCP, optional Vercel/Context7 MCP, and LAN LM Studio fallback models.
-- The OMO profile preserves the user routing doctrine: 5.4 Mini Fast for quick/recon/docs/evidence lanes, GPT-5.5 high/xhigh for operation control, validation, report writing, and final review.
+- The OMO profile preserves the user routing doctrine: 5.4 Mini Fast for quick/recon/docs/evidence lanes, GPT-5.5 high/xhigh for operation control, validation, backend architecture/build, report writing, and final review; Kimi handles frontend taste/build; Gemini handles semantic product taste; Claude Sonnet is sparse human-feel review only.
+- Background-task concurrency, runtime fallback, auto-resume, aggressive truncation, and tmux layout settings are carried over from the current local OpenCode profile.
 - Bundled commands include `ulm-resume`, `ulm-final-handoff`, and `ulm-test-plan`.
