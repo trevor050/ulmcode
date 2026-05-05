@@ -162,6 +162,15 @@ export type OperationStatusSummary = {
     manifest: boolean
   }
   runtimeSummary: boolean
+  runtime?: {
+    generatedAt: string
+    modelCalls?: RuntimeSummaryRecord["modelCalls"]
+    usage?: RuntimeSummaryRecord["usage"]
+    compaction?: RuntimeSummaryRecord["compaction"]
+    fetches?: RuntimeSummaryRecord["fetches"]
+    backgroundTasks?: RuntimeSummaryRecord["backgroundTasks"]
+    notes?: RuntimeSummaryRecord["notes"]
+  }
   lastEvents: unknown[]
 }
 
@@ -894,6 +903,7 @@ export async function readOperationStatus(
   const byState = Object.fromEntries(FINDING_STATES.map((state) => [state, 0])) as Record<FindingState, number>
   const bySeverity = Object.fromEntries(SEVERITIES.map((severity) => [severity, 0])) as Record<Severity, number>
   const byKind = Object.fromEntries(EVIDENCE_KINDS.map((kind) => [kind, 0])) as Record<EvidenceKind, number>
+  const runtime = await readJson<RuntimeSummaryRecord>(path.join(root, "deliverables", "runtime-summary.json"))
   for (const finding of findings) {
     byState[finding.state]++
     bySeverity[finding.severity]++
@@ -925,7 +935,18 @@ export async function readOperationStatus(
       readme: await exists(path.join(root, "deliverables", "final", "README.md")),
       manifest: await exists(path.join(root, "deliverables", "final", "manifest.json")),
     },
-    runtimeSummary: await exists(path.join(root, "deliverables", "runtime-summary.json")),
+    runtimeSummary: !!runtime,
+    runtime: runtime
+      ? {
+          generatedAt: runtime.generatedAt,
+          modelCalls: runtime.modelCalls,
+          usage: runtime.usage,
+          compaction: runtime.compaction,
+          fetches: runtime.fetches,
+          backgroundTasks: runtime.backgroundTasks,
+          notes: runtime.notes,
+        }
+      : undefined,
     lastEvents: await readJsonlTail(path.join(root, "events.jsonl"), options.eventLimit ?? 5),
   }
 }

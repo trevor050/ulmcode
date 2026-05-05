@@ -316,7 +316,10 @@ describe("ULM artifact ledger", () => {
     expect(markdown).toContain("task-recon-1")
     expect(markdown).toContain("tokens_total: 13500")
     expect(markdown).toContain("pentest: 5 calls, 8000 tokens, $1.6")
-    expect((await readOperationStatus(worktree, "school")).runtimeSummary).toBe(true)
+    const status = await readOperationStatus(worktree, "school")
+    expect(status.runtimeSummary).toBe(true)
+    expect(status.runtime?.usage?.remainingUSD).toBe(7.55)
+    expect(status.runtime?.backgroundTasks?.[0]?.id).toBe("task-recon-1")
   })
 
   test("writes execution-ready operation plans with subagent policy", async () => {

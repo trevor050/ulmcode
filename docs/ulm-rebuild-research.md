@@ -29,7 +29,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 
 - `.ulmcode/operations/<operation-id>/` is the canonical operation artifact root.
 - `operation_checkpoint` records stage gates and resumable heartbeats.
-- `operation_status` restores context after interruptions and compaction.
+- `operation_status` restores context after interruptions and compaction, including runtime budget/model/task rollups when a runtime summary exists.
 - `operation_plan` records execution-ready phase order, success criteria, subagent/no-subagent policy, assumptions, and report closeout.
 - `evidence_record` writes durable evidence JSON plus optional raw text, so findings can cite recorded artifacts instead of chat-only claims.
 - `finding_record` enforces evidence before validated/report-ready findings.
