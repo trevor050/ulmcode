@@ -118,6 +118,7 @@ const table = sqliteTable("session", {
 - `task` supports `background: true`; list recoverable background jobs with `task_list` and poll a returned `task_id` with `task_status` for long-running subagent lanes.
 - Background task metadata is persisted under storage key `background_job/<task_id>` so `task_status` can recover terminal output after a service reload; cancellation must interrupt the captured fiber before/while marking the job cancelled.
 - The bundled isolated profile lives in `tools/ulmcode-profile`; validate it with `tools/ulmcode-profile/test-profile.sh`. Its installer copies compact skills, ULM slash commands, plugin `package.json`, and both root/`.opencode` Oh My OpenAgent routing files.
+- `bun run --cwd packages/opencode test:ulm-skills` validates bundled ULM profile skills and commands for frontmatter, placeholder-free content, and references to durable ULM tools.
 - `bun run --cwd packages/opencode test:ulm-smoke` runs the synthetic ULM lifecycle smoke: plan, evidence, finding, outline, final checkpoint, report render, runtime summary, final handoff lint, and status/dashboard verification.
 - `bun run --cwd packages/opencode test:ulm-lab` runs the manifest-driven lab replay harness using `tools/ulmcode-labs/k12-login-mfa-gap/manifest.json`; this turns a synthetic lab into ULM artifacts and requires final handoff lint to pass.
 - `bun run --cwd packages/opencode test:ulm-lab-target` starts and probes the bundled weak-MFA HTTP lab target; Docker Compose support lives at `tools/ulmcode-labs/k12-login-mfa-gap/docker-compose.yml`.

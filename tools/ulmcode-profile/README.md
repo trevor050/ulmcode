@@ -12,6 +12,8 @@ The installer writes `~/.config/ulmcode/opencode.json`, copies compact skills an
 
 `test-profile.sh` also runs the package-level ULM lifecycle smoke command, which creates a synthetic operation, records evidence/finding artifacts, renders final HTML/PDF/manifest outputs, writes a runtime summary, and requires final handoff lint to pass.
 
+The verifier also runs `bun run --cwd packages/opencode test:ulm-skills` so compact skills and commands stay discoverable, placeholder-free, and wired to durable ULM tools.
+
 It also runs the bundled lab replay command against `tools/ulmcode-labs/k12-login-mfa-gap/manifest.json`, proving the manifest-driven replay harness can turn a lab scenario into final ULM artifacts. The same verifier starts and probes the lab target service to confirm the intentionally weak privileged MFA behavior.
 
 ## Runtime Defaults
