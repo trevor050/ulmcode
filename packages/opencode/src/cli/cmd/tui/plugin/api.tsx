@@ -19,6 +19,7 @@ import { Prompt } from "../component/prompt"
 import { Slot as HostSlot } from "./slots"
 import type { useToast } from "../ui/toast"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import * as Intercept from "../component/prompt/intercept"
 
 type RouteEntry = {
   key: symbol
@@ -315,6 +316,11 @@ export function createTuiApi(input: Input): TuiPluginApi {
       },
       create(defaults, overrides) {
         return createPluginKeybind(input.keybind, defaults, overrides)
+      },
+    },
+    input: {
+      intercept(handler) {
+        return Intercept.register(handler)
       },
     },
     get tuiConfig() {

@@ -20,6 +20,7 @@ import { useKeybind } from "@tui/context/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { computePromptTraits } from "./traits"
 import { assign } from "./part"
+import * as Intercept from "./intercept"
 import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
@@ -1241,6 +1242,10 @@ export function Prompt(props: PromptProps) {
               keyBindings={textareaKeybindings()}
               onKeyDown={async (e) => {
                 if (props.disabled) {
+                  e.preventDefault()
+                  return
+                }
+                if (Intercept.dispatch(e, input)) {
                   e.preventDefault()
                   return
                 }

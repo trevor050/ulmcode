@@ -15,7 +15,7 @@ import type {
   TextPart,
   Config as SdkConfig,
 } from "@opencode-ai/sdk/v2"
-import type { CliRenderer, ParsedKey, RGBA, SlotMode } from "@opentui/core"
+import type { CliRenderer, ParsedKey, RGBA, SlotMode, TextareaRenderable } from "@opentui/core"
 import type { JSX, SolidPlugin } from "@opentui/solid"
 import type { Config as PluginConfig, PluginOptions } from "./index.js"
 
@@ -74,6 +74,12 @@ export type TuiKeybindSet = {
   get: (name: string) => string
   match: (name: string, evt: ParsedKey) => boolean
   print: (name: string) => string
+}
+
+export type TuiInputInterceptHandler = (event: ParsedKey, input: TextareaRenderable) => boolean | void
+
+export type TuiInput = {
+  intercept: (handler: TuiInputInterceptHandler) => () => void
 }
 
 export type TuiDialogProps = {
@@ -474,6 +480,7 @@ export type TuiPluginApi = {
     print: (key: string) => string
     create: (defaults: TuiKeybindMap, overrides?: Record<string, unknown>) => TuiKeybindSet
   }
+  input: TuiInput
   readonly tuiConfig: Frozen<TuiConfigView>
   kv: TuiKV
   state: TuiState

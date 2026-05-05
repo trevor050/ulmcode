@@ -10,6 +10,8 @@ type Count = {
   route_drop: number
   command_add: number
   command_drop: number
+  input_add: number
+  input_drop: number
 }
 
 function themeCurrent(): HostPluginApi["theme"]["current"] {
@@ -254,6 +256,15 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
         ((defaults, over) => {
           return createPluginKeybind(key, defaults, over)
         }),
+    },
+    input: {
+      intercept: () => {
+        if (count) count.input_add += 1
+        return () => {
+          if (!count) return
+          count.input_drop += 1
+        }
+      },
     },
     tuiConfig: opts.tuiConfig ?? {},
     kv: {
