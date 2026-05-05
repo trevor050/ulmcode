@@ -100,6 +100,9 @@ export type ReportOutlineInput = {
 export type ReportLintOptions = {
   requireReport?: boolean
   minWords?: number
+  requireOperationPlan?: boolean
+  requireRenderedDeliverables?: boolean
+  requireRuntimeSummary?: boolean
 }
 
 export type OperationStatusSummary = {
@@ -791,6 +794,23 @@ export async function lintReport(
   if (report && options.minWords) {
     const words = report.trim().split(/\s+/).filter(Boolean).length
     if (words < options.minWords) gaps.push(`report is too sparse: ${words} words, expected at least ${options.minWords}`)
+  }
+  if (options.requireOperationPlan && !(await exists(path.join(root, "plans", "operation-plan.json")))) {
+    gaps.push("plans/operation-plan.json is required")
+  }
+  if (options.requireRenderedDeliverables) {
+    if (!(await exists(path.join(root, "deliverables", "final", "report.html")))) {
+      gaps.push("deliverables/final/report.html is required")
+    }
+    if (!(await exists(path.join(root, "deliverables", "final", "report.pdf")))) {
+      gaps.push("deliverables/final/report.pdf is required")
+    }
+    if (!(await exists(path.join(root, "deliverables", "final", "manifest.json")))) {
+      gaps.push("deliverables/final/manifest.json is required")
+    }
+  }
+  if (options.requireRuntimeSummary && !(await exists(path.join(root, "deliverables", "runtime-summary.json")))) {
+    gaps.push("deliverables/runtime-summary.json is required")
   }
 
   return {

@@ -12,6 +12,15 @@ export const Parameters = Schema.Struct({
   minWords: Schema.optional(Schema.Number).annotate({
     description: "Minimum word count for the report when a report file exists.",
   }),
+  requireOperationPlan: Schema.optional(Schema.Boolean).annotate({
+    description: "Require plans/operation-plan.json to exist.",
+  }),
+  requireRenderedDeliverables: Schema.optional(Schema.Boolean).annotate({
+    description: "Require final HTML, PDF, and manifest deliverables to exist.",
+  }),
+  requireRuntimeSummary: Schema.optional(Schema.Boolean).annotate({
+    description: "Require deliverables/runtime-summary.json to exist.",
+  }),
 })
 
 type Metadata = {
@@ -31,6 +40,9 @@ export const ReportLintTool = Tool.define<typeof Parameters, Metadata, never>(
           lintReport(Instance.worktree, params.operationID, {
             requireReport: params.requireReport,
             minWords: params.minWords,
+            requireOperationPlan: params.requireOperationPlan,
+            requireRenderedDeliverables: params.requireRenderedDeliverables,
+            requireRuntimeSummary: params.requireRuntimeSummary,
           }),
         ).pipe(Effect.orDie)
         return {

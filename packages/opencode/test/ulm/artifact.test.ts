@@ -225,4 +225,38 @@ describe("ULM artifact ledger", () => {
     expect(JSON.parse(await fs.readFile(result.json, "utf8")).phases).toHaveLength(2)
     expect((await readOperationStatus(worktree, "school")).plans.operation).toBe(true)
   })
+
+  test("lints missing final handoff artifacts when required", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "handoff",
+      status: "complete",
+      summary: "Ready for final handoff.",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "report_ready",
+      severity: "high",
+      confidence: 0.9,
+      affectedAssets: ["IdP"],
+      evidence: [{ id: "ev-1", path: "evidence/raw/idp-policy.json" }],
+      description: "MFA is not enforced for administrators.",
+      impact: "Administrator takeover is more likely after password compromise.",
+      remediation: "Require phishing-resistant MFA for privileged accounts.",
+    })
+
+    const result = await lintReport(worktree, "school", {
+      requireOperationPlan: true,
+      requireRenderedDeliverables: true,
+      requireRuntimeSummary: true,
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.gaps).toContain("plans/operation-plan.json is required")
+    expect(result.gaps).toContain("deliverables/final/report.pdf is required")
+    expect(result.gaps).toContain("deliverables/runtime-summary.json is required")
+  })
 })
