@@ -10,7 +10,12 @@ find "$PROFILE_DIR/skills" -name SKILL.md -print | sort | while read -r skill; d
   grep -q '^name:' "$skill"
   grep -q '^description:' "$skill"
 done
+find "$PROFILE_DIR/commands" -name '*.md' -print | sort | while read -r command; do
+  grep -q '^---$' "$command"
+  grep -q '^description:' "$command"
+done
 grep -q '"@khalilgharbaoui/opencode-claude-code-plugin"' "$PROFILE_DIR/package.json"
 grep -q '"oh-my-openagent"' "$PROFILE_DIR/package.json"
 grep -q '"report-writer"' "$PROFILE_DIR/oh-my-openagent.jsonc"
+grep -q 'finalHandoff: true' "$PROFILE_DIR/commands/ulm-final-handoff.md"
 sh -n "$PROFILE_DIR/scripts/install-profile.sh"
