@@ -38,7 +38,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `report_lint` checks report readiness, total and per-finding report density, evidence refs, final handoff artifacts, and `finalHandoff=true`.
 - `report_render` publishes final HTML, lightweight PDF, README, manifest, evidence index, state counts, and non-reportable finding IDs.
 - `runtime_summary` records model-call split, token/cost budget rollups, per-agent usage, compaction pressure, repeated fetches, background task state, notes, and canonical artifact paths. If model/token/cost, compaction, or background task fields are omitted, the tool derives them from the current session ledger, persisted child subagent sessions, and persisted background job ledger; explicit fields remain manual overrides.
-- `task` supports `background: true`; `task_status` polls running subagents; `task_list` recovers persisted background job metadata.
+- `task` supports `background: true`; `task_status` polls running subagents; `task_list` recovers persisted background job metadata and marks orphaned running jobs as `stale`.
 - `tools/ulmcode-profile` provides an isolated K-12 pentest profile, compact skill pack, plugin dependency manifest, and Oh My OpenAgent routing file.
 - `bun run --cwd packages/opencode test:ulm-skills` validates the bundled profile skills/commands for frontmatter, placeholder-free content, and durable ULM tool references.
 - `bun run --cwd packages/opencode test:ulm-smoke` exercises a synthetic ULM lifecycle outside the unit-test helpers: operation plan, evidence, finding, report outline, final render, runtime summary, final handoff lint, and status dashboard.
@@ -58,7 +58,7 @@ Source checked on 2026-05-05 from `~/.config/opencode` without copying secrets.
 
 ## Not Adopted Yet
 
-- True background job execution resume across process restart. Metadata is persisted and listable, but in-flight fibers are not restarted after process death.
+- True background job execution resume across process restart. Metadata is persisted, listable, and stale-aware, but in-flight fibers are not restarted after process death.
 - Full operation-wide cost/token extraction into budgets. `runtime_summary` now derives current-session and child-session assistant message usage, compaction counts, and background job status, but it does not yet recover transcripts from long-dead background jobs that no longer have a reachable session tree.
 - Full TUI operation dashboard. The tool output now has a compact dashboard, but there is not yet a dedicated interactive TUI route.
 - Larger vulnerable-target lab catalog. The first weak-MFA HTTP target ships with Docker Compose support, but the catalog is still one scenario.

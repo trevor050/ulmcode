@@ -21,7 +21,7 @@ export const Parameters = Schema.Struct({
   }),
 })
 
-type State = "running" | "completed" | "error"
+type State = "running" | "completed" | "error" | "stale"
 type InspectResult = { state: State; text: string }
 type Metadata = { task_id: SessionID; state: State; timed_out: boolean }
 
@@ -41,6 +41,12 @@ function errorText(error: NonNullable<MessageV2.Assistant["error"]>) {
 function jobResult(job: BackgroundJob.Info): InspectResult {
   if (job.status === "running") return { state: "running", text: "Task is still running." }
   if (job.status === "completed") return { state: "completed", text: job.output ?? "" }
+  if (job.status === "stale") {
+    return {
+      state: "stale",
+      text: job.error ?? "Task was persisted as running, but the process no longer has its running fiber.",
+    }
+  }
   return { state: "error", text: job.error ?? `Task ${job.status}.` }
 }
 

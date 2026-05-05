@@ -562,6 +562,52 @@ describe("tool.task", () => {
     }),
   )
 
+  it.instance("task_status marks orphaned running background jobs stale after BackgroundJob service reload", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const sessions = yield* Session.Service
+      const storage = yield* Storage.Service
+      const jobs = yield* BackgroundJob.Service
+      const taskSession = yield* sessions.create({ parentID: chat.id, title: "orphaned background task" })
+      yield* Effect.addFinalizer(() => storage.remove(["background_job", taskSession.id]).pipe(Effect.ignore))
+      yield* jobs.start({
+        id: taskSession.id,
+        type: "task",
+        title: "orphaned background task",
+        metadata: {
+          parentSessionID: chat.id,
+          sessionID: taskSession.id,
+          subagent: "validator",
+        },
+        run: Effect.never,
+      })
+      const ctx = {
+        sessionID: chat.id,
+        messageID: assistant.id,
+        agent: "build",
+        abort: new AbortController().signal,
+        extra: {},
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      }
+
+      const polledAfterReload = yield* Effect.gen(function* () {
+        const status = yield* TaskStatusTool
+        const statusDef = yield* status.init()
+        const list = yield* TaskListTool
+        const listDef = yield* list.init()
+        const listed = yield* listDef.execute({ status: "stale" }, ctx)
+        expect(listed.output).toContain(taskSession.id)
+        return yield* statusDef.execute({ task_id: taskSession.id }, ctx)
+      }).pipe(Effect.provide(Layer.fresh(BackgroundJob.layer)))
+
+      expect(polledAfterReload.metadata.state).toBe("stale")
+      expect(polledAfterReload.output).toContain("state: stale")
+      expect(polledAfterReload.output).toContain("lost its running fiber")
+    }),
+  )
+
   it.instance("task_list enumerates persisted background jobs", () =>
     Effect.gen(function* () {
       const { chat, assistant } = yield* seed()

@@ -3,7 +3,7 @@ import { Identifier } from "@/id/id"
 import { Storage } from "@/storage/storage"
 import { Cause, Context, Deferred, Effect, Fiber, Layer, Scope } from "effect"
 
-export type Status = "running" | "completed" | "error" | "cancelled"
+export type Status = "running" | "completed" | "error" | "cancelled" | "stale"
 
 export type Info = {
   id: string
@@ -65,6 +65,16 @@ function snapshot(job: Active): Info {
   }
 }
 
+function orphaned(info: Info): Info {
+  if (info.status !== "running") return info
+  return {
+    ...info,
+    status: "stale",
+    error: info.error ?? "Task was persisted as running, but the process lost its running fiber.",
+    ...(info.metadata ? { metadata: { ...info.metadata } } : {}),
+  }
+}
+
 function errorText(error: unknown) {
   if (error instanceof Error) return error.message
   return String(error)
@@ -101,7 +111,7 @@ export const layer = Layer.effect(
 
     const finish = Effect.fn("BackgroundJob.finish")(function* (
       job: Active,
-      status: Exclude<Status, "running">,
+      status: Exclude<Status, "running" | "stale">,
       data?: { output?: string; error?: string },
     ) {
       if (job.info.status !== "running") return snapshot(job)
@@ -118,15 +128,21 @@ export const layer = Layer.effect(
 
     const list: Interface["list"] = Effect.fn("BackgroundJob.list")(function* () {
       const items = new Map<string, Info>()
-      for (const job of yield* listPersisted()) items.set(job.id, job)
-      for (const job of (yield* InstanceState.get(state)).jobs.values()) items.set(job.info.id, snapshot(job))
+      const current = yield* InstanceState.get(state)
+      for (const job of yield* listPersisted()) {
+        items.set(job.id, current.jobs.has(job.id) ? job : orphaned(job))
+      }
+      for (const job of current.jobs.values()) items.set(job.info.id, snapshot(job))
       return Array.from(items.values())
         .toSorted((a, b) => a.startedAt - b.startedAt)
     })
 
     const get: Interface["get"] = Effect.fn("BackgroundJob.get")(function* (id) {
       const job = (yield* InstanceState.get(state)).jobs.get(id)
-      if (!job) return yield* getPersisted(id)
+      if (!job) {
+        const persisted = yield* getPersisted(id)
+        return persisted ? orphaned(persisted) : undefined
+      }
       return snapshot(job)
     })
 
@@ -165,8 +181,11 @@ export const layer = Layer.effect(
 
     const wait: Interface["wait"] = Effect.fn("BackgroundJob.wait")(function* (input) {
       const job = (yield* InstanceState.get(state)).jobs.get(input.id)
-      if (!job) return { timedOut: false }
-      if (job.info.status !== "running") return { info: snapshot(job), timedOut: false }
+      if (!job) {
+        const persisted = yield* getPersisted(input.id)
+        return { info: persisted ? orphaned(persisted) : undefined, timedOut: false }
+      }
+      if (job.info.status !== "running") return { info: yield* Deferred.await(job.done), timedOut: false }
       if (!input.timeout) return { info: yield* Deferred.await(job.done), timedOut: false }
       return yield* Effect.raceAll([
         Deferred.await(job.done).pipe(Effect.map((info) => ({ info, timedOut: false }))),

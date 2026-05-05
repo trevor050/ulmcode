@@ -4,7 +4,7 @@ import { BackgroundJob } from "@/background/job"
 import { Effect, Schema } from "effect"
 
 export const Parameters = Schema.Struct({
-  status: Schema.optional(Schema.Literals(["running", "completed", "error", "cancelled"])),
+  status: Schema.optional(Schema.Literals(["running", "completed", "error", "cancelled", "stale"])),
 })
 
 type Metadata = {
