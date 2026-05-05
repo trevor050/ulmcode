@@ -481,6 +481,8 @@ describe("tool.task", () => {
       const waited = yield* jobs.wait({ id: result.metadata.sessionId })
       expect(waited.info?.status).toBe("completed")
       expect(waited.info?.metadata?.operationID).toBe("school")
+      expect(waited.info?.metadata?.prompt).toBe("look into the cache key path")
+      expect(waited.info?.metadata?.subagent_type).toBe("general")
 
       const polled = yield* statusDef.execute({ task_id: result.metadata.sessionId }, ctx)
       expect(polled.output).toContain("state: completed")
@@ -580,6 +582,10 @@ describe("tool.task", () => {
           parentSessionID: chat.id,
           sessionID: taskSession.id,
           subagent: "validator",
+          subagent_type: "validator",
+          description: "orphaned background task",
+          prompt: "continue validating the stale operation lane",
+          operationID: "school",
         },
         run: Effect.never,
       })
@@ -601,12 +607,16 @@ describe("tool.task", () => {
         const listDef = yield* list.init()
         const listed = yield* listDef.execute({ status: "stale" }, ctx)
         expect(listed.output).toContain(taskSession.id)
+        expect(listed.output).toContain("restartable: true")
         return yield* statusDef.execute({ task_id: taskSession.id }, ctx)
       }).pipe(Effect.provide(Layer.fresh(BackgroundJob.layer)))
 
       expect(polledAfterReload.metadata.state).toBe("stale")
       expect(polledAfterReload.output).toContain("state: stale")
       expect(polledAfterReload.output).toContain("lost its running fiber")
+      expect(polledAfterReload.output).toContain('"task_id":"' + taskSession.id + '"')
+      expect(polledAfterReload.output).toContain('"subagent_type":"validator"')
+      expect(polledAfterReload.output).toContain('"operationID":"school"')
     }),
   )
 

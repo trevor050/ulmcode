@@ -263,6 +263,10 @@ export const TaskTool = Tool.define(
             parentSessionID: ctx.sessionID,
             sessionID: nextSession.id,
             subagent: next.name,
+            subagent_type: params.subagent_type,
+            description: params.description,
+            prompt: params.prompt,
+            ...(params.command ? { command: params.command } : {}),
             ...(params.operationID ? { operationID: params.operationID } : {}),
           },
           run: runTask().pipe(

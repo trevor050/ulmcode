@@ -42,12 +42,39 @@ function jobResult(job: BackgroundJob.Info): InspectResult {
   if (job.status === "running") return { state: "running", text: "Task is still running." }
   if (job.status === "completed") return { state: "completed", text: job.output ?? "" }
   if (job.status === "stale") {
+    const restartArgs = restartArgsFor(job)
     return {
       state: "stale",
-      text: job.error ?? "Task was persisted as running, but the process no longer has its running fiber.",
+      text: [
+        job.error ?? "Task was persisted as running, but the process no longer has its running fiber.",
+        restartArgs ? `restart_args: ${JSON.stringify(restartArgs)}` : undefined,
+      ]
+        .filter((line): line is string => line !== undefined)
+        .join("\n"),
     }
   }
   return { state: "error", text: job.error ?? `Task ${job.status}.` }
+}
+
+function stringMetadata(job: BackgroundJob.Info, key: string) {
+  const value = job.metadata?.[key]
+  return typeof value === "string" && value ? value : undefined
+}
+
+function restartArgsFor(job: BackgroundJob.Info) {
+  const prompt = stringMetadata(job, "prompt")
+  const subagentType = stringMetadata(job, "subagent_type")
+  const description = stringMetadata(job, "description") ?? job.title
+  if (!prompt || !subagentType || !description) return undefined
+  return {
+    task_id: job.id,
+    background: true,
+    description,
+    prompt,
+    subagent_type: subagentType,
+    operationID: stringMetadata(job, "operationID"),
+    command: stringMetadata(job, "command"),
+  }
 }
 
 export const TaskStatusTool = Tool.define<typeof Parameters, Metadata, Session.Service | SessionStatus.Service | BackgroundJob.Service>(

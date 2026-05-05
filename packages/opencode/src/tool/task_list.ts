@@ -37,6 +37,7 @@ export const TaskListTool = Tool.define<typeof Parameters, Metadata, BackgroundJ
                       `type: ${job.type}`,
                       `status: ${job.status}`,
                       ...(typeof job.metadata?.operationID === "string" ? [`operation_id: ${job.metadata.operationID}`] : []),
+                      ...(job.status === "stale" && typeof job.metadata?.prompt === "string" ? ["restartable: true"] : []),
                       ...(job.title ? [`title: ${job.title}`] : []),
                       ...(job.completedAt ? [`completed_at: ${new Date(job.completedAt).toISOString()}`] : []),
                     ].join("\n"),
