@@ -114,6 +114,7 @@ const table = sqliteTable("session", {
 - `operation_audit` combines restart health and final handoff lint, writes `deliverables/operation-audit.json` plus `.md`, and should be the last gate before claiming a final package is ready.
 - CLI operators can inspect the same ledger outside a model turn with `opencode ulm list`, `opencode ulm status <operationID>`, `opencode ulm resume <operationID>`, `opencode ulm gate <operationID>`, and `opencode ulm audit <operationID>`; use `--format json` for machine-readable handoff.
 - Instance HTTP API routes under `/ulm/operation` expose operation list, status, resume, and audit JSON for TUI/plugin dashboards. Regenerate the JS SDK after changing this route surface.
+- The TUI has a native `ulm.operations` command and `/ulm` slash entry. It opens an operation list plus status/audit detail dialog backed by the generated SDK.
 - `evidence_record` writes durable evidence JSON plus optional raw text under `evidence/`; findings should cite evidence IDs/paths from this tool rather than chat-only observations.
 - `finding_record` is the evidence-backed finding state tool; validated/report-ready findings require evidence refs.
 - Native ULM agents are `pentest`, `recon`, `attack-map`, `validator`, `evidence`, `report-writer`, and `report-reviewer`; prompts are artifact-contracts, not old swarm carryover. Keep profile routing aligned when adding or renaming one.

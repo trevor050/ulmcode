@@ -35,6 +35,7 @@ import { useConnected } from "@tui/component/use-connected"
 import { DialogMcp } from "@tui/component/dialog-mcp"
 import { DialogStatus } from "@tui/component/dialog-status"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
+import { DialogUlmOperations } from "@tui/component/dialog-ulm-operations"
 import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
@@ -589,6 +590,18 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
           },
         ]
       : []),
+    {
+      title: "ULM operations",
+      value: "ulm.operations",
+      slash: {
+        name: "ulm",
+        aliases: ["operations"],
+      },
+      onSelect: () => {
+        dialog.replace(() => <DialogUlmOperations />)
+      },
+      category: "System",
+    },
     {
       title: "View status",
       keybind: "status_view",

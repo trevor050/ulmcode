@@ -23,6 +23,7 @@ const commandAliases = {
   messages_first: "session.first",
   messages_last: "session.last",
   agent_cycle: "agent.cycle",
+  ulm_operations: "ulm.operations",
 } as const
 
 export const tuiHandlers = HttpApiBuilder.group(InstanceHttpApi, "tui", (handlers) =>

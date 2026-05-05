@@ -282,6 +282,7 @@ export const TuiRoutes = lazy(() =>
             messages_first: "session.first",
             messages_last: "session.last",
             agent_cycle: "agent.cycle",
+            ulm_operations: "ulm.operations",
           }[command],
         })
         return c.json(true)
