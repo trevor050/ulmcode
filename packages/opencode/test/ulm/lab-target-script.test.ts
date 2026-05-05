@@ -22,5 +22,7 @@ describe("ULM lab target smoke script", () => {
     expect(stdout).toContain("ulm_lab_target: ok")
     expect(stdout).toContain("target: k12-login-mfa-gap")
     expect(stdout).toContain("weak_privileged_mfa: confirmed")
+    expect(stdout).toContain("target: k12-roster-idor")
+    expect(stdout).toContain("cross_tenant_roster_read: confirmed")
   })
 })

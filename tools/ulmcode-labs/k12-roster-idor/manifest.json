@@ -1,0 +1,160 @@
+{
+  "id": "k12-roster-idor",
+  "operationID": "k12-roster-idor",
+  "objective": "Replay a synthetic authorized K-12 roster authorization assessment with cross-tenant read exposure.",
+  "assumptions": [
+    "The lab uses synthetic evidence only.",
+    "No real external target is contacted.",
+    "Roster data and teacher identities are intentionally fake."
+  ],
+  "plan": {
+    "phases": [
+      {
+        "stage": "recon",
+        "objective": "Map the roster API authorization boundary.",
+        "actions": [
+          "Load the synthetic roster API route behavior",
+          "Identify the teacher/class ownership fields used by the endpoint"
+        ],
+        "successCriteria": [
+          "Roster endpoint evidence is recorded with a durable evidence ID"
+        ],
+        "subagents": [
+          "recon"
+        ],
+        "noSubagents": [
+          "authorization scope and data-handling decisions stay with the primary operator"
+        ]
+      },
+      {
+        "stage": "validation",
+        "objective": "Validate cross-tenant roster read exposure.",
+        "actions": [
+          "Replay a teacher-scoped request against another school's class roster",
+          "Record the exposed fields and expected ownership check"
+        ],
+        "successCriteria": [
+          "A report-ready finding cites the request evidence and control-gap evidence"
+        ],
+        "subagents": [
+          "validator",
+          "evidence"
+        ],
+        "noSubagents": [
+          "final severity and disclosure language stay with the primary operator"
+        ]
+      },
+      {
+        "stage": "reporting",
+        "objective": "Render final handoff artifacts.",
+        "actions": [
+          "Run report_lint",
+          "Run report_render",
+          "Run runtime_summary"
+        ],
+        "successCriteria": [
+          "Final handoff lint passes"
+        ],
+        "subagents": [
+          "report-writer"
+        ],
+        "noSubagents": [
+          "client-facing delivery approval is manual"
+        ]
+      }
+    ],
+    "reportingCloseout": [
+      "Run report_lint",
+      "Run report_render",
+      "Run runtime_summary"
+    ]
+  },
+  "evidence": [
+    {
+      "evidenceID": "ev-cross-tenant-roster-request",
+      "title": "Synthetic cross-tenant roster request",
+      "kind": "http_response",
+      "summary": "A teacher-scoped request for another school's class returned student roster records.",
+      "url": "http://127.0.0.1/api/roster?classId=south-algebra",
+      "content": "{\"requestTeacher\":\"teacher-north\",\"classId\":\"south-algebra\",\"authorized\":true,\"students\":[{\"id\":\"stu-2001\",\"name\":\"Synthetic Student\",\"grade\":\"8\"}],\"labFinding\":\"cross_tenant_roster_read\"}"
+    },
+    {
+      "evidenceID": "ev-roster-ownership-gap",
+      "title": "Synthetic roster ownership check gap",
+      "kind": "note",
+      "summary": "The synthetic route validates authentication but does not enforce class ownership against the requesting teacher.",
+      "content": "Expected control: require class.schoolId and class.teacherId to match the authenticated teacher context before returning roster rows."
+    }
+  ],
+  "findings": [
+    {
+      "findingID": "cross-tenant-roster-read",
+      "title": "Cross-tenant roster read exposure",
+      "state": "report_ready",
+      "severity": "high",
+      "confidence": 0.9,
+      "affectedAssets": [
+        "Roster API",
+        "Student information system"
+      ],
+      "evidence": [
+        {
+          "id": "ev-cross-tenant-roster-request",
+          "path": "evidence/raw/synthetic-cross-tenant-roster-request.txt"
+        },
+        {
+          "id": "ev-roster-ownership-gap",
+          "path": "evidence/raw/synthetic-roster-ownership-check-gap.txt"
+        }
+      ],
+      "description": "The synthetic roster endpoint returns student records for a class outside the requesting teacher's assigned school context.",
+      "impact": "A compromised or curious teacher account could read student roster data beyond its intended class or school boundary.",
+      "remediation": "Enforce server-side school and class ownership checks before returning roster rows, and add audit alerts for cross-school roster access attempts."
+    }
+  ],
+  "runtime": {
+    "sessionMessages": [
+      {
+        "role": "assistant",
+        "agent": "pentest",
+        "modelID": "gpt-5.5",
+        "providerID": "openai",
+        "cost": 0.42,
+        "tokens": {
+          "input": 1100,
+          "output": 450,
+          "reasoning": 350,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "role": "assistant",
+        "agent": "validator",
+        "modelID": "gpt-5.4-mini",
+        "providerID": "openai",
+        "cost": 0.12,
+        "tokens": {
+          "input": 600,
+          "output": 250,
+          "reasoning": 100,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      }
+    ]
+  },
+  "expected": {
+    "reportableFindings": 1,
+    "evidence": 2,
+    "dashboardIncludes": [
+      "# k12-roster-idor - handoff/complete",
+      "risk: high",
+      "findings: 1 total"
+    ]
+  }
+}

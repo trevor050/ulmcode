@@ -1,0 +1,6 @@
+services:
+  k12-roster-idor:
+    build:
+      context: ./service
+    ports:
+      - "8081:8080"
