@@ -301,6 +301,7 @@ export type EventTuiCommandExecute = {
       | "prompt.clear"
       | "prompt.submit"
       | "agent.cycle"
+      | "ulm.operations"
       | string
   }
 }
@@ -1696,6 +1697,7 @@ export type EventTuiCommandExecute2 = {
       | "prompt.clear"
       | "prompt.submit"
       | "agent.cycle"
+      | "ulm.operations"
       | string
   }
 }
@@ -1718,6 +1720,169 @@ export type EventTuiSessionSelect2 = {
      */
     sessionID: string
   }
+}
+
+export type UlmEvidenceRef = {
+  id: string
+  path?: string
+  summary?: string
+  command?: string
+  createdAt?: string
+}
+
+export type UlmOperationTime = {
+  created: string
+  updated: string
+}
+
+export type UlmOperationRecord = {
+  operationID: string
+  objective: string
+  stage: "intake" | "recon" | "mapping" | "validation" | "reporting" | "handoff"
+  status: "planned" | "running" | "blocked" | "paused" | "complete"
+  summary: string
+  nextActions: Array<string>
+  blockers: Array<string>
+  riskLevel: "low" | "medium" | "high" | "critical"
+  activeTasks: Array<string>
+  evidence: Array<UlmEvidenceRef>
+  notes?: string
+  time: UlmOperationTime
+}
+
+export type UlmPlanArtifacts = {
+  operation: boolean
+}
+
+export type UlmFindingCounts = {
+  total: number
+  byState: {
+    candidate: number
+    needs_validation: number
+    validated: number
+    report_ready: number
+    rejected: number
+  }
+  bySeverity: {
+    info: number
+    low: number
+    medium: number
+    high: number
+    critical: number
+  }
+}
+
+export type UlmEvidenceCounts = {
+  total: number
+  byKind: {
+    command_output: number
+    http_response: number
+    screenshot: number
+    file: number
+    note: number
+    log: number
+  }
+}
+
+export type UlmReportArtifacts = {
+  outline: boolean
+  markdown: boolean
+  html: boolean
+  pdf: boolean
+  readme: boolean
+  manifest: boolean
+}
+
+export type UlmRuntimeSnapshot = {
+  [key: string]: unknown
+}
+
+export type UlmOperationStatusSummary = {
+  operationID: string
+  root: string
+  operation?: UlmOperationRecord
+  plans: UlmPlanArtifacts
+  findings: UlmFindingCounts
+  evidence: UlmEvidenceCounts
+  reports: UlmReportArtifacts
+  runtimeSummary: boolean
+  runtime?: UlmRuntimeSnapshot
+  lastEvents: Array<unknown>
+}
+
+export type UlmOperationCheckpointBrief = {
+  objective: string
+  stage: "intake" | "recon" | "mapping" | "validation" | "reporting" | "handoff"
+  status: "planned" | "running" | "blocked" | "paused" | "complete"
+  summary: string
+  riskLevel: "low" | "medium" | "high" | "critical"
+  nextActions: Array<string>
+  blockers: Array<string>
+  activeTasks: Array<string>
+  time: UlmOperationTime
+}
+
+export type UlmResumeHealth = {
+  ready: boolean
+  status: "ready" | "attention_required"
+  gaps: Array<string>
+}
+
+export type UlmResumeArtifacts = {
+  operation: boolean
+  reports: UlmReportArtifacts
+  runtimeSummary: boolean
+  findings: number
+  evidence: number
+}
+
+export type UlmOperationResumeBrief = {
+  operationID: string
+  root: string
+  generatedAt: string
+  checkpoint?: UlmOperationCheckpointBrief
+  health: UlmResumeHealth
+  artifacts: UlmResumeArtifacts
+  runtime?: UlmRuntimeSnapshot
+  recommendedTools: Array<string>
+  continuationPrompt: string
+  lastEvents: Array<unknown>
+}
+
+export type UlmAuditChecks = {
+  resume: {
+    ok: boolean
+    status: "ready" | "attention_required"
+    gaps: Array<string>
+  }
+  finalHandoff: {
+    ok: boolean
+    status: "ready" | "attention_required"
+    gaps: Array<string>
+    counts: {
+      findings: number
+      reportReady: number
+      validated: number
+      candidates: number
+      rejected: number
+    }
+  }
+}
+
+export type UlmAuditFiles = {
+  json: string
+  markdown: string
+}
+
+export type UlmOperationAuditResult = {
+  operationID: string
+  root: string
+  generatedAt: string
+  ok: boolean
+  checks: UlmAuditChecks
+  blockers: Array<string>
+  recommendedTools: Array<string>
+  files: UlmAuditFiles
 }
 
 export type Workspace = {
@@ -6575,7 +6740,7 @@ export type UlmOperationListResponses = {
   /**
    * ULMCode operation status list
    */
-  200: Array<unknown>
+  200: Array<UlmOperationStatusSummary>
 }
 
 export type UlmOperationListResponse = UlmOperationListResponses[keyof UlmOperationListResponses]
@@ -6597,8 +6762,10 @@ export type UlmOperationStatusResponses = {
   /**
    * ULMCode operation status
    */
-  200: unknown
+  200: UlmOperationStatusSummary
 }
+
+export type UlmOperationStatusResponse = UlmOperationStatusResponses[keyof UlmOperationStatusResponses]
 
 export type UlmOperationResumeData = {
   body?: never
@@ -6618,8 +6785,10 @@ export type UlmOperationResumeResponses = {
   /**
    * ULMCode operation resume brief
    */
-  200: unknown
+  200: UlmOperationResumeBrief
 }
+
+export type UlmOperationResumeResponse = UlmOperationResumeResponses[keyof UlmOperationResumeResponses]
 
 export type UlmOperationAuditData = {
   body?: never
@@ -6645,8 +6814,10 @@ export type UlmOperationAuditResponses = {
   /**
    * ULMCode operation audit
    */
-  200: unknown
+  200: UlmOperationAuditResult
 }
+
+export type UlmOperationAuditResponse = UlmOperationAuditResponses[keyof UlmOperationAuditResponses]
 
 export type ExperimentalWorkspaceAdapterListData = {
   body?: never

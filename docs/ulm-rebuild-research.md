@@ -46,7 +46,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `operation_stage_gate` writes durable per-stage JSON/markdown gate artifacts and blocks advancement when required stage evidence is missing or validation still has unresolved candidate findings.
 - `operation_audit` writes durable JSON/markdown audit artifacts that combine restart health and final handoff lint, giving long runs a hard final readiness gate.
 - `opencode ulm list`, `opencode ulm status <operationID>`, `opencode ulm resume <operationID>`, `opencode ulm gate <operationID>`, and `opencode ulm audit <operationID>` expose operation discovery, dashboards, restart briefs, stage gates, and final audits directly from the CLI, with JSON output for automation.
-- `/ulm/operation`, `/ulm/operation/:operationID/status`, `/resume`, and `/audit` now expose the same ULM operation dashboard data through the instance HttpApi and generated JS SDK for TUI/plugin consumers.
+- `/ulm/operation`, `/ulm/operation/:operationID/status`, `/resume`, and `/audit` now expose typed ULM operation dashboard data through the instance HttpApi and generated JS SDK for TUI/plugin consumers.
 - The TUI now registers `ulm.operations` plus `/ulm`/`/operations`, opening a native operation list and status/audit detail dialog.
 - `operation_plan` records execution-ready phase order, success criteria, subagent/no-subagent policy, assumptions, and report closeout.
 - Native ULM agents now cover primary operation control, recon, attack-path mapping, validation, evidence normalization, report writing, and adversarial report review with prompts written around durable artifacts and gate tools instead of the old swarm prompts.

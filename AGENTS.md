@@ -113,7 +113,7 @@ const table = sqliteTable("session", {
 - `operation_status` is the post-compaction/interruption resume reader for ledgers, finding counts, reports, runtime budget/task rollups, and recent events. It prints a compact dashboard first, then the full JSON inside `<operation_status_json>` tags.
 - `operation_audit` combines restart health and final handoff lint, writes `deliverables/operation-audit.json` plus `.md`, and should be the last gate before claiming a final package is ready.
 - CLI operators can inspect the same ledger outside a model turn with `opencode ulm list`, `opencode ulm status <operationID>`, `opencode ulm resume <operationID>`, `opencode ulm gate <operationID>`, and `opencode ulm audit <operationID>`; use `--format json` for machine-readable handoff.
-- Instance HTTP API routes under `/ulm/operation` expose operation list, status, resume, and audit JSON for TUI/plugin dashboards. Regenerate the JS SDK after changing this route surface.
+- Instance HTTP API routes under `/ulm/operation` expose typed operation list, status, resume, and audit JSON for TUI/plugin dashboards. Regenerate the JS SDK after changing this route surface.
 - The TUI has a native `ulm.operations` command and `/ulm` slash entry. It opens an operation list plus status/audit detail dialog backed by the generated SDK.
 - `evidence_record` writes durable evidence JSON plus optional raw text under `evidence/`; findings should cite evidence IDs/paths from this tool rather than chat-only observations.
 - `finding_record` is the evidence-backed finding state tool; validated/report-ready findings require evidence refs.
