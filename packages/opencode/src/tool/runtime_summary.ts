@@ -3,6 +3,7 @@ import * as Tool from "./tool"
 import DESCRIPTION from "./runtime_summary.txt"
 import { Instance } from "@/project/instance"
 import { Session } from "@/session/session"
+import { BackgroundJob } from "@/background/job"
 import type { SessionID } from "@/session/schema"
 import type { MessageV2 } from "@/session/message-v2"
 import { writeRuntimeSummary } from "@/ulm/artifact"
@@ -82,10 +83,29 @@ function collectChildMessages(session: Session.Interface, sessionID: SessionID):
   })
 }
 
-export const RuntimeSummaryTool = Tool.define<typeof Parameters, Metadata, Session.Service>(
+function backgroundStatus(status: BackgroundJob.Status): Schema.Schema.Type<typeof BackgroundTask>["status"] {
+  if (status === "error") return "failed"
+  return status
+}
+
+function backgroundSummary(job: BackgroundJob.Info) {
+  if (job.title) return job.title
+  if (job.output) return job.output.split(/\r?\n/)[0]
+  if (job.error) return job.error.split(/\r?\n/)[0]
+  return undefined
+}
+
+function backgroundAgent(job: BackgroundJob.Info) {
+  const subagent = job.metadata?.subagent
+  if (typeof subagent === "string" && subagent) return subagent
+  return undefined
+}
+
+export const RuntimeSummaryTool = Tool.define<typeof Parameters, Metadata, Session.Service | BackgroundJob.Service>(
   "runtime_summary",
   Effect.gen(function* () {
     const session = yield* Session.Service
+    const jobs = yield* BackgroundJob.Service
     return {
       description: DESCRIPTION,
       parameters: Parameters,
@@ -93,9 +113,18 @@ export const RuntimeSummaryTool = Tool.define<typeof Parameters, Metadata, Sessi
         Effect.gen(function* () {
           const worktree = Instance.worktree
           const childMessages = yield* collectChildMessages(session, ctx.sessionID)
+          const backgroundTasks =
+            params.backgroundTasks ??
+            (yield* jobs.list()).map((job) => ({
+              id: job.id,
+              agent: backgroundAgent(job),
+              status: backgroundStatus(job.status),
+              summary: backgroundSummary(job),
+            }))
           const result = yield* Effect.tryPromise(() =>
             writeRuntimeSummary(worktree, {
               ...params,
+              backgroundTasks,
               sessionMessages: [...ctx.messages, ...childMessages].map((message) => ({
                 role: message.info.role,
                 agent: message.info.agent,

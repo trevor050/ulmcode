@@ -37,7 +37,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `report_outline` gives report writers a page/section budget so final reports do not become sparse.
 - `report_lint` checks report readiness, total and per-finding report density, evidence refs, final handoff artifacts, and `finalHandoff=true`.
 - `report_render` publishes final HTML, lightweight PDF, README, manifest, evidence index, state counts, and non-reportable finding IDs.
-- `runtime_summary` records model-call split, token/cost budget rollups, per-agent usage, compaction pressure, repeated fetches, background task state, notes, and canonical artifact paths. If model/token/cost or compaction fields are omitted, the tool derives them from the current session ledger and persisted child subagent sessions; explicit fields remain manual overrides.
+- `runtime_summary` records model-call split, token/cost budget rollups, per-agent usage, compaction pressure, repeated fetches, background task state, notes, and canonical artifact paths. If model/token/cost, compaction, or background task fields are omitted, the tool derives them from the current session ledger, persisted child subagent sessions, and persisted background job ledger; explicit fields remain manual overrides.
 - `task` supports `background: true`; `task_status` polls running subagents; `task_list` recovers persisted background job metadata.
 - `tools/ulmcode-profile` provides an isolated K-12 pentest profile, compact skill pack, plugin dependency manifest, and Oh My OpenAgent routing file.
 - `bun run --cwd packages/opencode test:ulm-skills` validates the bundled profile skills/commands for frontmatter, placeholder-free content, and durable ULM tool references.
@@ -59,7 +59,7 @@ Source checked on 2026-05-05 from `~/.config/opencode` without copying secrets.
 ## Not Adopted Yet
 
 - True background job execution resume across process restart. Metadata is persisted and listable, but in-flight fibers are not restarted after process death.
-- Full operation-wide cost/token extraction into budgets. `runtime_summary` now derives current-session and child-session assistant message usage and compaction counts, but it does not yet recover transcripts from long-dead background jobs that no longer have a reachable session tree.
+- Full operation-wide cost/token extraction into budgets. `runtime_summary` now derives current-session and child-session assistant message usage, compaction counts, and background job status, but it does not yet recover transcripts from long-dead background jobs that no longer have a reachable session tree.
 - Full TUI operation dashboard. The tool output now has a compact dashboard, but there is not yet a dedicated interactive TUI route.
 - Larger vulnerable-target lab catalog. The first weak-MFA HTTP target ships with Docker Compose support, but the catalog is still one scenario.
 - Full vendored plugin source. The isolated profile records plugin dependencies and routing, but does not vendor third-party plugin code into this repo.

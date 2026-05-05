@@ -1,5 +1,5 @@
 Write a durable runtime handoff summary for a ULMCode operation.
 
-Use this during long autonomous runs, before compaction-heavy handoffs, and before final delivery. The summary records model-call split, token/cost budget rollups, compaction pressure, repeated fetches, active background tasks, notes, and canonical artifact paths under `.ulmcode/operations/<operation>/deliverables/`.
+Use this during long autonomous runs, before compaction-heavy handoffs, and before final delivery. The summary records model-call split, token/cost budget rollups, compaction pressure, repeated fetches, persisted background task state, notes, and canonical artifact paths under `.ulmcode/operations/<operation>/deliverables/`.
 
-When model-call or token/cost fields are omitted, the tool derives them from the current session's assistant messages and persisted child subagent sessions. Provide explicit values only when you need to override or supplement the stored session ledger.
+When model-call, token/cost, compaction, or background task fields are omitted, the tool derives them from the current session's assistant messages, persisted child subagent sessions, and persisted background job ledger. Provide explicit values only when you need to override or supplement the stored runtime ledger.

@@ -8,6 +8,7 @@ import { Session } from "@/session/session"
 import { RuntimeSummaryTool } from "@/tool/runtime_summary"
 import { Truncate } from "@/tool/truncate"
 import { Storage } from "@/storage/storage"
+import { BackgroundJob } from "@/background/job"
 import { writeOperationCheckpoint } from "@/ulm/artifact"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Instance } from "@/project/instance"
@@ -21,6 +22,7 @@ const layer = Layer.mergeAll(
   CrossSpawnSpawner.defaultLayer,
   Session.defaultLayer,
   Storage.defaultLayer,
+  BackgroundJob.defaultLayer,
   Truncate.defaultLayer,
 )
 
@@ -188,6 +190,70 @@ describe("tool.runtime_summary", () => {
             expect(record.compaction.count).toBe(1)
             expect(record.compaction.pressure).toBe("low")
           }).pipe(Effect.provide(layer)),
+        ),
+    })
+  })
+
+  test("includes persisted background jobs when backgroundTasks is omitted", async () => {
+    await using dir = await tmpdir({ git: true })
+    await provideTestInstance({
+      directory: dir.path,
+      fn: () =>
+        Effect.runPromise(
+          Effect.gen(function* () {
+            const worktree = Instance.worktree
+            yield* Effect.promise(() =>
+              writeOperationCheckpoint(worktree, {
+                operationID: "school",
+                objective: "Authorized school assessment",
+                stage: "validation",
+                status: "running",
+                summary: "Validation is still running.",
+              }),
+            )
+
+            const jobs = yield* BackgroundJob.Service
+            const storage = yield* Storage.Service
+            const id = `tool_${crypto.randomUUID().replaceAll("-", "")}`
+            yield* Effect.addFinalizer(() => storage.remove(["background_job", id]).pipe(Effect.ignore))
+            yield* jobs.start({
+              id,
+              type: "task",
+              title: "validate weak mfa",
+              metadata: {
+                subagent: "validator",
+              },
+              run: Effect.succeed("MFA bypass validation completed."),
+            })
+            expect((yield* jobs.wait({ id })).info?.status).toBe("completed")
+
+            const tool = yield* RuntimeSummaryTool
+            const def = yield* tool.init()
+            const result = yield* def.execute(
+              {
+                operationID: "school",
+              },
+              {
+                sessionID: "session-1" as any,
+                messageID: MessageID.ascending(),
+                agent: "build",
+                abort: new AbortController().signal,
+                messages: [],
+                metadata: () => Effect.void,
+                ask: () => Effect.void,
+              },
+            )
+
+            const record = yield* Effect.promise(() => fs.readFile(result.metadata.json, "utf8").then(JSON.parse))
+            expect(record.backgroundTasks).toEqual([
+              {
+                id,
+                agent: "validator",
+                status: "completed",
+                summary: "validate weak mfa",
+              },
+            ])
+          }).pipe(Effect.scoped, Effect.provide(layer)),
         ),
     })
   })
