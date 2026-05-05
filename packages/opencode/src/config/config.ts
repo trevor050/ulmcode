@@ -290,6 +290,14 @@ type State = {
   directories: string[]
   deps: Fiber.Fiber<void, never>[]
   consoleState: ConsoleState
+  files: string[]
+  fingerprints: Record<string, string>
+}
+
+type GlobalState = {
+  config: Info
+  files: string[]
+  fingerprints: Record<string, string>
 }
 
 export interface Interface {
@@ -313,6 +321,35 @@ function globalConfigFile() {
     if (existsSync(file)) return file
   }
   return candidates[0]
+}
+
+function globalConfigFiles() {
+  return ["config.json", "opencode.json", "opencode.jsonc", "config"].map((file) =>
+    path.join(Global.Path.config, file),
+  )
+}
+
+async function fingerprintFile(filepath: string) {
+  try {
+    const stat = await fsNode.stat(filepath)
+    return `${stat.size}:${stat.mtimeMs}`
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "missing"
+    throw error
+  }
+}
+
+async function fingerprintFiles(files: string[]) {
+  const result: Record<string, string> = {}
+  for (const file of files) {
+    result[file] = await fingerprintFile(file)
+  }
+  return result
+}
+
+async function fingerprintsChanged(files: string[], previous: Record<string, string>) {
+  const latest = await fingerprintFiles(files)
+  return files.some((file) => latest[file] !== previous[file])
 }
 
 function patchJsonc(input: string, patch: unknown, path: string[] = []): string {
@@ -393,6 +430,7 @@ export const layer = Layer.effect(
 
     const loadGlobal = Effect.fnUntraced(function* () {
       let result: Info = {}
+      const files = globalConfigFiles()
       result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "config.json")))
       result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "opencode.json")))
       result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "opencode.jsonc")))
@@ -413,7 +451,11 @@ export const layer = Layer.effect(
         )
       }
 
-      return result
+      return {
+        config: result,
+        files,
+        fingerprints: yield* Effect.promise(() => fingerprintFiles(files)),
+      }
     })
 
     const [cachedGlobal, invalidateGlobal] = yield* Effect.cachedInvalidateWithTTL(
@@ -421,13 +463,23 @@ export const layer = Layer.effect(
         Effect.tapError((error) =>
           Effect.sync(() => log.error("failed to load global config, using defaults", { error: String(error) })),
         ),
-        Effect.orElseSucceed((): Info => ({})),
+        Effect.orElseSucceed(
+          (): GlobalState => ({
+            config: {},
+            files: globalConfigFiles(),
+            fingerprints: {},
+          }),
+        ),
       ),
       Duration.infinity,
     )
 
     const getGlobal = Effect.fn("Config.getGlobal")(function* () {
-      return yield* cachedGlobal
+      const current = yield* cachedGlobal
+      const changed = yield* Effect.promise(() => fingerprintsChanged(current.files, current.fingerprints))
+      if (!changed) return current.config
+      yield* invalidateGlobal
+      return (yield* cachedGlobal).config
     })
 
     const ensureGitignore = Effect.fn("Config.ensureGitignore")(function* (dir: string) {
@@ -453,6 +505,7 @@ export const layer = Layer.effect(
         const auth = yield* authSvc.all().pipe(Effect.orDie)
 
         let result: Info = {}
+        const files = new Set<string>(globalConfigFiles())
         const consoleManagedProviders = new Set<string>()
         let activeOrgName: string | undefined
 
@@ -515,12 +568,14 @@ export const layer = Layer.effect(
         yield* merge(Global.Path.config, global, "global")
 
         if (Flag.OPENCODE_CONFIG) {
+          files.add(Flag.OPENCODE_CONFIG)
           yield* merge(Flag.OPENCODE_CONFIG, yield* loadFile(Flag.OPENCODE_CONFIG))
           log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
         }
 
         if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
           for (const file of yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie)) {
+            files.add(file)
             yield* merge(file, yield* loadFile(file), "local")
           }
         }
@@ -541,6 +596,7 @@ export const layer = Layer.effect(
           if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
             for (const file of ["opencode.json", "opencode.jsonc"]) {
               const source = path.join(dir, file)
+              files.add(source)
               log.debug(`loading config from ${source}`)
               yield* merge(source, yield* loadFile(source))
               result.agent ??= {}
@@ -636,6 +692,7 @@ export const layer = Layer.effect(
         if (existsSync(managedDir)) {
           for (const file of ["opencode.json", "opencode.jsonc"]) {
             const source = path.join(managedDir, file)
+            files.add(source)
             yield* merge(source, yield* loadFile(source), "global")
           }
         }
@@ -691,10 +748,14 @@ export const layer = Layer.effect(
           result.compaction = { ...result.compaction, prune: false }
         }
 
+        const trackedFiles = Array.from(files)
+
         return {
           config: result,
           directories,
           deps,
+          files: trackedFiles,
+          fingerprints: yield* Effect.promise(() => fingerprintFiles(trackedFiles)),
           consoleState: {
             consoleManagedProviders: Array.from(consoleManagedProviders),
             activeOrgName,
@@ -711,22 +772,29 @@ export const layer = Layer.effect(
       }),
     )
 
+    const getState = Effect.fn("Config.getState")(function* () {
+      const current = yield* InstanceState.get(state)
+      const changed = yield* Effect.promise(() => fingerprintsChanged(current.files, current.fingerprints))
+      if (!changed) return current
+      yield* invalidateGlobal
+      yield* InstanceState.invalidate(state)
+      return yield* InstanceState.get(state)
+    })
+
     const get = Effect.fn("Config.get")(function* () {
-      return yield* InstanceState.use(state, (s) => s.config)
+      return (yield* getState()).config
     })
 
     const directories = Effect.fn("Config.directories")(function* () {
-      return yield* InstanceState.use(state, (s) => s.directories)
+      return (yield* getState()).directories
     })
 
     const getConsoleState = Effect.fn("Config.getConsoleState")(function* () {
-      return yield* InstanceState.use(state, (s) => s.consoleState)
+      return (yield* getState()).consoleState
     })
 
     const waitForDependencies = Effect.fn("Config.waitForDependencies")(function* () {
-      yield* InstanceState.useEffect(state, (s) =>
-        Effect.forEach(s.deps, Fiber.join, { concurrency: "unbounded" }).pipe(Effect.asVoid),
-      )
+      yield* Effect.forEach((yield* getState()).deps, Fiber.join, { concurrency: "unbounded" }).pipe(Effect.asVoid)
     })
 
     const update = Effect.fn("Config.update")(function* (config: Info) {

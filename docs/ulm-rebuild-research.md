@@ -19,6 +19,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `#25180` subagent auto-compaction is a future target for 20-hour operation stability.
 - `#25805` session retry caps matter for unattended operations; adopted locally as `max_retries`.
 - `#25658` SSE reconnect replay matters for long-running operation visibility; adopted locally for global event streams.
+- `#25778` config cache refresh matters for live profile/plugin edits during long runs; adopted locally with direct `getGlobal()` refresh coverage.
 
 ## External Cyber Harness Ideas
 
@@ -48,6 +49,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `max_retries` caps session-level transient model/provider retries. The isolated ULM profile sets it to 8 so 20-hour runs tolerate short provider instability without looping indefinitely.
 - Malformed input for a valid tool is now routed through `invalid` with `type: "known_tool_invalid_input"` and an explicit retry hint, while nonexistent tools use `type: "unknown_tool"`.
 - `/global/event` now assigns SSE ids to recoverable global events and honors `Last-Event-ID` on reconnect through a 1024-event replay ring, so browser/network reconnects can catch up on missed global operation updates.
+- Config file fingerprints are tracked for cached global and instance config. Changed project/global config files force reload on the next config read; `Config.invalidate()` remains safe outside an instance context.
 - `tools/ulmcode-profile` provides an isolated K-12 pentest profile, compact skill pack, plugin dependency manifest, and Oh My OpenAgent routing file. The isolated profile now carries over the useful local OMO routing lanes: backend architect/builder, frontend taste/builder, product taste pass, sparse human-taste review, test coverage, background concurrency, runtime fallback, auto-resume, aggressive truncation, and tmux layout settings.
 - `bun run --cwd packages/opencode test:ulm-skills` validates the bundled profile skills/commands for frontmatter, placeholder-free content, and durable ULM tool references.
 - `bun run --cwd packages/opencode test:ulm-smoke` exercises a synthetic ULM lifecycle outside the unit-test helpers: operation plan, evidence, finding, report outline, validation stage gate, final render, runtime summary, operation audit, final handoff lint, and status dashboard.
