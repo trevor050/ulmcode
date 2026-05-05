@@ -13,35 +13,35 @@
       "model": "openai/gpt-5.5-fast",
       "mode": "primary",
       "options": {
-        "reasoning_effort": "high"
+        "reasoningEffort": "high"
       }
     },
     "recon": {
       "model": "openai/gpt-5.4-mini-fast",
       "mode": "subagent",
       "options": {
-        "reasoning_effort": "medium"
+        "reasoningEffort": "medium"
       }
     },
     "evidence": {
       "model": "openai/gpt-5.4-mini-fast",
       "mode": "subagent",
       "options": {
-        "reasoning_effort": "medium"
+        "reasoningEffort": "medium"
       }
     },
     "validator": {
       "model": "openai/gpt-5.5-fast",
       "mode": "subagent",
       "options": {
-        "reasoning_effort": "xhigh"
+        "reasoningEffort": "xhigh"
       }
     },
     "report-writer": {
       "model": "openai/gpt-5.5-fast",
       "mode": "subagent",
       "options": {
-        "reasoning_effort": "high"
+        "reasoningEffort": "high"
       }
     }
   },
