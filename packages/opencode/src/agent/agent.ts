@@ -8,11 +8,13 @@ import { Auth } from "../auth"
 import { ProviderTransform } from "@/provider/transform"
 
 import PROMPT_GENERATE from "./generate.txt"
+import PROMPT_ULM_ATTACK_MAP from "./prompt/attack-map.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_ULM_EVIDENCE from "./prompt/evidence.txt"
 import PROMPT_ULM_PENTEST from "./prompt/pentest.txt"
 import PROMPT_ULM_RECON from "./prompt/recon.txt"
+import PROMPT_ULM_REPORT_REVIEWER from "./prompt/report-reviewer.txt"
 import PROMPT_ULM_REPORT_WRITER from "./prompt/report-writer.txt"
 import PROMPT_ULM_VALIDATOR from "./prompt/validator.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
@@ -228,6 +230,23 @@ export const layer = Layer.effect(
             native: true,
             color: "cyan",
           },
+          "attack-map": {
+            name: "attack-map",
+            description:
+              "ULMCode subagent for turning recon evidence into prioritized attack paths, validation queues, and safe test plans.",
+            prompt: PROMPT_ULM_ATTACK_MAP,
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                todowrite: "deny",
+              }),
+              user,
+            ),
+            options: {},
+            mode: "subagent",
+            native: true,
+            color: "magenta",
+          },
           validator: {
             name: "validator",
             description:
@@ -266,6 +285,23 @@ export const layer = Layer.effect(
             mode: "subagent",
             native: true,
             color: "green",
+          },
+          "report-reviewer": {
+            name: "report-reviewer",
+            description:
+              "ULMCode subagent for adversarial review of final reports, evidence coverage, sparse sections, and handoff readiness.",
+            prompt: PROMPT_ULM_REPORT_REVIEWER,
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                todowrite: "deny",
+              }),
+              user,
+            ),
+            options: {},
+            mode: "subagent",
+            native: true,
+            color: "purple",
           },
           compaction: {
             name: "compaction",

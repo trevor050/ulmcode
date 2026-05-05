@@ -47,6 +47,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `operation_audit` writes durable JSON/markdown audit artifacts that combine restart health and final handoff lint, giving long runs a hard final readiness gate.
 - `opencode ulm list`, `opencode ulm status <operationID>`, `opencode ulm resume <operationID>`, `opencode ulm gate <operationID>`, and `opencode ulm audit <operationID>` expose operation discovery, dashboards, restart briefs, stage gates, and final audits directly from the CLI, with JSON output for automation.
 - `operation_plan` records execution-ready phase order, success criteria, subagent/no-subagent policy, assumptions, and report closeout.
+- Native ULM agents now cover primary operation control, recon, attack-path mapping, validation, evidence normalization, report writing, and adversarial report review with prompts written around durable artifacts and gate tools instead of the old swarm prompts.
 - `evidence_record` writes durable evidence JSON plus optional raw text, so findings can cite recorded artifacts instead of chat-only claims.
 - `finding_record` enforces evidence before validated/report-ready findings.
 - `report_outline` gives report writers a page/section budget so final reports do not become sparse.

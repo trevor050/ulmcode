@@ -78,6 +78,14 @@
       "textVerbosity": "medium",
       "description": "Reconnaissance, inventory, passive discovery, and low-risk enumeration."
     },
+    "attack-map": {
+      "model": "openai/gpt-5.5-fast",
+      "variant": "high",
+      "reasoningEffort": "high",
+      "temperature": 0.04,
+      "textVerbosity": "medium",
+      "description": "Attack-path mapping, validation queue design, and blast-radius prioritization from recorded evidence."
+    },
     "evidence": {
       "model": "openai/gpt-5.4-mini-fast",
       "reasoningEffort": "medium",
@@ -100,6 +108,14 @@
       "temperature": 0.08,
       "textVerbosity": "medium",
       "description": "Dense report drafting, finding synthesis, artifact handoff, and final readiness checks."
+    },
+    "report-reviewer": {
+      "model": "openai/gpt-5.5-fast",
+      "variant": "xhigh",
+      "reasoningEffort": "xhigh",
+      "temperature": 0.03,
+      "textVerbosity": "medium",
+      "description": "Adversarial report QA for sparse sections, unsupported claims, missing evidence, and final handoff blockers."
     },
     "backend-architect": {
       "model": "openai/gpt-5.5-fast",

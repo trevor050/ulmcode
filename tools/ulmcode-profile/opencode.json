@@ -24,6 +24,13 @@
         "reasoningEffort": "medium"
       }
     },
+    "attack-map": {
+      "model": "openai/gpt-5.5-fast",
+      "mode": "subagent",
+      "options": {
+        "reasoningEffort": "high"
+      }
+    },
     "evidence": {
       "model": "openai/gpt-5.4-mini-fast",
       "mode": "subagent",
@@ -43,6 +50,13 @@
       "mode": "subagent",
       "options": {
         "reasoningEffort": "high"
+      }
+    },
+    "report-reviewer": {
+      "model": "openai/gpt-5.5-fast",
+      "mode": "subagent",
+      "options": {
+        "reasoningEffort": "xhigh"
       }
     }
   },

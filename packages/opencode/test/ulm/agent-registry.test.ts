@@ -14,9 +14,11 @@ describe("ULM native surface", () => {
       const names = (yield* agent.list()).map((item) => item.name)
       expect(names).toContain("pentest")
       expect(names).toContain("recon")
+      expect(names).toContain("attack-map")
       expect(names).toContain("validator")
       expect(names).toContain("evidence")
       expect(names).toContain("report-writer")
+      expect(names).toContain("report-reviewer")
     }))
 
   it.instance("registers rebuilt ULM operation tools", () =>
