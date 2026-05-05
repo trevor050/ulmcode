@@ -1378,6 +1378,20 @@ export async function readOperationStatus(
   }
 }
 
+export async function listOperationStatuses(
+  worktree: string,
+  options: { eventLimit?: number } = {},
+): Promise<OperationStatusSummary[]> {
+  const root = operationsRoot(worktree)
+  if (!(await exists(root))) return []
+  const entries = await fs.readdir(root, { withFileTypes: true })
+  const operationIDs = entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort((a, b) => a.localeCompare(b))
+  return Promise.all(operationIDs.map((operationID) => readOperationStatus(worktree, operationID, options)))
+}
+
 export async function writeRuntimeSummary(
   worktree: string,
   input: RuntimeSummaryInput,

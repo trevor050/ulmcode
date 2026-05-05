@@ -6,6 +6,7 @@ import {
   buildOperationResumeBrief,
   formatOperationStatusDashboard,
   formatOperationResumeBrief,
+  listOperationStatuses,
   lintReport,
   readOperationStatus,
   renderReport,
@@ -242,6 +243,29 @@ describe("ULM artifact ledger", () => {
     expect(status.operation?.stage).toBe("validation")
     expect(status.findings.total).toBe(0)
     expect(status.lastEvents).toHaveLength(1)
+  })
+
+  test("lists operation statuses for CLI dashboards", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "beta",
+      objective: "Beta school assessment",
+      stage: "recon",
+      status: "running",
+      summary: "Recon running.",
+    })
+    await writeOperationCheckpoint(worktree, {
+      operationID: "alpha",
+      objective: "Alpha school assessment",
+      stage: "handoff",
+      status: "complete",
+      summary: "Handoff complete.",
+    })
+
+    const statuses = await listOperationStatuses(worktree)
+    expect(statuses.map((status) => status.operationID)).toEqual(["alpha", "beta"])
+    expect(statuses[0]?.operation?.status).toBe("complete")
+    expect(statuses[1]?.operation?.stage).toBe("recon")
   })
 
   test("formats a compact operation status dashboard", async () => {

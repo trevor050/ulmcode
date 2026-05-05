@@ -31,6 +31,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `operation_checkpoint` records stage gates and resumable heartbeats.
 - `operation_resume` emits a compact post-compaction/restart brief with health gaps, recommended tools, operation-scoped tool hints, active/background tasks, and a continuation prompt before raw JSON. With `staleAfterMinutes`, it also flags stale running checkpoints and stale background jobs before new work starts.
 - `operation_status` restores context after interruptions and compaction, including runtime budget/model/task rollups when a runtime summary exists. It now emits a compact operator dashboard before the raw JSON payload.
+- `opencode ulm list`, `opencode ulm status <operationID>`, and `opencode ulm resume <operationID>` expose operation discovery, dashboards, and restart briefs directly from the CLI, with JSON output for automation.
 - `operation_plan` records execution-ready phase order, success criteria, subagent/no-subagent policy, assumptions, and report closeout.
 - `evidence_record` writes durable evidence JSON plus optional raw text, so findings can cite recorded artifacts instead of chat-only claims.
 - `finding_record` enforces evidence before validated/report-ready findings.
@@ -60,6 +61,6 @@ Source checked on 2026-05-05 from `~/.config/opencode` without copying secrets.
 
 - True background job execution resume across process restart. Metadata is persisted, listable, and stale-aware, but in-flight fibers are not restarted after process death.
 - Full operation-wide cost/token extraction into budgets. `runtime_summary` now derives current-session, child-session, and persisted background-job-session assistant usage, compaction counts, and background job status, but it cannot recover cost/transcript data once the underlying session ledger is missing.
-- Full TUI operation dashboard. The tool output now has a compact dashboard, but there is not yet a dedicated interactive TUI route.
+- Full interactive TUI operation dashboard. Tool output and `opencode ulm ...` now provide compact dashboards, but there is not yet a dedicated interactive TUI route.
 - Broader vulnerable-target lab catalog. The catalog now has weak-MFA and roster-IDOR scenarios with Docker Compose support, but still needs more authz, injection, storage, and reporting-quality cases.
 - Full vendored plugin source. The isolated profile records plugin dependencies and routing, but does not vendor third-party plugin code into this repo.
