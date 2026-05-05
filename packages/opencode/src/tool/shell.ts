@@ -28,6 +28,18 @@ export { Parameters } from "./shell/prompt"
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
+const DANGEROUS_PROCESS_KILL_PATTERNS = [
+  /\btaskkill\b(?=[\s\S]*\/im\s+node(?:\.exe)?\b)/i,
+  /\bkillall\b(?=[\s\S]*\bnode(?:\.exe)?\b)/i,
+  /\bpkill\b(?=[\s\S]*\bnode(?:\.exe)?\b)/i,
+  /\bget-process\b(?=[\s\S]*\bnode(?:\.exe)?\b)(?=[\s\S]*\|\s*\bstop-process\b)/i,
+  /\bstop-process\b(?=[\s\S]*(?:-name\s+node(?:\.exe)?\b|\bnode(?:\.exe)?\b))/i,
+]
+
+export function isDangerousProcessKillCommand(command: string): boolean {
+  return DANGEROUS_PROCESS_KILL_PATTERNS.some((pattern) => pattern.test(command))
+}
+
 const FILES = new Set([
   ...CWD,
   "rm",
@@ -604,6 +616,11 @@ export const ShellTool = Tool.define(
                 throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
               }
               const timeout = params.timeout ?? DEFAULT_TIMEOUT
+              if (isDangerousProcessKillCommand(params.command)) {
+                throw new Error(
+                  `Command blocked for system safety: "${params.command}". Broadly killing Node.js processes can crash OpenCode. Target a specific PID or use project-scoped commands such as npm stop or pm2 stop <name>.`,
+                )
+              }
               const ps = Shell.ps(shell)
               yield* Effect.scoped(
                 Effect.gen(function* () {

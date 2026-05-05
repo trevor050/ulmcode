@@ -58,6 +58,8 @@ export const layer = Layer.effect(
             `  Platform: ${process.platform}`,
             `  Today's date: ${new Date().toDateString()}`,
             `</env>`,
+            ``,
+            `System safety: never run broad commands that kill every Node.js process, such as \`pkill node\`, \`killall node\`, \`taskkill /F /IM node.exe\`, or \`Get-Process node | Stop-Process\`. OpenCode itself runs on Node.js, so stop specific PIDs or use project-scoped commands such as \`npm stop\` or \`pm2 stop <name>\`.`,
           ].join("\n"),
         ]
       }),

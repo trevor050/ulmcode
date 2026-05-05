@@ -109,6 +109,9 @@ async function auditOperationRuntime() {
   const commandService = await read("packages/opencode/src/command/index.ts")
   const configService = await read("packages/opencode/src/config/config.ts")
   const observability = await read("packages/core/src/effect/observability.ts")
+  const shellTool = await read("packages/opencode/src/tool/shell.ts")
+  const shellPrompt = await read("packages/opencode/src/tool/shell/shell.txt")
+  const systemPrompt = await read("packages/opencode/src/session/system.ts")
   const promptPaste = await read("packages/opencode/src/cli/cmd/tui/component/prompt/paste.ts")
   const projectService = await read("packages/opencode/src/project/project.ts")
   const providerTransform = await read("packages/opencode/src/provider/transform.ts")
@@ -153,6 +156,13 @@ async function auditOperationRuntime() {
     "service.version",
     "deployment.environment.name",
   ])
+  requireText("packages/opencode/src/tool/shell.ts", shellTool, [
+    "isDangerousProcessKillCommand",
+    "DANGEROUS_PROCESS_KILL_PATTERNS",
+    "Broadly killing Node.js processes can crash OpenCode",
+  ])
+  requireText("packages/opencode/src/tool/shell/shell.txt", shellPrompt, ["pkill node", "taskkill /F /IM node.exe"])
+  requireText("packages/opencode/src/session/system.ts", systemPrompt, ["pkill node", "OpenCode itself runs on Node.js"])
   requireText("packages/opencode/src/cli/cmd/tui/component/prompt/paste.ts", promptPaste, [
     "displayOffsetToStringIndex",
     "expandPromptTextParts",
