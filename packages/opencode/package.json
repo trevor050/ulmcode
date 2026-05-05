@@ -9,7 +9,7 @@
     "typecheck": "tsgo --noEmit",
     "test": "bun test --timeout 30000",
     "test:ci": "mkdir -p .artifacts/unit && bun test --timeout 30000 --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml",
-    "test:ulm-lab": "bun run script/ulm-lab-replay.ts",
+    "test:ulm-lab": "bun run script/ulm-lab-replay-all.ts",
     "test:ulm-lab-target": "bun run script/ulm-lab-target-smoke.ts",
     "test:ulm-skills": "bun run script/ulm-profile-skills.ts",
     "test:ulm-smoke": "bun run script/ulm-lifecycle-smoke.ts",

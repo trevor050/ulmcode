@@ -8,7 +8,7 @@ Run the bundled replay check from the repo root:
 bun run --cwd packages/opencode test:ulm-lab
 ```
 
-Each lab manifest defines the operation objective, execution plan, evidence records, expected findings, runtime usage, and assertions for the generated handoff artifacts. The replay runner writes a temporary `.ulmcode/operations/<id>/` tree, renders final deliverables, writes a runtime summary, and requires `finalHandoff` lint to pass. The unit harness replays every `*/manifest.json` in this directory so new labs are automatically covered.
+Each lab manifest defines the operation objective, execution plan, evidence records, expected findings, runtime usage, and assertions for the generated handoff artifacts. The replay runner writes a temporary `.ulmcode/operations/<id>/` tree, renders final deliverables, writes a runtime summary, and requires `finalHandoff` lint to pass. The package command replays every `*/manifest.json` in this directory so new labs are automatically covered.
 
 Bundled labs:
 

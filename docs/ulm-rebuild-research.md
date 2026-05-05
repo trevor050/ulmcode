@@ -42,7 +42,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `tools/ulmcode-profile` provides an isolated K-12 pentest profile, compact skill pack, plugin dependency manifest, and Oh My OpenAgent routing file.
 - `bun run --cwd packages/opencode test:ulm-skills` validates the bundled profile skills/commands for frontmatter, placeholder-free content, and durable ULM tool references.
 - `bun run --cwd packages/opencode test:ulm-smoke` exercises a synthetic ULM lifecycle outside the unit-test helpers: operation plan, evidence, finding, report outline, final render, runtime summary, final handoff lint, and status dashboard.
-- The lab replay unit harness replays every `tools/ulmcode-labs/*/manifest.json` into full ULM artifacts and final handoff lint; current scenarios cover weak privileged MFA and roster cross-tenant read exposure.
+- `bun run --cwd packages/opencode test:ulm-lab` replays every `tools/ulmcode-labs/*/manifest.json` into full ULM artifacts and final handoff lint; current scenarios cover weak privileged MFA and roster cross-tenant read exposure.
 - `bun run --cwd packages/opencode test:ulm-lab-target` starts and probes the bundled intentionally weak MFA and roster-IDOR HTTP lab targets; each lab can run through its own Docker Compose file.
 
 ## Current Local OpenCode Inventory
