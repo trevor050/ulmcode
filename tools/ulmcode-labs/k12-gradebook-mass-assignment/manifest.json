@@ -1,0 +1,160 @@
+{
+  "id": "k12-gradebook-mass-assignment",
+  "operationID": "k12-gradebook-mass-assignment",
+  "objective": "Replay a synthetic authorized K-12 gradebook authorization assessment with client-controlled role escalation.",
+  "assumptions": [
+    "The lab uses synthetic evidence only.",
+    "No real external target is contacted.",
+    "Student, teacher, and grade records are intentionally fake."
+  ],
+  "plan": {
+    "phases": [
+      {
+        "stage": "recon",
+        "objective": "Map the gradebook write path and role inputs.",
+        "actions": [
+          "Load the synthetic gradebook update behavior",
+          "Identify whether role and teacher context are server-owned or client-controlled"
+        ],
+        "successCriteria": [
+          "Gradebook endpoint evidence is recorded with a durable evidence ID"
+        ],
+        "subagents": [
+          "recon"
+        ],
+        "noSubagents": [
+          "authorization scope and student-data handling decisions stay with the primary operator"
+        ]
+      },
+      {
+        "stage": "validation",
+        "objective": "Validate gradebook write escalation through mass assignment.",
+        "actions": [
+          "Replay a student-scoped request that supplies teacher role fields",
+          "Record the mutated grade and the expected server-side authorization check"
+        ],
+        "successCriteria": [
+          "A report-ready finding cites both the request evidence and the missing control evidence"
+        ],
+        "subagents": [
+          "validator",
+          "evidence"
+        ],
+        "noSubagents": [
+          "final severity and disclosure wording stay with the primary operator"
+        ]
+      },
+      {
+        "stage": "reporting",
+        "objective": "Render final handoff artifacts.",
+        "actions": [
+          "Run report_lint",
+          "Run report_render",
+          "Run runtime_summary"
+        ],
+        "successCriteria": [
+          "Final handoff lint passes"
+        ],
+        "subagents": [
+          "report-writer"
+        ],
+        "noSubagents": [
+          "client-facing delivery approval is manual"
+        ]
+      }
+    ],
+    "reportingCloseout": [
+      "Run report_lint",
+      "Run report_render",
+      "Run runtime_summary"
+    ]
+  },
+  "evidence": [
+    {
+      "evidenceID": "ev-student-grade-update",
+      "title": "Synthetic student grade update request",
+      "kind": "http_response",
+      "summary": "A student-scoped request changed a grade after supplying teacher role fields in the request body.",
+      "url": "http://127.0.0.1/api/gradebook/update",
+      "content": "{\"actor\":\"student-3001\",\"bodyRole\":\"teacher\",\"authorized\":true,\"grade\":{\"studentId\":\"student-3001\",\"courseId\":\"math-8\",\"score\":100},\"labFinding\":\"student_grade_mass_assignment\"}"
+    },
+    {
+      "evidenceID": "ev-gradebook-control-gap",
+      "title": "Synthetic gradebook server-owned role gap",
+      "kind": "note",
+      "summary": "The synthetic route trusts request-body role and teacher fields instead of deriving authorization from the authenticated server-side session.",
+      "content": "Expected control: ignore client-supplied role, teacherId, and canEdit fields; derive gradebook write permission from the authenticated session and enforce course ownership before mutating grades."
+    }
+  ],
+  "findings": [
+    {
+      "findingID": "student-grade-mass-assignment",
+      "title": "Student-controlled gradebook write escalation",
+      "state": "report_ready",
+      "severity": "critical",
+      "confidence": 0.91,
+      "affectedAssets": [
+        "Gradebook API",
+        "Academic records"
+      ],
+      "evidence": [
+        {
+          "id": "ev-student-grade-update",
+          "path": "evidence/raw/synthetic-student-grade-update-request.txt"
+        },
+        {
+          "id": "ev-gradebook-control-gap",
+          "path": "evidence/raw/synthetic-gradebook-server-owned-role-gap.txt"
+        }
+      ],
+      "description": "The synthetic gradebook endpoint accepts role and teacher context from the request body, allowing a student-scoped request to update a protected grade record.",
+      "impact": "A student account could alter academic records without teacher approval, undermining grade integrity and district reporting workflows.",
+      "remediation": "Make role and course ownership server-owned, reject client-supplied privilege fields, and require an authenticated teacher session with explicit course ownership before grade mutations."
+    }
+  ],
+  "runtime": {
+    "sessionMessages": [
+      {
+        "role": "assistant",
+        "agent": "pentest",
+        "modelID": "gpt-5.5",
+        "providerID": "openai",
+        "cost": 0.48,
+        "tokens": {
+          "input": 1300,
+          "output": 520,
+          "reasoning": 380,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "role": "assistant",
+        "agent": "validator",
+        "modelID": "gpt-5.4-mini",
+        "providerID": "openai",
+        "cost": 0.14,
+        "tokens": {
+          "input": 700,
+          "output": 320,
+          "reasoning": 120,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      }
+    ]
+  },
+  "expected": {
+    "reportableFindings": 1,
+    "evidence": 2,
+    "dashboardIncludes": [
+      "# k12-gradebook-mass-assignment - handoff/complete",
+      "risk: high",
+      "findings: 1 total"
+    ]
+  }
+}

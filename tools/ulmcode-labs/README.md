@@ -14,6 +14,7 @@ Bundled labs:
 
 - `k12-login-mfa-gap`: privileged-login MFA policy weakness.
 - `k12-roster-idor`: roster API cross-tenant read exposure.
+- `k12-gradebook-mass-assignment`: student-controlled gradebook write escalation.
 
 Both labs include tiny intentionally weak HTTP services under `service/`. Probe them without Docker:
 
@@ -26,4 +27,5 @@ Or run it with Docker Compose:
 ```sh
 docker compose -f tools/ulmcode-labs/k12-login-mfa-gap/docker-compose.yml up --build
 docker compose -f tools/ulmcode-labs/k12-roster-idor/docker-compose.yml up --build
+docker compose -f tools/ulmcode-labs/k12-gradebook-mass-assignment/docker-compose.yml up --build
 ```
