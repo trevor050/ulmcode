@@ -145,6 +145,9 @@ async function auditReportQuality() {
     "requireOutlineSections",
     "minOutlineSectionWords",
     "outline section is too sparse",
+    "readAuthoredReport",
+    "markdownReportToHtml",
+    "htmlToPdfLines",
   ])
   requireText("packages/opencode/src/tool/report_lint.ts", reportLint, [
     "requireOutlineSections",
@@ -156,6 +159,9 @@ async function auditReportQuality() {
     "lints sparse outline report sections",
     "operation audit forwards strict outline section gates",
     "handoff stage gate forwards strict outline section gates",
+    "rendered reports preserve authored report markdown",
+    "Scope, Authorization, and Methodology",
+    "Risk Register and Prioritized Roadmap",
   ])
   requireText("tools/ulmcode-profile/skills/pentest-compact/k12-long-report-production/SKILL.md", longReportSkill, [
     "requireOutlineBudget: true",
@@ -163,6 +169,53 @@ async function auditReportQuality() {
     "requireFindingSections: true",
   ])
   return { id: "report_quality", status: "ok", detail: "strict report outline and finding-section gates are wired" } satisfies CheckResult
+}
+
+async function auditProfileRouting() {
+  const profileSkills = await read("packages/opencode/script/ulm-profile-skills.ts")
+  const profileConfig = await read("tools/ulmcode-profile/opencode.json")
+  const omoConfig = await read("tools/ulmcode-profile/oh-my-openagent.jsonc")
+  const shellStrategy = await read("tools/ulmcode-profile/plugins/shell-strategy/shell_strategy.md")
+  requireText("packages/opencode/script/ulm-profile-skills.ts", profileSkills, [
+    "profile model must default to GPT-5.5 Fast",
+    "profile small_model must use GPT-5.4 Mini Fast",
+    "validator must use xhigh reasoning",
+    "report-reviewer must use xhigh reasoning",
+    "routing: ok",
+  ])
+  requireText("tools/ulmcode-profile/opencode.json", profileConfig, [
+    '"model": "openai/gpt-5.5-fast"',
+    '"small_model": "openai/gpt-5.4-mini-fast"',
+    '"default_agent": "pentest"',
+    "__ULMCODE_PROFILE_DIR__/plugins/shell-strategy/shell_strategy.md",
+  ])
+  requireText("tools/ulmcode-profile/oh-my-openagent.jsonc", omoConfig, [
+    '"repo-scout"',
+    '"xhigh-court"',
+    '"reasoningEffort": "xhigh"',
+  ])
+  requireText("tools/ulmcode-profile/plugins/shell-strategy/shell_strategy.md", shellStrategy, [
+    "Shell Non-Interactive Strategy",
+    "GIT_TERMINAL_PROMPT",
+    "Process Continuity",
+  ])
+  for (const command of [
+    "btw.md",
+    "commit-msg.md",
+    "explain-diff.md",
+    "frontend-polish.md",
+    "handoff.md",
+    "review.md",
+    "ship.md",
+    "test-plan.md",
+  ]) {
+    assert(await exists(`tools/ulmcode-profile/commands/${command}`), `profile command ${command} is missing`)
+  }
+  return {
+    id: "profile_routing",
+    status: "ok",
+    detail: "GPT-5.5/GPT-5.4 routing, xhigh hard-task routes, shell strategy, and local workflow commands are enforced",
+  } satisfies CheckResult
 }
 
 async function auditProfileRuntime() {
@@ -255,6 +308,7 @@ const checks: CheckResult[] = [
   await auditUpstream(),
   await auditOperationRuntime(),
   await auditReportQuality(),
+  await auditProfileRouting(),
   await auditProfileRuntime(),
   await auditLabCatalog(),
   await auditRequiredGates(),

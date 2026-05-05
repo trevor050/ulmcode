@@ -19,6 +19,7 @@ describe("ULM rebuild audit script", () => {
     expect(stdout).toContain("upstream_current: ok")
     expect(stdout).toContain("operation_runtime: ok")
     expect(stdout).toContain("report_quality: ok")
+    expect(stdout).toContain("profile_routing: ok")
     expect(stdout).toContain("profile_runtime: ok")
     expect(stdout).toContain("lab_catalog: ok")
     expect(stdout).toContain("required_gates: ok")
@@ -49,6 +50,7 @@ describe("ULM rebuild audit script", () => {
       "upstream_current",
       "operation_runtime",
       "report_quality",
+      "profile_routing",
       "profile_runtime",
       "lab_catalog",
       "required_gates",
