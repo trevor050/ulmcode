@@ -101,3 +101,12 @@ const table = sqliteTable("session", {
 ## Type Checking
 
 - Always run `bun typecheck` from package directories (e.g., `packages/opencode`), never `tsc` directly.
+
+## ULMCode Rebuild Notes
+
+- The rebuild branch starts from current `upstream/dev`; old fork cyber code should be mined for requirements, not ported wholesale.
+- Native ULM operation artifacts are written under `.ulmcode/operations/<operation-id>/`.
+- `operation_checkpoint` is the durable heartbeat/stage ledger tool.
+- `finding_record` is the evidence-backed finding state tool; validated/report-ready findings require evidence refs.
+- `report_outline` creates a long-form report page budget before drafting; `report_lint` can require a report file and minimum word count to catch sparse deliverables.
+- The bundled isolated profile lives in `tools/ulmcode-profile`; validate it with `tools/ulmcode-profile/test-profile.sh`.
