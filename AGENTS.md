@@ -126,6 +126,7 @@ const table = sqliteTable("session", {
 - Anthropic/Vertex-Anthropic message normalization treats `tool-call` and `tool-result` as one group; do not split them apart when moving trailing text, or Anthropic rejects the request.
 - MCP dynamic tools retry once after recognized transport/session errors by reconnecting the MCP client. Auth/business errors should still surface directly; do not broaden `isTransportError` without focused reconnect tests.
 - Core process handles resolve exit state on `exit` as well as `close`, and SIGKILL escalation does not wait forever for a close event. Preserve this, shell cleanup can otherwise hang after orphaned pipe holders.
+- `Npm.add` resolves cached non-registry plugin specs from the cached install root `package.json`; do not assume `npm-package-arg` can infer names for tarballs/git/file specs.
 - `/global/event` has a shared 1024-event SSE replay ring in `server/sse-replay.ts` / `server/global-event-replay.ts`. Both legacy Hono and Effect HttpApi global event routes should continue honoring `Last-Event-ID`; do not regress reconnect catch-up for long operations.
 - Config caching tracks file fingerprints for global and instance config. Keep `Config.invalidate()` usable without an instance context; instance config should refresh from fingerprints on the next read.
 - TUI plugins can intercept prompt keydown events with `api.input.intercept(handler)`. Handlers return `true` to consume the event and are automatically disposed with the plugin scope.
