@@ -15,7 +15,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `#25634` v2 message rendering matters for tool/result visibility.
 - `#25787` patch boundary preservation matters for evidence-grade diffs.
 - `#25788` known-tool malformed-input classification reduces wasted agent repair loops; adopted locally.
-- `#25775` Anthropic tool-call/tool-result pairing matters for tool-heavy turns; adopted locally.
+- `#25775` / `#25861` Anthropic tool-call/tool-result pairing matters for tool-heavy turns; adopted locally with provider-executed server-tool pairs preserved in assistant content.
 - `#25712` subagent cost rollup is a future target for operation budgets.
 - `#25180` subagent auto-compaction is a future target for 20-hour operation stability.
 - `#25728` codex overload retry matters for provider instability during long operations; adopted locally.
@@ -73,7 +73,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `task` supports `background: true` plus optional `operationID`; background launches persist prompt/subagent/operation/worktree metadata; `task_status` polls running subagents and prints restart args for stale persisted jobs; `task_list` recovers persisted background job metadata, filters by operation, marks restartable orphaned jobs as `stale`, `task_restart` relaunches a specific stale lane from saved metadata, and `operation_recover` restarts all restartable stale lanes for one operation. Recovery now writes a fresh operation checkpoint with recovered task IDs when the worktree is known, so `operation_status` reflects recovery immediately.
 - `max_retries` caps session-level transient model/provider retries. The isolated ULM profile sets it to 8 so 20-hour runs tolerate short provider instability without looping indefinitely.
 - Malformed input for a valid tool is now routed through `invalid` with `type: "known_tool_invalid_input"` and an explicit retry hint, while nonexistent tools use `type: "unknown_tool"`.
-- Anthropic/Vertex-Anthropic normalization now keeps `tool-call` and `tool-result` parts paired when splitting assistant text away from tool blocks, preventing provider rejections about orphaned tool_use IDs.
+- Anthropic/Vertex-Anthropic normalization now keeps client `tool-call` and `tool-result` parts paired when splitting assistant text away from tool blocks, while preserving provider-executed server-tool pairs in assistant content.
 - MCP tool execution now classifies transport/stale-session failures, reconnects the named MCP client through a single-flight reconnect path, and retries the tool call once with the fresh client while preserving auth and business errors.
 - Core process spawning now resolves exit waiters on `exit` as well as `close`, stops waiting after forced SIGKILL escalation, and shell execution treats exit-code read errors as terminal instead of hanging the race.
 - Cached npm plugin installs now recover the actual package name from the cached install root for tarball, git, GitHub, and file specs instead of relying on registry-only name inference.
