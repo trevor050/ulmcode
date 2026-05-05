@@ -6,6 +6,13 @@ import path from "path"
 const packageRoot = path.resolve(import.meta.dir, "..")
 const repoRoot = path.resolve(packageRoot, "../..")
 
+type CheckResult = {
+  id: string
+  status: "ok"
+  detail: string
+  summary?: string
+}
+
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
 }
@@ -84,7 +91,7 @@ async function labManifests() {
 async function auditUpstream() {
   const right = await run(["git", "rev-list", "--right-only", "--count", "HEAD...upstream/dev"])
   assert(right === "0", `branch is behind upstream/dev by ${right} commits`)
-  return "upstream_current: ok"
+  return { id: "upstream_current", status: "ok", detail: "branch has no missing upstream/dev commits" } satisfies CheckResult
 }
 
 async function auditOperationRuntime() {
@@ -124,7 +131,7 @@ async function auditOperationRuntime() {
     assert(await exists(`packages/opencode/src/tool/${tool}.ts`), `${tool}.ts is missing`)
     assert(await exists(`packages/opencode/src/tool/${tool}.txt`), `${tool}.txt is missing`)
   }
-  return "operation_runtime: ok"
+  return { id: "operation_runtime", status: "ok", detail: "durable runtime, resume, recovery, and stage tools are wired" } satisfies CheckResult
 }
 
 async function auditReportQuality() {
@@ -155,7 +162,7 @@ async function auditReportQuality() {
     "requireOutlineSections: true",
     "requireFindingSections: true",
   ])
-  return "report_quality: ok"
+  return { id: "report_quality", status: "ok", detail: "strict report outline and finding-section gates are wired" } satisfies CheckResult
 }
 
 async function auditProfileRuntime() {
@@ -184,7 +191,7 @@ async function auditProfileRuntime() {
     await exists("tools/ulmcode-profile/plugins/vendor/oh-my-openagent-3.17.12/dist/index.js"),
     "vendored oh-my-openagent dist is missing",
   )
-  return "profile_runtime: ok"
+  return { id: "profile_runtime", status: "ok", detail: "isolated profile, runtime guard, and vendored plugins are wired" } satisfies CheckResult
 }
 
 async function auditLabCatalog() {
@@ -213,7 +220,12 @@ async function auditLabCatalog() {
     assert(await exists(`tools/ulmcode-labs/${id}/service/server.js`), `${id}: service/server.js is missing`)
     assert(await exists(`tools/ulmcode-labs/${id}/docker-compose.yml`), `${id}: docker-compose.yml is missing`)
   }
-  return `lab_catalog: ok (${labs.length})`
+  return {
+    id: "lab_catalog",
+    status: "ok",
+    detail: `${labs.length} bundled labs include Docker targets and at least one multi-finding chain`,
+    summary: `lab_catalog: ok (${labs.length})`,
+  } satisfies CheckResult
 }
 
 async function auditRequiredGates() {
@@ -236,10 +248,10 @@ async function auditRequiredGates() {
     "test:ulm-lab",
     "test:ulm-lab-target",
   ])
-  return "required_gates: ok"
+  return { id: "required_gates", status: "ok", detail: "package and profile verifier scripts include the ULM gates" } satisfies CheckResult
 }
 
-const checks = [
+const checks: CheckResult[] = [
   await auditUpstream(),
   await auditOperationRuntime(),
   await auditReportQuality(),
@@ -248,5 +260,19 @@ const checks = [
   await auditRequiredGates(),
 ]
 
-console.log("ulm_rebuild_audit: ok")
-for (const check of checks) console.log(check)
+if (process.argv.includes("--json")) {
+  console.log(
+    JSON.stringify(
+      {
+        ok: true,
+        checkedAt: new Date().toISOString(),
+        checks,
+      },
+      null,
+      2,
+    ),
+  )
+} else {
+  console.log("ulm_rebuild_audit: ok")
+  for (const check of checks) console.log(check.summary ?? `${check.id}: ok`)
+}
