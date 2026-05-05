@@ -1,0 +1,3 @@
+Record or update an evidence-backed ULMCode finding.
+
+Use this for candidate, validated, rejected, and report-ready findings. Validated and report-ready findings require evidence references. Report-ready findings also require impact and remediation so the final report cannot become sparse or claim-heavy.

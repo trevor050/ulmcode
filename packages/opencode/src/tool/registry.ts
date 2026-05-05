@@ -12,6 +12,9 @@ import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
+import { OperationCheckpointTool } from "./operation_checkpoint"
+import { FindingRecordTool } from "./finding_record"
+import { ReportLintTool } from "./report_lint"
 import * as Tool from "./tool"
 import { Config } from "@/config/config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
@@ -113,6 +116,9 @@ export const layer: Layer.Layer<
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const operationCheckpoint = yield* OperationCheckpointTool
+    const findingRecord = yield* FindingRecordTool
+    const reportLint = yield* ReportLintTool
     const agent = yield* Agent.Service
 
     const state = yield* InstanceState.make<State>(
@@ -206,6 +212,9 @@ export const layer: Layer.Layer<
           todo: Tool.init(todo),
           search: Tool.init(websearch),
           skill: Tool.init(skilltool),
+          operationCheckpoint: Tool.init(operationCheckpoint),
+          findingRecord: Tool.init(findingRecord),
+          reportLint: Tool.init(reportLint),
           patch: Tool.init(patchtool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
@@ -228,6 +237,9 @@ export const layer: Layer.Layer<
             tool.todo,
             tool.search,
             tool.skill,
+            tool.operationCheckpoint,
+            tool.findingRecord,
+            tool.reportLint,
             tool.patch,
             ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [tool.lsp] : []),
             ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [tool.plan] : []),
