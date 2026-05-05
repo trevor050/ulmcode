@@ -239,7 +239,10 @@ describe("ULM artifact ledger", () => {
     expect(manifest.findings).toEqual(["weak-mfa-coverage"])
     expect(manifest.artifacts.operationPlan).toContain("operation-plan.json")
     expect(manifest.counts.evidence).toBe(1)
-    expect((await readOperationStatus(worktree, "school")).reports.pdf).toBe(true)
+    const status = await readOperationStatus(worktree, "school")
+    expect(status.reports.pdf).toBe(true)
+    expect(status.reports.readme).toBe(true)
+    expect(status.reports.manifest).toBe(true)
   })
 
   test("writes runtime summaries for long operation handoff", async () => {

@@ -157,6 +157,8 @@ export type OperationStatusSummary = {
     markdown: boolean
     html: boolean
     pdf: boolean
+    readme: boolean
+    manifest: boolean
   }
   runtimeSummary: boolean
   lastEvents: unknown[]
@@ -834,6 +836,8 @@ export async function readOperationStatus(
         (await exists(path.join(root, "reports", "report.html"))) ||
         (await exists(path.join(root, "deliverables", "final", "report.html"))),
       pdf: await exists(path.join(root, "deliverables", "final", "report.pdf")),
+      readme: await exists(path.join(root, "deliverables", "final", "README.md")),
+      manifest: await exists(path.join(root, "deliverables", "final", "manifest.json")),
     },
     runtimeSummary: await exists(path.join(root, "deliverables", "runtime-summary.json")),
     lastEvents: await readJsonlTail(path.join(root, "events.jsonl"), options.eventLimit ?? 5),
