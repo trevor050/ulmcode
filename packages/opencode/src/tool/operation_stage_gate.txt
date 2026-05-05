@@ -2,4 +2,4 @@ Check whether a ULMCode operation stage is ready to continue or advance.
 
 Use this at stage boundaries, before launching the next major lane, and after resuming a long unattended run. The gate reads the durable operation ledger, checks the required artifacts for the selected stage, writes JSON and markdown gate artifacts under `.ulmcode/operations/<operation-id>/deliverables/stage-gates/`, and returns recommended tools for fixing gaps.
 
-Validation and reporting gates are intentionally strict: unresolved candidate findings block progress, and report handoff must use the final audit path instead of chat-only claims.
+Validation and reporting gates are intentionally strict: unresolved candidate findings block progress, and report handoff must use durable final lint/audit paths instead of chat-only claims. For substantial handoff reports, pass the same report gates used with `report_lint`, including `requireOutlineBudget`, `requireOutlineSections`, and `requireFindingSections`.

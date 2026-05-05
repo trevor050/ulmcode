@@ -9,6 +9,35 @@ export const Parameters = Schema.Struct({
   stage: Schema.optional(Schema.Literals(["intake", "recon", "mapping", "validation", "reporting", "handoff"])).annotate({
     description: "Stage to check. Defaults to the operation checkpoint stage.",
   }),
+  requireReport: Schema.optional(Schema.Boolean).annotate({
+    description: "Require reports/report.md or reports/report.html to exist for handoff gates.",
+  }),
+  minWords: Schema.optional(Schema.Number).annotate({
+    description: "Minimum word count for the report when a report file exists.",
+  }),
+  requireOutlineBudget: Schema.optional(Schema.Boolean).annotate({
+    description: "Require the report to satisfy the report-outline target page budget for handoff gates.",
+  }),
+  minOutlineWordsPerPage: Schema.optional(Schema.Number).annotate({
+    description: "Minimum words per target outline page when enforcing outline budget. Defaults to 300.",
+  }),
+  requireOutlineSections: Schema.optional(Schema.Boolean).annotate({
+    description: "Require every Page Budget section from reports/report-outline.md to appear in the report.",
+  }),
+  minOutlineSectionWords: Schema.optional(Schema.Number).annotate({
+    description:
+      "Minimum absolute word count for each Page Budget section. Overrides the per-page outline section default.",
+  }),
+  minOutlineSectionWordsPerPage: Schema.optional(Schema.Number).annotate({
+    description:
+      "Minimum words per allocated outline page for each Page Budget section. Defaults to 120 when enforcing outline sections.",
+  }),
+  requireFindingSections: Schema.optional(Schema.Boolean).annotate({
+    description: "Require every validated/report-ready finding to have a matching section in the report.",
+  }),
+  minFindingWords: Schema.optional(Schema.Number).annotate({
+    description: "Minimum word count for each validated/report-ready finding section when a report file exists.",
+  }),
 })
 
 type Metadata = {
@@ -42,6 +71,15 @@ export const OperationStageGateTool = Tool.define<typeof Parameters, Metadata, n
         const result = yield* Effect.tryPromise(() =>
           buildOperationStageGate(Instance.worktree, params.operationID, {
             stage,
+            requireReport: params.requireReport,
+            minWords: params.minWords,
+            requireOutlineBudget: params.requireOutlineBudget,
+            minOutlineWordsPerPage: params.minOutlineWordsPerPage,
+            requireOutlineSections: params.requireOutlineSections,
+            minOutlineSectionWords: params.minOutlineSectionWords,
+            minOutlineSectionWordsPerPage: params.minOutlineSectionWordsPerPage,
+            requireFindingSections: params.requireFindingSections,
+            minFindingWords: params.minFindingWords,
           }),
         ).pipe(Effect.orDie)
         return {

@@ -894,6 +894,69 @@ describe("ULM artifact ledger", () => {
     expect(await fs.readFile(gate.files.markdown, "utf8")).toContain("validation has no validated")
   })
 
+  test("handoff stage gate forwards strict outline section gates", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "handoff",
+      status: "complete",
+      summary: "Ready for handoff review.",
+    })
+    await writeOperationPlan(worktree, {
+      operationID: "school",
+      phases: [
+        {
+          stage: "reporting",
+          objective: "Finalize report.",
+          actions: ["Run report_lint", "Render final deliverables"],
+          successCriteria: ["Final lint gates are clean"],
+          subagents: ["report-writer"],
+          noSubagents: ["client-facing approval remains manual"],
+        },
+      ],
+      reportingCloseout: ["Run report_lint", "Run report_render", "Run runtime_summary"],
+    })
+    await writeEvidence(worktree, {
+      operationID: "school",
+      evidenceID: "ev-1",
+      title: "IdP policy export",
+      kind: "file",
+      summary: "MFA policy export.",
+      path: "evidence/raw/idp-policy.json",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "report_ready",
+      severity: "high",
+      confidence: 0.9,
+      affectedAssets: ["IdP"],
+      evidence: [{ id: "ev-1", path: "evidence/raw/idp-policy.json" }],
+      description: "MFA is not enforced for administrators.",
+      impact: "Administrator takeover is more likely after password compromise.",
+      remediation: "Require phishing-resistant MFA for privileged accounts.",
+    })
+
+    const outline = await writeReportOutline(worktree, { operationID: "school", targetPages: 4 })
+    await fs.writeFile(
+      path.join(outline.root, "reports", "report.md"),
+      ["# Report", "", "## Methodology", "methodology ".repeat(500)].join("\n"),
+    )
+    await renderReport(worktree, { operationID: "school" })
+    await writeRuntimeSummary(worktree, { operationID: "school" })
+
+    const gate = await buildOperationStageGate(worktree, "school", {
+      stage: "handoff",
+      requireOutlineSections: true,
+      minOutlineSectionWords: 25,
+    })
+
+    expect(gate.ok).toBe(false)
+    expect(gate.gaps).toContain("Executive Summary: outline section is missing")
+    expect(gate.recommendedTools).toContain("report_outline")
+  })
+
   test("derives runtime usage from assistant messages when usage is not provided", async () => {
     const worktree = await tmpdir()
     await writeOperationCheckpoint(worktree, {

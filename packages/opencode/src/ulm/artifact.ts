@@ -271,7 +271,18 @@ export type OperationAuditResult = {
   }
 }
 
-export type OperationStageGateOptions = {
+export type OperationStageGateOptions = Pick<
+  ReportLintOptions,
+  | "requireReport"
+  | "minWords"
+  | "requireOutlineBudget"
+  | "minOutlineWordsPerPage"
+  | "requireOutlineSections"
+  | "minOutlineSectionWords"
+  | "minOutlineSectionWordsPerPage"
+  | "requireFindingSections"
+  | "minFindingWords"
+> & {
   stage?: Stage
 }
 
@@ -1071,7 +1082,12 @@ function stageGateToolRecommendations(stage: Stage, gaps: string[]) {
   return unique(tools)
 }
 
-async function stageGateGaps(worktree: string, status: OperationStatusSummary, stage: Stage) {
+async function stageGateGaps(
+  worktree: string,
+  status: OperationStatusSummary,
+  stage: Stage,
+  options: OperationStageGateOptions = {},
+) {
   const gaps: string[] = []
   const reportableFindings = status.findings.byState.validated + status.findings.byState.report_ready
   const unresolvedFindings = status.findings.byState.candidate + status.findings.byState.needs_validation
@@ -1101,7 +1117,18 @@ async function stageGateGaps(worktree: string, status: OperationStatusSummary, s
     if (!status.reports.markdown && !status.reports.html) gaps.push("reporting has no draft report")
   }
   if (stage === "handoff") {
-    const finalHandoff = await lintReport(worktree, status.operationID, { finalHandoff: true })
+    const finalHandoff = await lintReport(worktree, status.operationID, {
+      requireReport: options.requireReport,
+      minWords: options.minWords,
+      requireOutlineBudget: options.requireOutlineBudget,
+      minOutlineWordsPerPage: options.minOutlineWordsPerPage,
+      requireOutlineSections: options.requireOutlineSections,
+      minOutlineSectionWords: options.minOutlineSectionWords,
+      minOutlineSectionWordsPerPage: options.minOutlineSectionWordsPerPage,
+      requireFindingSections: options.requireFindingSections,
+      minFindingWords: options.minFindingWords,
+      finalHandoff: true,
+    })
     gaps.push(...finalHandoff.gaps)
   }
   return gaps
@@ -1135,7 +1162,7 @@ export async function buildOperationStageGate(
   const status = await readOperationStatus(worktree, operationID)
   const stage = options.stage ?? status.operation?.stage ?? "intake"
   const root = operationPath(worktree, operationID)
-  const gaps = await stageGateGaps(worktree, status, stage)
+  const gaps = await stageGateGaps(worktree, status, stage, options)
   const files = {
     json: path.join(root, "deliverables", "stage-gates", `${stage}.json`),
     markdown: path.join(root, "deliverables", "stage-gates", `${stage}.md`),
