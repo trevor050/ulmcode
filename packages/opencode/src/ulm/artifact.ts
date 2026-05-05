@@ -867,11 +867,21 @@ export async function lintReport(
   }
 
   const findings = await readFindings(root)
+  const evidenceRecords = await readEvidenceRecords(root)
+  const evidenceIDs = new Set(evidenceRecords.map((item) => item.evidenceID))
+  const evidencePaths = new Set(evidenceRecords.flatMap((item) => (item.path ? [item.path] : [])))
 
   for (const finding of findings) {
     for (const gap of validateFinding(finding)) gaps.push(`${finding.findingID}: ${gap}`)
     if (finding.state === "candidate") gaps.push(`${finding.findingID}: candidate finding is not reportable`)
     if (finding.state === "needs_validation") gaps.push(`${finding.findingID}: finding still needs validation`)
+    if (finding.state === "validated" || finding.state === "report_ready") {
+      for (const ref of finding.evidence) {
+        if (!evidenceIDs.has(ref.id) && (!ref.path || !evidencePaths.has(ref.path))) {
+          gaps.push(`${finding.findingID}: evidence reference ${ref.id} is not recorded`)
+        }
+      }
+    }
   }
 
   const counts = {

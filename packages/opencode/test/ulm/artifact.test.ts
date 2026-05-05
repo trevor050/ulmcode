@@ -86,6 +86,14 @@ describe("ULM artifact ledger", () => {
       status: "running",
       summary: "Reporting started.",
     })
+    await writeEvidence(worktree, {
+      operationID: "school",
+      evidenceID: "ev-1",
+      title: "IdP policy export",
+      kind: "file",
+      summary: "MFA policy export.",
+      path: "evidence/raw/idp-policy.json",
+    })
     await writeFinding(worktree, {
       operationID: "school",
       title: "Weak MFA coverage",
@@ -102,6 +110,33 @@ describe("ULM artifact ledger", () => {
     const result = await lintReport(worktree, "school")
     expect(result.ok).toBe(true)
     expect(result.counts.reportReady).toBe(1)
+  })
+
+  test("lints reportable findings that cite unrecorded evidence", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "reporting",
+      status: "running",
+      summary: "Reporting started.",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "report_ready",
+      severity: "high",
+      confidence: 0.9,
+      affectedAssets: ["IdP"],
+      evidence: [{ id: "ev-missing", path: "evidence/raw/missing.txt" }],
+      description: "MFA is not enforced for administrators.",
+      impact: "Administrator takeover is more likely after password compromise.",
+      remediation: "Require phishing-resistant MFA for privileged accounts.",
+    })
+
+    const result = await lintReport(worktree, "school")
+    expect(result.ok).toBe(false)
+    expect(result.gaps).toContain("weak-mfa-coverage: evidence reference ev-missing is not recorded")
   })
 
   test("writes a dense report outline and catches sparse reports", async () => {
