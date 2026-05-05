@@ -131,6 +131,8 @@ export type ReportOutlineInput = {
 export type ReportLintOptions = {
   requireReport?: boolean
   minWords?: number
+  requireOutlineBudget?: boolean
+  minOutlineWordsPerPage?: number
   requireFindingSections?: boolean
   minFindingWords?: number
   finalHandoff?: boolean
@@ -371,6 +373,15 @@ export function makeEvidenceID(input: Pick<EvidenceInput, "evidenceID" | "title"
 async function readJson<T>(file: string): Promise<T | undefined> {
   try {
     return JSON.parse(await fs.readFile(file, "utf8")) as T
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined
+    throw error
+  }
+}
+
+async function readText(file: string) {
+  try {
+    return await fs.readFile(file, "utf8")
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined
     throw error
@@ -1263,6 +1274,14 @@ function reportSectionForFinding(report: string, finding: FindingRecord) {
   return plainReportText(report.slice(Math.min(...anchors)))
 }
 
+function outlineTargetPages(outline: string | undefined) {
+  if (!outline) return undefined
+  const match = outline.match(/^- target_pages:\s*(\d+)/m)
+  if (!match?.[1]) return undefined
+  const pages = Number.parseInt(match[1], 10)
+  return Number.isFinite(pages) && pages > 0 ? pages : undefined
+}
+
 export async function writeReportOutline(worktree: string, input: ReportOutlineInput) {
   const root = operationPath(worktree, input.operationID)
   const operation = await readJson<OperationRecord>(path.join(root, "operation.json"))
@@ -1513,6 +1532,22 @@ export async function lintReport(
   if (report && options.minWords) {
     const words = wordCount(plainReportText(report))
     if (words < options.minWords) gaps.push(`report is too sparse: ${words} words, expected at least ${options.minWords}`)
+  }
+  if (options.requireOutlineBudget || options.minOutlineWordsPerPage) {
+    const outline = await readText(path.join(root, "reports", "report-outline.md"))
+    const targetPages = outlineTargetPages(outline)
+    if (!targetPages) gaps.push("reports/report-outline.md with target_pages is required for outline budget lint")
+    if (!report) gaps.push("report is required for outline budget lint")
+    if (report && targetPages) {
+      const words = wordCount(plainReportText(report))
+      const wordsPerPage = options.minOutlineWordsPerPage ?? 300
+      const expected = targetPages * wordsPerPage
+      if (words < expected) {
+        gaps.push(
+          `report misses outline budget: ${words} words, expected at least ${expected} for ${targetPages} target pages`,
+        )
+      }
+    }
   }
   if (report && (options.requireFindingSections || options.minFindingWords)) {
     for (const finding of findings.filter((item) => item.state === "report_ready" || item.state === "validated")) {

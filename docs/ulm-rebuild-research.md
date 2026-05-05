@@ -36,7 +36,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `evidence_record` writes durable evidence JSON plus optional raw text, so findings can cite recorded artifacts instead of chat-only claims.
 - `finding_record` enforces evidence before validated/report-ready findings.
 - `report_outline` gives report writers a page/section budget so final reports do not become sparse.
-- `report_lint` checks report readiness, total and per-finding report density, evidence refs, final handoff artifacts, and `finalHandoff=true`.
+- `report_lint` checks report readiness, outline target-page budget, total and per-finding report density, evidence refs, final handoff artifacts, and `finalHandoff=true`.
 - `report_render` publishes final HTML, lightweight PDF, README, manifest, evidence index, state counts, and non-reportable finding IDs.
 - `runtime_summary` records model-call split, token/cost budget rollups, per-agent usage, compaction pressure, repeated fetches, background task state, notes, and canonical artifact paths. If model/token/cost, compaction, or background task fields are omitted, the tool derives them from the current session ledger, persisted child subagent sessions, persisted background job sessions, and persisted background job ledger; explicit fields remain manual overrides.
 - `task` supports `background: true` plus optional `operationID`; background launches persist prompt/subagent/operation metadata; `task_status` polls running subagents and prints restart args for stale persisted jobs; `task_list` recovers persisted background job metadata, filters by operation, and marks restartable orphaned jobs as `stale`.

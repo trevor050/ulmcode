@@ -12,6 +12,12 @@ export const Parameters = Schema.Struct({
   minWords: Schema.optional(Schema.Number).annotate({
     description: "Minimum word count for the report when a report file exists.",
   }),
+  requireOutlineBudget: Schema.optional(Schema.Boolean).annotate({
+    description: "Require the report to satisfy the report-outline target page budget.",
+  }),
+  minOutlineWordsPerPage: Schema.optional(Schema.Number).annotate({
+    description: "Minimum words per target outline page when enforcing outline budget. Defaults to 300.",
+  }),
   requireFindingSections: Schema.optional(Schema.Boolean).annotate({
     description: "Require every validated/report-ready finding to have a matching section in the report.",
   }),
@@ -50,6 +56,8 @@ export const ReportLintTool = Tool.define<typeof Parameters, Metadata, never>(
           lintReport(Instance.worktree, params.operationID, {
             requireReport: params.requireReport,
             minWords: params.minWords,
+            requireOutlineBudget: params.requireOutlineBudget,
+            minOutlineWordsPerPage: params.minOutlineWordsPerPage,
             requireFindingSections: params.requireFindingSections,
             minFindingWords: params.minFindingWords,
             finalHandoff: params.finalHandoff,
