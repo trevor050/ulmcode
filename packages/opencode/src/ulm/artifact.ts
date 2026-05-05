@@ -6,12 +6,14 @@ export const OPERATION_STATUSES = ["planned", "running", "blocked", "paused", "c
 export const RISK_LEVELS = ["low", "medium", "high", "critical"] as const
 export const FINDING_STATES = ["candidate", "needs_validation", "validated", "report_ready", "rejected"] as const
 export const SEVERITIES = ["info", "low", "medium", "high", "critical"] as const
+export const EVIDENCE_KINDS = ["command_output", "http_response", "screenshot", "file", "note", "log"] as const
 
 export type Stage = (typeof STAGES)[number]
 export type OperationStatus = (typeof OPERATION_STATUSES)[number]
 export type RiskLevel = (typeof RISK_LEVELS)[number]
 export type FindingState = (typeof FINDING_STATES)[number]
 export type Severity = (typeof SEVERITIES)[number]
+export type EvidenceKind = (typeof EVIDENCE_KINDS)[number]
 
 export type EvidenceRef = {
   id: string
@@ -68,6 +70,35 @@ export type FindingInput = {
   sourceTasks?: string[]
 }
 
+export type EvidenceInput = {
+  operationID: string
+  evidenceID?: string
+  title: string
+  kind: EvidenceKind
+  summary: string
+  source?: string
+  command?: string
+  path?: string
+  content?: string
+}
+
+export type EvidenceRecord = Omit<EvidenceInput, "content"> & {
+  evidenceID: string
+  path?: string
+  time: {
+    created: string
+    updated: string
+  }
+}
+
+export type EvidenceWriteResult = {
+  operationID: string
+  evidenceID: string
+  json: string
+  rawPath?: string
+  record: EvidenceRecord
+}
+
 export type FindingRecord = FindingInput & {
   findingID: string
   time: {
@@ -116,6 +147,10 @@ export type OperationStatusSummary = {
     total: number
     byState: Record<FindingState, number>
     bySeverity: Record<Severity, number>
+  }
+  evidence: {
+    total: number
+    byKind: Record<EvidenceKind, number>
   }
   reports: {
     outline: boolean
@@ -237,6 +272,10 @@ export function makeOperationID(input: Pick<OperationCheckpointInput, "operation
 
 export function makeFindingID(input: Pick<FindingInput, "findingID" | "title">) {
   return slug(input.findingID ?? input.title, `finding-${Date.now()}`)
+}
+
+export function makeEvidenceID(input: Pick<EvidenceInput, "evidenceID" | "title">) {
+  return slug(input.evidenceID ?? input.title, `evidence-${Date.now()}`)
 }
 
 async function readJson<T>(file: string): Promise<T | undefined> {
@@ -587,6 +626,55 @@ async function readFindings(root: string) {
   return findings
 }
 
+async function readEvidenceRecords(root: string) {
+  let records: EvidenceRecord[] = []
+  try {
+    const files = await fs.readdir(path.join(root, "evidence"))
+    records = (
+      await Promise.all(
+        files
+          .filter((file) => file.endsWith(".json"))
+          .map((file) => readJson<EvidenceRecord>(path.join(root, "evidence", file))),
+      )
+    ).filter((item): item is EvidenceRecord => Boolean(item))
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+  }
+  return records
+}
+
+export async function writeEvidence(worktree: string, input: EvidenceInput): Promise<EvidenceWriteResult> {
+  const now = new Date().toISOString()
+  const operationID = slug(input.operationID, "operation")
+  const root = operationPath(worktree, operationID)
+  const evidenceID = makeEvidenceID(input)
+  const json = path.join(root, "evidence", `${evidenceID}.json`)
+  const current = await readJson<EvidenceRecord>(json)
+  const rawRelativePath = input.content === undefined ? undefined : path.join("evidence", "raw", `${evidenceID}.txt`)
+  const rawPath = rawRelativePath ? path.join(root, rawRelativePath) : undefined
+  const record: EvidenceRecord = {
+    operationID,
+    evidenceID,
+    title: input.title,
+    kind: input.kind,
+    summary: input.summary,
+    source: input.source,
+    command: input.command,
+    path: input.path ?? rawRelativePath,
+    time: {
+      created: current?.time.created ?? now,
+      updated: now,
+    },
+  }
+  if (rawPath) {
+    await fs.mkdir(path.dirname(rawPath), { recursive: true })
+    await fs.writeFile(rawPath, input.content ?? "")
+  }
+  await writeJson(json, record)
+  await appendJsonl(path.join(root, "evidence.jsonl"), { type: "evidence", ...record })
+  return { operationID, evidenceID, json, rawPath, record }
+}
+
 async function readReportText(root: string) {
   for (const candidate of ["report.md", "report.html"]) {
     try {
@@ -661,12 +749,15 @@ export async function readOperationStatus(
   const id = slug(operationID, "operation")
   const root = operationPath(worktree, id)
   const findings = await readFindings(root)
+  const evidence = await readEvidenceRecords(root)
   const byState = Object.fromEntries(FINDING_STATES.map((state) => [state, 0])) as Record<FindingState, number>
   const bySeverity = Object.fromEntries(SEVERITIES.map((severity) => [severity, 0])) as Record<Severity, number>
+  const byKind = Object.fromEntries(EVIDENCE_KINDS.map((kind) => [kind, 0])) as Record<EvidenceKind, number>
   for (const finding of findings) {
     byState[finding.state]++
     bySeverity[finding.severity]++
   }
+  for (const item of evidence) byKind[item.kind]++
   return {
     operationID: id,
     root,
@@ -678,6 +769,10 @@ export async function readOperationStatus(
       total: findings.length,
       byState,
       bySeverity,
+    },
+    evidence: {
+      total: evidence.length,
+      byKind,
     },
     reports: {
       outline: await exists(path.join(root, "reports", "report-outline.md")),

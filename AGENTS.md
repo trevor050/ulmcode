@@ -109,6 +109,7 @@ const table = sqliteTable("session", {
 - `operation_checkpoint` is the durable heartbeat/stage ledger tool.
 - `operation_plan` writes `plans/operation-plan.json` and `.md`; use it before broad execution to capture ordered phases, actions, success criteria, subagent/no-subagent policy, assumptions, and reporting closeout.
 - `operation_status` is the post-compaction/interruption resume reader for ledgers, finding counts, reports, and recent events.
+- `evidence_record` writes durable evidence JSON plus optional raw text under `evidence/`; findings should cite evidence IDs/paths from this tool rather than chat-only observations.
 - `finding_record` is the evidence-backed finding state tool; validated/report-ready findings require evidence refs.
 - `report_outline` creates a long-form report page budget before drafting; `report_lint` can require a report file and minimum word count to catch sparse deliverables.
 - `report_render` publishes print-ready HTML, a lightweight PDF, and a manifest to `.ulmcode/operations/<id>/deliverables/final/`.

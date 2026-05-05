@@ -8,6 +8,7 @@ import {
   renderReport,
   validateFinding,
   writeFinding,
+  writeEvidence,
   writeOperationCheckpoint,
   writeOperationPlan,
   writeReportOutline,
@@ -50,6 +51,30 @@ describe("ULM artifact ledger", () => {
     })
 
     expect(gaps).toContain("validated findings require at least one evidence reference")
+  })
+
+  test("writes durable evidence records and raw content", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "recon",
+      status: "running",
+      summary: "Recon is collecting evidence.",
+    })
+
+    const result = await writeEvidence(worktree, {
+      operationID: "school",
+      title: "IdP policy export",
+      kind: "command_output",
+      summary: "Policy export shows privileged MFA is optional.",
+      command: "idpctl policy export --json",
+      content: "{\"adminMfa\":\"optional\"}",
+    })
+
+    expect(await fs.readFile(result.rawPath!, "utf8")).toContain("adminMfa")
+    expect(JSON.parse(await fs.readFile(result.json, "utf8")).path).toBe("evidence/raw/idp-policy-export.txt")
+    expect((await readOperationStatus(worktree, "school")).evidence.total).toBe(1)
   })
 
   test("lints findings before report handoff", async () => {
