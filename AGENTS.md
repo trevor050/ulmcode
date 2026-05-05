@@ -126,6 +126,7 @@ const table = sqliteTable("session", {
 - `/global/event` has a shared 1024-event SSE replay ring in `server/sse-replay.ts` / `server/global-event-replay.ts`. Both legacy Hono and Effect HttpApi global event routes should continue honoring `Last-Event-ID`; do not regress reconnect catch-up for long operations.
 - Config caching tracks file fingerprints for global and instance config. Keep `Config.invalidate()` usable without an instance context; instance config should refresh from fingerprints on the next read.
 - TUI plugins can intercept prompt keydown events with `api.input.intercept(handler)`. Handlers return `true` to consume the event and are automatically disposed with the plugin scope.
+- Queued user messages should be cancelled with `session.deleteMessage(..., force: "true")`, not `session.abort`; abort is for the active run and should not be used to discard a queued prompt.
 - Session cost rollups are served by `Session.cost` / `GET /session/:id/cost`; they include self spend plus all descendant subagent sessions and should 404 for missing root sessions.
 - Session processor does a proactive pre-stream context estimate when compaction is enabled and the model reports a context limit; this prevents subagent runs from hanging on providers that silently accept oversized prompts.
 - Codex/OpenAI stream chunks with `server_is_overloaded` are retryable provider overloads; keep this alongside generic `server_error` handling so unattended runs do not fail on transient overload JSON.

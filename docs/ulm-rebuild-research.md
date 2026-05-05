@@ -20,6 +20,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `#25728` codex overload retry matters for provider instability during long operations; adopted locally.
 - `#25805` session retry caps matter for unattended operations; adopted locally as `max_retries`.
 - `#25658` SSE reconnect replay matters for long-running operation visibility; adopted locally for global event streams.
+- `#25760` queued-message cancellation matters for TUI safety during busy long runs; adopted locally.
 - `#25778` config cache refresh matters for live profile/plugin edits during long runs; adopted locally with direct `getGlobal()` refresh coverage.
 
 ## External Cyber Harness Ideas
@@ -52,6 +53,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `/global/event` now assigns SSE ids to recoverable global events and honors `Last-Event-ID` on reconnect through a 1024-event replay ring, so browser/network reconnects can catch up on missed global operation updates.
 - Config file fingerprints are tracked for cached global and instance config. Changed project/global config files force reload on the next config read; `Config.invalidate()` remains safe outside an instance context.
 - TUI plugins can now register `api.input.intercept(handler)` to observe prompt keydown events before built-in handling. Returning `true` consumes the event, and plugin-scoped registrations clean up on deactivate/dispose.
+- Queued user messages now show a `Cancel` action that force-deletes only that queued message via the delete-message route, leaving the active assistant run alone.
 - Session cost rollups now expose parent/session spend plus transitive descendant subagent spend through `GET /session/:id/cost`, generated SDK support, TUI sidebar cost lines, and completed Task footers.
 - Session processing now estimates outgoing prompt size before opening the LLM stream and returns `compact` early when the estimate exceeds 85% of the model's reported context limit; extra z.ai/GLM-style overflow strings also classify as context overflow instead of retryable generic API errors.
 - Codex/OpenAI `server_is_overloaded` stream chunks now parse as retryable API errors, and retry classification recognizes nested overloaded/rate-limit codes instead of only top-level provider codes.
