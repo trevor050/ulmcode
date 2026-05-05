@@ -178,8 +178,9 @@ export const layer = Layer.effect(
       const job = (yield* InstanceState.get(state)).jobs.get(id)
       if (!job) return
       if (job.info.status !== "running") return snapshot(job)
+      const fiber = job.fiber
       const info = yield* finish(job, "cancelled")
-      if (job.fiber) yield* Fiber.interrupt(job.fiber).pipe(Effect.ignore)
+      if (fiber) yield* Fiber.interrupt(fiber).pipe(Effect.ignore)
       return info
     })
 

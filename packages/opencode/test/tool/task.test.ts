@@ -1,5 +1,5 @@
 import { afterEach, describe, expect } from "bun:test"
-import { Effect, Exit, Fiber, Layer } from "effect"
+import { Deferred, Effect, Exit, Fiber, Layer, Option } from "effect"
 import { Agent } from "../../src/agent/agent"
 import { Config } from "@/config/config"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -513,6 +513,29 @@ describe("tool.task", () => {
       expect(reloaded?.id).toBe(id)
       expect(reloaded?.status).toBe("completed")
       expect(reloaded?.output).toBe("persisted output")
+    }),
+  )
+
+  it.instance("background job cancellation interrupts the running fiber", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const jobs = yield* BackgroundJob.Service
+      const id = `tool_${crypto.randomUUID().replaceAll("-", "")}`
+      const interrupted = yield* Deferred.make<void>()
+      yield* Effect.addFinalizer(() => storage.remove(["background_job", id]).pipe(Effect.ignore))
+
+      yield* jobs.start({
+        id,
+        type: "task",
+        title: "cancellable background task",
+        run: Effect.never.pipe(Effect.ensuring(Deferred.succeed(interrupted, undefined))),
+      })
+
+      const cancelled = yield* jobs.cancel(id)
+      const signal = yield* Deferred.await(interrupted).pipe(Effect.timeoutOption("1 second"))
+
+      expect(cancelled?.status).toBe("cancelled")
+      expect(Option.isSome(signal)).toBe(true)
     }),
   )
 })
