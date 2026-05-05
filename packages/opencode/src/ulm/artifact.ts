@@ -106,6 +106,9 @@ export type OperationStatusSummary = {
   operationID: string
   root: string
   operation?: OperationRecord
+  plans: {
+    operation: boolean
+  }
   findings: {
     total: number
     byState: Record<FindingState, number>
@@ -177,6 +180,35 @@ export type RuntimeSummaryResult = {
   json: string
   markdown: string
   finalDir: string
+}
+
+export type OperationPlanPhase = {
+  stage: Stage
+  objective: string
+  actions: string[]
+  successCriteria: string[]
+  subagents: string[]
+  noSubagents: string[]
+}
+
+export type OperationPlanInput = {
+  operationID: string
+  assumptions?: string[]
+  phases: OperationPlanPhase[]
+  reportingCloseout: string[]
+}
+
+export type OperationPlanRecord = OperationPlanInput & {
+  operationID: string
+  writtenAt: string
+  objective?: string
+}
+
+export type OperationPlanResult = {
+  operationID: string
+  json: string
+  markdown: string
+  phases: number
 }
 
 export function slug(input: string, fallback: string) {
@@ -328,6 +360,42 @@ function runtimeSummaryMarkdown(record: RuntimeSummaryRecord) {
     `- events: ${record.artifacts.events}`,
     `- findings: ${record.artifacts.findings}`,
     `- final: ${record.artifacts.final}`,
+    "",
+  ].join("\n")
+}
+
+function operationPlanMarkdown(record: OperationPlanRecord) {
+  return [
+    `# Operation Plan: ${record.operationID}`,
+    "",
+    `- written: ${record.writtenAt}`,
+    `- objective: ${record.objective ?? "unknown"}`,
+    "",
+    "## Assumptions",
+    ...(record.assumptions?.length ? record.assumptions.map((item) => `- ${item}`) : ["- none recorded"]),
+    "",
+    "## Execution Order",
+    ...record.phases.flatMap((phase, index) => [
+      "",
+      `### ${index + 1}. ${phase.stage}`,
+      "",
+      phase.objective,
+      "",
+      "Actions:",
+      ...phase.actions.map((item) => `- ${item}`),
+      "",
+      "Success Criteria:",
+      ...phase.successCriteria.map((item) => `- ${item}`),
+      "",
+      "Subagents:",
+      ...(phase.subagents.length ? phase.subagents.map((item) => `- ${item}`) : ["- none"]),
+      "",
+      "No Subagents:",
+      ...(phase.noSubagents.length ? phase.noSubagents.map((item) => `- ${item}`) : ["- none recorded"]),
+    ]),
+    "",
+    "## Reporting Closeout",
+    ...record.reportingCloseout.map((item) => `- ${item}`),
     "",
   ].join("\n")
 }
@@ -600,6 +668,9 @@ export async function readOperationStatus(
     operationID: id,
     root,
     operation: await readJson<OperationRecord>(path.join(root, "operation.json")),
+    plans: {
+      operation: await exists(path.join(root, "plans", "operation-plan.json")),
+    },
     findings: {
       total: findings.length,
       byState,
@@ -653,6 +724,35 @@ export async function writeRuntimeSummary(
   await writeJson(json, record)
   await fs.writeFile(markdown, runtimeSummaryMarkdown(record))
   return { operationID, json, markdown, finalDir }
+}
+
+export async function writeOperationPlan(
+  worktree: string,
+  input: OperationPlanInput,
+): Promise<OperationPlanResult> {
+  if (input.phases.length === 0) throw new Error("operation plan requires at least one phase")
+  if (input.reportingCloseout.length === 0) throw new Error("operation plan requires reporting closeout steps")
+
+  const operationID = slug(input.operationID, "operation")
+  const root = operationPath(worktree, operationID)
+  const operation = await readJson<OperationRecord>(path.join(root, "operation.json"))
+  const record: OperationPlanRecord = {
+    ...input,
+    operationID,
+    writtenAt: new Date().toISOString(),
+    objective: operation?.objective,
+  }
+  const json = path.join(root, "plans", "operation-plan.json")
+  const markdown = path.join(root, "plans", "operation-plan.md")
+  await writeJson(json, record)
+  await fs.writeFile(markdown, operationPlanMarkdown(record))
+  await appendJsonl(path.join(root, "events.jsonl"), {
+    type: "operation_plan",
+    operationID,
+    phases: record.phases.length,
+    writtenAt: record.writtenAt,
+  })
+  return { operationID, json, markdown, phases: record.phases.length }
 }
 
 export async function lintReport(

@@ -9,6 +9,7 @@ import {
   validateFinding,
   writeFinding,
   writeOperationCheckpoint,
+  writeOperationPlan,
   writeReportOutline,
   writeRuntimeSummary,
 } from "@/ulm/artifact"
@@ -180,5 +181,48 @@ describe("ULM artifact ledger", () => {
     expect(JSON.parse(await fs.readFile(result.json, "utf8")).modelCalls.byModel["gpt-5.5"]).toBe(8)
     expect(await fs.readFile(result.markdown, "utf8")).toContain("task-recon-1")
     expect((await readOperationStatus(worktree, "school")).runtimeSummary).toBe(true)
+  })
+
+  test("writes execution-ready operation plans with subagent policy", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "intake",
+      status: "planned",
+      summary: "Initial authorization captured.",
+    })
+
+    const result = await writeOperationPlan(worktree, {
+      operationID: "school",
+      assumptions: ["Testing is limited to approved school-owned systems."],
+      phases: [
+        {
+          stage: "recon",
+          objective: "Map externally exposed services.",
+          actions: ["Enumerate DNS", "Identify login surfaces"],
+          successCriteria: ["All in-scope hostnames are classified"],
+          subagents: ["recon"],
+          noSubagents: ["authorization decisions stay with primary operator"],
+        },
+        {
+          stage: "reporting",
+          objective: "Produce final report package.",
+          actions: ["Run report_lint", "Render final deliverables"],
+          successCriteria: ["HTML, PDF, manifest, and runtime summary exist"],
+          subagents: ["report-writer"],
+          noSubagents: ["final risk acceptance remains manual"],
+        },
+      ],
+      reportingCloseout: [
+        "Run report_outline before drafting.",
+        "Run report_lint and fix all gaps.",
+        "Run report_render and runtime_summary before handoff.",
+      ],
+    })
+
+    expect(await fs.readFile(result.markdown, "utf8")).toContain("authorization decisions stay with primary operator")
+    expect(JSON.parse(await fs.readFile(result.json, "utf8")).phases).toHaveLength(2)
+    expect((await readOperationStatus(worktree, "school")).plans.operation).toBe(true)
   })
 })

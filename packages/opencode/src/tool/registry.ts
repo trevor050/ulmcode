@@ -14,6 +14,7 @@ import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
 import { OperationCheckpointTool } from "./operation_checkpoint"
+import { OperationPlanTool } from "./operation_plan"
 import { OperationStatusTool } from "./operation_status"
 import { FindingRecordTool } from "./finding_record"
 import { ReportLintTool } from "./report_lint"
@@ -127,6 +128,7 @@ export const layer: Layer.Layer<
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
     const operationCheckpoint = yield* OperationCheckpointTool
+    const operationPlan = yield* OperationPlanTool
     const operationStatus = yield* OperationStatusTool
     const findingRecord = yield* FindingRecordTool
     const reportLint = yield* ReportLintTool
@@ -228,6 +230,7 @@ export const layer: Layer.Layer<
           search: Tool.init(websearch),
           skill: Tool.init(skilltool),
           operationCheckpoint: Tool.init(operationCheckpoint),
+          operationPlan: Tool.init(operationPlan),
           operationStatus: Tool.init(operationStatus),
           findingRecord: Tool.init(findingRecord),
           reportLint: Tool.init(reportLint),
@@ -258,6 +261,7 @@ export const layer: Layer.Layer<
             tool.search,
             tool.skill,
             tool.operationCheckpoint,
+            tool.operationPlan,
             tool.operationStatus,
             tool.findingRecord,
             tool.reportLint,
