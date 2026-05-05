@@ -2,7 +2,14 @@ import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
-import { lintReport, validateFinding, writeFinding, writeOperationCheckpoint, writeReportOutline } from "@/ulm/artifact"
+import {
+  lintReport,
+  readOperationStatus,
+  validateFinding,
+  writeFinding,
+  writeOperationCheckpoint,
+  writeReportOutline,
+} from "@/ulm/artifact"
 
 async function tmpdir() {
   return fs.mkdtemp(path.join(os.tmpdir(), "ulm-artifact-"))
@@ -98,5 +105,21 @@ describe("ULM artifact ledger", () => {
     const result = await lintReport(worktree, "school", { requireReport: true, minWords: 100 })
     expect(result.ok).toBe(false)
     expect(result.gaps.some((gap) => gap.includes("too sparse"))).toBe(true)
+  })
+
+  test("reads operation status for resumable runs", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "validation",
+      status: "running",
+      summary: "Validation running.",
+    })
+
+    const status = await readOperationStatus(worktree, "school")
+    expect(status.operation?.stage).toBe("validation")
+    expect(status.findings.total).toBe(0)
+    expect(status.lastEvents).toHaveLength(1)
   })
 })

@@ -102,6 +102,23 @@ export type ReportLintOptions = {
   minWords?: number
 }
 
+export type OperationStatusSummary = {
+  operationID: string
+  root: string
+  operation?: OperationRecord
+  findings: {
+    total: number
+    byState: Record<FindingState, number>
+    bySeverity: Record<Severity, number>
+  }
+  reports: {
+    outline: boolean
+    markdown: boolean
+    html: boolean
+  }
+  lastEvents: unknown[]
+}
+
 export function slug(input: string, fallback: string) {
   const value = input
     .trim()
@@ -144,6 +161,30 @@ async function writeJson(file: string, data: unknown) {
 async function appendJsonl(file: string, data: unknown) {
   await fs.mkdir(path.dirname(file), { recursive: true })
   await fs.appendFile(file, JSON.stringify(data) + "\n")
+}
+
+async function readJsonlTail(file: string, limit: number) {
+  try {
+    return (await fs.readFile(file, "utf8"))
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .slice(-limit)
+      .map((line) => JSON.parse(line) as unknown)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return []
+    throw error
+  }
+}
+
+async function exists(file: string) {
+  try {
+    await fs.access(file)
+    return true
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false
+    throw error
+  }
 }
 
 function statusMarkdown(record: OperationRecord) {
@@ -322,6 +363,38 @@ export async function writeReportOutline(worktree: string, input: ReportOutlineI
   await fs.mkdir(path.dirname(file), { recursive: true })
   await fs.writeFile(file, body)
   return { root, file, targetPages, reportReady: reportReady.length }
+}
+
+export async function readOperationStatus(
+  worktree: string,
+  operationID: string,
+  options: { eventLimit?: number } = {},
+): Promise<OperationStatusSummary> {
+  const id = slug(operationID, "operation")
+  const root = operationPath(worktree, id)
+  const findings = await readFindings(root)
+  const byState = Object.fromEntries(FINDING_STATES.map((state) => [state, 0])) as Record<FindingState, number>
+  const bySeverity = Object.fromEntries(SEVERITIES.map((severity) => [severity, 0])) as Record<Severity, number>
+  for (const finding of findings) {
+    byState[finding.state]++
+    bySeverity[finding.severity]++
+  }
+  return {
+    operationID: id,
+    root,
+    operation: await readJson<OperationRecord>(path.join(root, "operation.json")),
+    findings: {
+      total: findings.length,
+      byState,
+      bySeverity,
+    },
+    reports: {
+      outline: await exists(path.join(root, "reports", "report-outline.md")),
+      markdown: await exists(path.join(root, "reports", "report.md")),
+      html: await exists(path.join(root, "reports", "report.html")),
+    },
+    lastEvents: await readJsonlTail(path.join(root, "events.jsonl"), options.eventLimit ?? 5),
+  }
 }
 
 export async function lintReport(

@@ -24,6 +24,7 @@ describe("ULM native surface", () => {
       const registry = yield* ToolRegistry.Service
       const ids = yield* registry.ids()
       expect(ids).toContain("operation_checkpoint")
+      expect(ids).toContain("operation_status")
       expect(ids).toContain("finding_record")
       expect(ids).toContain("report_lint")
       expect(ids).toContain("report_outline")

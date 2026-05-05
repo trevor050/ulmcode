@@ -1,0 +1,3 @@
+Read the current ULMCode operation status.
+
+Use this after compaction, after interruptions, before resuming a long run, or before delegating new subagent work. It summarizes the checkpoint ledger, finding state counts, report artifact state, and recent events.
