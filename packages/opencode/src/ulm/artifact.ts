@@ -131,6 +131,7 @@ export type ReportOutlineInput = {
 export type ReportLintOptions = {
   requireReport?: boolean
   minWords?: number
+  finalHandoff?: boolean
   requireOperationPlan?: boolean
   requireRenderedDeliverables?: boolean
   requireRuntimeSummary?: boolean
@@ -917,10 +918,17 @@ export async function lintReport(
 ): Promise<ReportLintResult> {
   const root = operationPath(worktree, operationID)
   const gaps: string[] = []
+  const requireOperationPlan = options.finalHandoff || options.requireOperationPlan
+  const requireRenderedDeliverables = options.finalHandoff || options.requireRenderedDeliverables
+  const requireRuntimeSummary = options.finalHandoff || options.requireRuntimeSummary
   const operation = await readJson<OperationRecord>(path.join(root, "operation.json"))
   if (!operation) gaps.push("operation.json is missing")
   if (operation && operation.status !== "complete" && operation.stage === "handoff") {
     gaps.push("handoff stage must be marked complete before final report handoff")
+  }
+  if (options.finalHandoff && operation) {
+    if (operation.stage !== "handoff") gaps.push("operation stage must be handoff for final handoff")
+    if (operation.status !== "complete") gaps.push("operation status must be complete for final handoff")
   }
 
   const findings = await readFindings(root)
@@ -957,10 +965,10 @@ export async function lintReport(
     const words = report.trim().split(/\s+/).filter(Boolean).length
     if (words < options.minWords) gaps.push(`report is too sparse: ${words} words, expected at least ${options.minWords}`)
   }
-  if (options.requireOperationPlan && !(await exists(path.join(root, "plans", "operation-plan.json")))) {
+  if (requireOperationPlan && !(await exists(path.join(root, "plans", "operation-plan.json")))) {
     gaps.push("plans/operation-plan.json is required")
   }
-  if (options.requireRenderedDeliverables) {
+  if (requireRenderedDeliverables) {
     if (!(await exists(path.join(root, "deliverables", "final", "report.html")))) {
       gaps.push("deliverables/final/report.html is required")
     }
@@ -974,7 +982,7 @@ export async function lintReport(
       gaps.push("deliverables/final/manifest.json is required")
     }
   }
-  if (options.requireRuntimeSummary && !(await exists(path.join(root, "deliverables", "runtime-summary.json")))) {
+  if (requireRuntimeSummary && !(await exists(path.join(root, "deliverables", "runtime-summary.json")))) {
     gaps.push("deliverables/runtime-summary.json is required")
   }
 

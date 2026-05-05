@@ -243,6 +243,16 @@ describe("ULM artifact ledger", () => {
     expect(status.reports.pdf).toBe(true)
     expect(status.reports.readme).toBe(true)
     expect(status.reports.manifest).toBe(true)
+
+    await writeRuntimeSummary(worktree, {
+      operationID: "school",
+      modelCalls: { total: 5, byModel: { "gpt-5.5": 5 } },
+      compaction: { count: 0, pressure: "low" },
+      fetches: { total: 2, repeatedTargets: [] },
+      backgroundTasks: [],
+    })
+    const handoffLint = await lintReport(worktree, "school", { finalHandoff: true })
+    expect(handoffLint.ok).toBe(true)
   })
 
   test("writes runtime summaries for long operation handoff", async () => {
@@ -359,9 +369,7 @@ describe("ULM artifact ledger", () => {
     })
 
     const result = await lintReport(worktree, "school", {
-      requireOperationPlan: true,
-      requireRenderedDeliverables: true,
-      requireRuntimeSummary: true,
+      finalHandoff: true,
     })
 
     expect(result.ok).toBe(false)
