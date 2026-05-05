@@ -105,6 +105,8 @@ async function auditOperationRuntime() {
   const registry = await read("packages/opencode/src/tool/registry.ts")
   const artifact = await read("packages/opencode/src/ulm/artifact.ts")
   const operationResume = await read("packages/opencode/src/tool/operation_resume.ts")
+  const todoService = await read("packages/opencode/src/session/todo.ts")
+  const commandService = await read("packages/opencode/src/command/index.ts")
   const v2ModelGroup = await read("packages/opencode/src/server/routes/instance/httpapi/groups/v2/model.ts")
   const v2ModelHandler = await read("packages/opencode/src/server/routes/instance/httpapi/handlers/v2/model.ts")
   const sdk = await read("packages/sdk/js/src/v2/gen/sdk.gen.ts")
@@ -128,6 +130,12 @@ async function auditOperationRuntime() {
     "stage-gates",
   ])
   requireText("packages/opencode/src/tool/operation_resume.ts", operationResume, ["recoverStaleTasks", "maxRecoveries"])
+  requireText("packages/opencode/src/session/todo.ts", todoService, [
+    "export function active",
+    'todo.status === "pending"',
+    'todo.status === "in_progress"',
+  ])
+  requireText("packages/opencode/src/command/index.ts", commandService, ["CLEAR_TASKS", "CLEAR_TASKS_ZH", "todowrite"])
   requireText("packages/opencode/src/server/routes/instance/httpapi/groups/v2/model.ts", v2ModelGroup, [
     "v2.model.list",
     "InstanceContextMiddleware",

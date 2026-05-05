@@ -29,6 +29,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `#25744` npm cache name recovery matters for non-registry plugin installs; adopted locally in core npm tests.
 - `#25778` config cache refresh matters for live profile/plugin edits during long runs; adopted locally with direct `getGlobal()` refresh coverage.
 - `#25821` v2 model listing matters for plugin/custom-provider visibility in profile dashboards; adopted locally as `/api/model`, backed by the existing provider registry instead of an empty v2-only registry.
+- `#25856` stale todo cleanup matters for long unattended sessions where completed chat todos accumulate; adopted locally for chat todos only, keeping ULM operation ledgers/background jobs as the durable task source.
 
 ## External Cyber Harness Ideas
 
@@ -51,6 +52,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `opencode ulm list`, `opencode ulm status <operationID>`, `opencode ulm resume <operationID>`, `opencode ulm gate <operationID>`, and `opencode ulm audit <operationID>` expose operation discovery, dashboards, restart briefs, stage gates, and final audits directly from the CLI, with JSON output for automation.
 - `/ulm/operation`, `/ulm/operation/:operationID/status`, `/resume`, and `/audit` now expose typed ULM operation dashboard data through the instance HttpApi and generated JS SDK for TUI/plugin consumers.
 - `/api/model` now exposes configured/provider-registered models through the v2 HttpApi and generated JS SDK. The route uses workspace routing and instance context middleware so profile/plugin providers are visible to clients that need model-picker or custom-agent diagnostics.
+- Completed/cancelled chat todos are pruned on write/read, and `/clear-tasks` plus `/清除任务` clear active todos via `todowrite`. Do not use chat todos as the durable operation ledger; ULM checkpoints, stage gates, runtime summaries, and background job metadata remain canonical.
 - The TUI now registers `ulm.operations` plus `/ulm`/`/operations`, opening a persistent operation route with list, status, audit, and report readiness panels. ULM artifact writers emit typed `operation.updated` events after durable writes so the route can update immediately from compact event payloads for checkpoints, evidence, findings, plans, reports, runtime summaries, stage gates, and audits while keeping a poll/API fallback. The compact dialog still exists for modal use.
 - `operation_plan` records execution-ready phase order, success criteria, subagent/no-subagent policy, assumptions, and report closeout.
 - Native ULM agents now cover primary operation control, recon, attack-path mapping, validation, evidence normalization, report writing, and adversarial report review with prompts written around durable artifacts and gate tools instead of the old swarm prompts.
