@@ -28,6 +28,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `#25672` process kill escalation and shell exit-code hang fixes matter for unattended cleanup; adopted locally against current `tool/shell.ts`.
 - `#25744` npm cache name recovery matters for non-registry plugin installs; adopted locally in core npm tests.
 - `#25778` config cache refresh matters for live profile/plugin edits during long runs; adopted locally with direct `getGlobal()` refresh coverage.
+- `#25810` custom-agent selector labels matter for heavily customized ULM profiles; adopted locally so the dialog shows `native`/`custom` instead of dumping long agent descriptions.
 - `#25821` v2 model listing matters for plugin/custom-provider visibility in profile dashboards; adopted locally as `/api/model`, backed by the existing provider registry instead of an empty v2-only registry.
 - `#25841` OTEL env preservation matters for operator-controlled tracing/logging during long runs; adopted locally so service identity, version, and deployment environment are not overwritten.
 - `#25855` wide-text paste expansion matters for large pasted findings/reports in the TUI; adopted locally with display-offset-to-string-index tests so summarized paste markers expand in the right order after CJK/wide characters.
@@ -62,6 +63,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - The TUI now registers `ulm.operations` plus `/ulm`/`/operations`, opening a persistent operation route with list, status, audit, and report readiness panels. ULM artifact writers emit typed `operation.updated` events after durable writes so the route can update immediately from compact event payloads for checkpoints, evidence, findings, plans, reports, runtime summaries, stage gates, and audits while keeping a poll/API fallback. The compact dialog still exists for modal use.
 - `operation_plan` records execution-ready phase order, success criteria, subagent/no-subagent policy, assumptions, and report closeout.
 - Native ULM agents now cover primary operation control, recon, attack-path mapping, validation, evidence normalization, report writing, and adversarial report review with prompts written around durable artifacts and gate tools instead of the old swarm prompts.
+- The TUI agent selector labels agents as `native` or `custom` instead of rendering long custom-agent descriptions, keeping ULM profile agent lists readable.
 - `evidence_record` writes durable evidence JSON plus optional raw text, so findings can cite recorded artifacts instead of chat-only claims.
 - `finding_record` enforces evidence before validated/report-ready findings.
 - `report_outline` gives report writers a page/section budget so final reports do not become sparse.
