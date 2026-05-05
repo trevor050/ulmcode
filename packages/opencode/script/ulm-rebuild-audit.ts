@@ -105,6 +105,9 @@ async function auditOperationRuntime() {
   const registry = await read("packages/opencode/src/tool/registry.ts")
   const artifact = await read("packages/opencode/src/ulm/artifact.ts")
   const operationResume = await read("packages/opencode/src/tool/operation_resume.ts")
+  const v2ModelGroup = await read("packages/opencode/src/server/routes/instance/httpapi/groups/v2/model.ts")
+  const v2ModelHandler = await read("packages/opencode/src/server/routes/instance/httpapi/handlers/v2/model.ts")
+  const sdk = await read("packages/sdk/js/src/v2/gen/sdk.gen.ts")
   const requiredTools = [
     "OperationCheckpointTool",
     "OperationPlanTool",
@@ -125,6 +128,16 @@ async function auditOperationRuntime() {
     "stage-gates",
   ])
   requireText("packages/opencode/src/tool/operation_resume.ts", operationResume, ["recoverStaleTasks", "maxRecoveries"])
+  requireText("packages/opencode/src/server/routes/instance/httpapi/groups/v2/model.ts", v2ModelGroup, [
+    "v2.model.list",
+    "InstanceContextMiddleware",
+    "WorkspaceRoutingMiddleware",
+  ])
+  requireText("packages/opencode/src/server/routes/instance/httpapi/handlers/v2/model.ts", v2ModelHandler, [
+    "providerModelToV2Info",
+    "Provider.Service",
+  ])
+  requireText("packages/sdk/js/src/v2/gen/sdk.gen.ts", sdk, ["class Model", "get model()", 'url: "/api/model"'])
   for (const tool of [
     "operation_checkpoint",
     "operation_plan",

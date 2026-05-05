@@ -199,6 +199,7 @@ import type {
   UlmOperationListResponses,
   UlmOperationResumeResponses,
   UlmOperationStatusResponses,
+  V2ModelListResponses,
   V2SessionCompactResponses,
   V2SessionContextResponses,
   V2SessionListErrors,
@@ -4242,10 +4243,47 @@ export class Session3 extends HeyApiClient {
   }
 }
 
+export class Model extends HeyApiClient {
+  /**
+   * List v2 models
+   *
+   * Retrieve available provider models with cost, capability, provider, and variant details.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<V2ModelListResponses, unknown, ThrowOnError>({
+      url: "/api/model",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class V2 extends HeyApiClient {
   private _session?: Session3
   get session(): Session3 {
     return (this._session ??= new Session3({ client: this.client }))
+  }
+
+  private _model?: Model
+  get model(): Model {
+    return (this._model ??= new Model({ client: this.client }))
   }
 }
 

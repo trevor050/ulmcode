@@ -248,6 +248,7 @@ describe("HttpApi server", () => {
 
     expect(honoRoutes.filter((route) => !effectRoutes.includes(route))).toEqual([])
     expect(effectRoutes.filter((route) => !honoRoutes.includes(route))).toEqual([
+      "GET /api/model",
       "GET /api/session",
       "GET /api/session/{sessionID}/context",
       "GET /api/session/{sessionID}/message",
