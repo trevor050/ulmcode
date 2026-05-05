@@ -1,0 +1,5 @@
+Restart stale, errored, or cancelled background subagent tasks for one ULMCode operation.
+
+Use this after `operation_resume` or `runtime_summary` reports stale operation lanes. The tool scans persisted background task metadata for the requested `operationID`, skips currently running tasks, and relaunches restartable lanes in the background using their saved prompt, description, subagent type, command, and operation ID.
+
+Set `dryRun` to true to inspect which lanes would restart without launching them.

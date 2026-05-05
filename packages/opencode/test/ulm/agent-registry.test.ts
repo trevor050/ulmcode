@@ -26,6 +26,7 @@ describe("ULM native surface", () => {
       expect(ids).toContain("operation_audit")
       expect(ids).toContain("operation_checkpoint")
       expect(ids).toContain("operation_plan")
+      expect(ids).toContain("operation_recover")
       expect(ids).toContain("operation_status")
       expect(ids).toContain("operation_stage_gate")
       expect(ids).toContain("evidence_record")

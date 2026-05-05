@@ -9,6 +9,7 @@ const skillsRoot = path.join(profileRoot, "skills")
 const commandsRoot = path.join(profileRoot, "commands")
 const durableTools = [
   "operation_audit",
+  "operation_recover",
   "operation_resume",
   "operation_status",
   "operation_stage_gate",

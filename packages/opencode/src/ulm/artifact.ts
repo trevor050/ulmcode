@@ -714,7 +714,7 @@ function resumeToolRecommendations(status: OperationStatusSummary, gaps: string[
   }
   if (gaps.some((gap) => gap.startsWith("operation checkpoint is stale"))) tools.push("operation_checkpoint")
   if (operation?.activeTasks.length || background.length) tools.push("task_list", "task_status")
-  if (background.some((task) => task.status === "stale" && task.restartArgs)) tools.push("task_restart")
+  if (background.some((task) => task.status === "stale" && task.restartArgs)) tools.push("operation_recover", "task_restart")
   if (operation?.stage === "validation") tools.push("evidence_record", "finding_record")
   if (operation?.stage === "reporting" || operation?.stage === "handoff") tools.push("report_lint")
   if (operation?.stage === "handoff" && (!status.reports.html || !status.reports.pdf)) tools.push("report_render")
@@ -783,6 +783,7 @@ export function formatOperationResumeBrief(brief: OperationResumeBrief) {
   const toolHints = [
     brief.recommendedTools.includes("operation_status") ? `operation_status operationID=${brief.operationID}` : undefined,
     brief.recommendedTools.includes("operation_resume") ? `operation_resume operationID=${brief.operationID}` : undefined,
+    brief.recommendedTools.includes("operation_recover") ? `operation_recover operationID=${brief.operationID}` : undefined,
     brief.recommendedTools.includes("task_list") ? `task_list operationID=${brief.operationID}` : undefined,
     ...background.map((task) => `task_status task_id=${task.id}`),
     ...background

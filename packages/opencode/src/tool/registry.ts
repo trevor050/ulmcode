@@ -18,6 +18,7 @@ import { SkillTool } from "./skill"
 import { OperationAuditTool } from "./operation_audit"
 import { OperationCheckpointTool } from "./operation_checkpoint"
 import { OperationPlanTool } from "./operation_plan"
+import { OperationRecoverTool } from "./operation_recover"
 import { OperationResumeTool } from "./operation_resume"
 import { OperationStageGateTool } from "./operation_stage_gate"
 import { OperationStatusTool } from "./operation_status"
@@ -138,6 +139,7 @@ export const layer: Layer.Layer<
     const operationAudit = yield* OperationAuditTool
     const operationCheckpoint = yield* OperationCheckpointTool
     const operationPlan = yield* OperationPlanTool
+    const operationRecover = yield* OperationRecoverTool
     const operationResume = yield* OperationResumeTool
     const operationStageGate = yield* OperationStageGateTool
     const operationStatus = yield* OperationStatusTool
@@ -246,6 +248,7 @@ export const layer: Layer.Layer<
           operationAudit: Tool.init(operationAudit),
           operationCheckpoint: Tool.init(operationCheckpoint),
           operationPlan: Tool.init(operationPlan),
+          operationRecover: Tool.init(operationRecover),
           operationResume: Tool.init(operationResume),
           operationStageGate: Tool.init(operationStageGate),
           operationStatus: Tool.init(operationStatus),
@@ -283,6 +286,7 @@ export const layer: Layer.Layer<
             tool.operationAudit,
             tool.operationCheckpoint,
             tool.operationPlan,
+            tool.operationRecover,
             tool.operationResume,
             tool.operationStageGate,
             tool.operationStatus,

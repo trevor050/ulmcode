@@ -9,6 +9,7 @@ import { MessageV2 } from "../../src/session/message-v2"
 import type { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
+import { OperationRecoverTool } from "@/tool/operation_recover"
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
 import { TaskListTool } from "@/tool/task_list"
 import { TaskRestartTool } from "@/tool/task_restart"
@@ -764,6 +765,83 @@ describe("tool.task", () => {
       expect(restarted.waited.info?.status).toBe("completed")
       expect(restarted.waited.info?.output).toBe("restarted validation output")
       expect(restarted.waited.info?.metadata?.operationID).toBe("school")
+    }),
+  )
+
+  it.instance("operation_recover restarts stale background tasks for one operation", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const sessions = yield* Session.Service
+      const storage = yield* Storage.Service
+      const jobs = yield* BackgroundJob.Service
+      const schoolTask = yield* sessions.create({ parentID: chat.id, title: "school stale lane" })
+      const otherTask = yield* sessions.create({ parentID: chat.id, title: "other stale lane" })
+      yield* Effect.addFinalizer(() =>
+        Effect.all([schoolTask.id, otherTask.id].map((id) => storage.remove(["background_job", id]).pipe(Effect.ignore))).pipe(
+          Effect.ignore,
+        ),
+      )
+      yield* jobs.start({
+        id: schoolTask.id,
+        type: "task",
+        title: "school stale lane",
+        metadata: {
+          parentSessionID: chat.id,
+          sessionID: schoolTask.id,
+          subagent: "validator",
+          subagent_type: "validator",
+          description: "school stale lane",
+          prompt: "recover school validation",
+          operationID: "school",
+        },
+        run: Effect.never,
+      })
+      yield* jobs.start({
+        id: otherTask.id,
+        type: "task",
+        title: "other stale lane",
+        metadata: {
+          parentSessionID: chat.id,
+          sessionID: otherTask.id,
+          subagent: "validator",
+          subagent_type: "validator",
+          description: "other stale lane",
+          prompt: "do not recover other operation",
+          operationID: "other",
+        },
+        run: Effect.never,
+      })
+
+      const recovered = yield* Effect.gen(function* () {
+        const recover = yield* OperationRecoverTool
+        const recoverDef = yield* recover.init()
+        const jobsAfterReload = yield* BackgroundJob.Service
+        const promptOps = stubOps({ text: "recovered school output" })
+        const result = yield* recoverDef.execute(
+          { operationID: "school" },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+        const school = yield* jobsAfterReload.wait({ id: schoolTask.id })
+        const other = yield* jobsAfterReload.get(otherTask.id)
+        return { result, school, other }
+      }).pipe(Effect.provide(Layer.fresh(BackgroundJob.layer)))
+
+      expect(recovered.result.metadata.operationID).toBe("school")
+      expect(recovered.result.metadata.restarted).toBe(1)
+      expect(recovered.result.metadata.skipped).toBe(0)
+      expect(recovered.result.output).toContain(`task_id: ${schoolTask.id}`)
+      expect(recovered.school.info?.status).toBe("completed")
+      expect(recovered.school.info?.output).toBe("recovered school output")
+      expect(recovered.other?.status).toBe("stale")
     }),
   )
 
