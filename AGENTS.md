@@ -111,3 +111,4 @@ const table = sqliteTable("session", {
 - `finding_record` is the evidence-backed finding state tool; validated/report-ready findings require evidence refs.
 - `report_outline` creates a long-form report page budget before drafting; `report_lint` can require a report file and minimum word count to catch sparse deliverables.
 - The bundled isolated profile lives in `tools/ulmcode-profile`; validate it with `tools/ulmcode-profile/test-profile.sh`.
+- Invoking the package as `ulmcode` sets `OPENCODE_APP_NAME=ulmcode`; core global paths then use the `ulmcode` app name.
