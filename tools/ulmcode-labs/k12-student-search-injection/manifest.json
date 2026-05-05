@@ -1,0 +1,162 @@
+{
+  "id": "k12-student-search-injection",
+  "operationID": "k12-student-search-injection",
+  "objective": "Replay a synthetic authorized K-12 student-search injection assessment with unsafe query construction.",
+  "assumptions": [
+    "The lab uses synthetic evidence only.",
+    "No real external target is contacted.",
+    "Student records and search results are intentionally fake."
+  ],
+  "plan": {
+    "phases": [
+      {
+        "stage": "recon",
+        "objective": "Map student search query behavior.",
+        "actions": [
+          "Load the synthetic student search endpoint behavior",
+          "Identify whether search input is safely parameterized or concatenated into a query expression"
+        ],
+        "successCriteria": [
+          "Baseline search behavior and query-shape evidence are recorded"
+        ],
+        "subagents": [
+          "recon"
+        ],
+        "noSubagents": [
+          "student-data exposure scoping stays with the primary operator"
+        ]
+      },
+      {
+        "stage": "validation",
+        "objective": "Validate injection-driven search broadening.",
+        "actions": [
+          "Replay a synthetic quote-based injection payload",
+          "Record result broadening across class boundaries and the missing parameterization control"
+        ],
+        "successCriteria": [
+          "A report-ready finding cites both baseline and injected search evidence"
+        ],
+        "subagents": [
+          "validator",
+          "evidence"
+        ],
+        "noSubagents": [
+          "final severity and remediation sequencing stay with the primary operator"
+        ]
+      },
+      {
+        "stage": "reporting",
+        "objective": "Render final handoff artifacts.",
+        "actions": [
+          "Run report_lint",
+          "Run report_render",
+          "Run runtime_summary"
+        ],
+        "successCriteria": [
+          "Final handoff lint passes"
+        ],
+        "subagents": [
+          "report-writer"
+        ],
+        "noSubagents": [
+          "client-facing delivery approval is manual"
+        ]
+      }
+    ],
+    "reportingCloseout": [
+      "Run report_lint",
+      "Run report_render",
+      "Run runtime_summary"
+    ]
+  },
+  "evidence": [
+    {
+      "evidenceID": "ev-student-search-baseline",
+      "title": "Synthetic baseline student search response",
+      "kind": "http_response",
+      "summary": "A normal search for one last name returned a single class-scoped synthetic student record.",
+      "url": "http://127.0.0.1/api/students/search?q=North",
+      "content": "{\"query\":\"North\",\"results\":[{\"id\":\"stu-5101\",\"name\":\"Synthetic North Student\",\"classId\":\"north-homeroom\"}],\"labFinding\":null}"
+    },
+    {
+      "evidenceID": "ev-student-search-injection",
+      "title": "Synthetic injected student search response",
+      "kind": "http_response",
+      "summary": "A quote-based payload broadened results across class boundaries, indicating unsafe query construction.",
+      "url": "http://127.0.0.1/api/students/search?q=' OR '1'='1",
+      "content": "{\"query\":\"' OR '1'='1\",\"results\":[{\"id\":\"stu-5101\"},{\"id\":\"stu-6201\"},{\"id\":\"stu-7301\"}],\"labFinding\":\"student_search_query_injection\"}"
+    }
+  ],
+  "findings": [
+    {
+      "findingID": "student-search-query-injection",
+      "title": "Student search query injection exposes cross-class records",
+      "state": "report_ready",
+      "severity": "high",
+      "confidence": 0.88,
+      "affectedAssets": [
+        "Student search API",
+        "Student directory records",
+        "Class-scoped access controls"
+      ],
+      "evidence": [
+        {
+          "id": "ev-student-search-baseline",
+          "path": "evidence/raw/synthetic-baseline-student-search-response.txt"
+        },
+        {
+          "id": "ev-student-search-injection",
+          "path": "evidence/raw/synthetic-injected-student-search-response.txt"
+        }
+      ],
+      "description": "The synthetic student search endpoint treats quote-based search input as query logic, allowing an injected predicate to broaden results beyond the intended class scope.",
+      "impact": "A teacher- or student-scoped user could enumerate student directory records outside the intended classroom boundary.",
+      "remediation": "Use parameterized queries or structured query builders, validate search syntax as plain data, and apply class-ownership filters after authentication on the server side."
+    }
+  ],
+  "runtime": {
+    "sessionMessages": [
+      {
+        "role": "assistant",
+        "agent": "pentest",
+        "modelID": "gpt-5.5",
+        "providerID": "openai",
+        "cost": 0.45,
+        "tokens": {
+          "input": 1250,
+          "output": 500,
+          "reasoning": 340,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "role": "assistant",
+        "agent": "validator",
+        "modelID": "gpt-5.4-mini",
+        "providerID": "openai",
+        "cost": 0.13,
+        "tokens": {
+          "input": 690,
+          "output": 300,
+          "reasoning": 125,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      }
+    ]
+  },
+  "expected": {
+    "reportableFindings": 1,
+    "evidence": 2,
+    "dashboardIncludes": [
+      "# k12-student-search-injection - handoff/complete",
+      "risk: high",
+      "findings: 1 total"
+    ]
+  }
+}

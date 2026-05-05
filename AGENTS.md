@@ -123,5 +123,5 @@ const table = sqliteTable("session", {
 - `bun run --cwd packages/opencode test:ulm-skills` validates bundled ULM profile skills and commands for frontmatter, placeholder-free content, and references to durable ULM tools.
 - `bun run --cwd packages/opencode test:ulm-smoke` runs the synthetic ULM lifecycle smoke: plan, evidence, finding, outline, final checkpoint, report render, runtime summary, final handoff lint, and status/dashboard verification.
 - `bun run --cwd packages/opencode test:ulm-lab` runs the manifest-driven lab replay harness across every `tools/ulmcode-labs/*/manifest.json`.
-- `bun run --cwd packages/opencode test:ulm-lab-target` starts and probes the bundled weak-MFA, roster-IDOR, gradebook mass-assignment, and storage-config leak HTTP lab targets; Docker Compose support lives beside each lab under `tools/ulmcode-labs/<lab>/docker-compose.yml`.
+- `bun run --cwd packages/opencode test:ulm-lab-target` starts and probes the bundled weak-MFA, roster-IDOR, gradebook mass-assignment, storage-config leak, and student-search injection HTTP lab targets; Docker Compose support lives beside each lab under `tools/ulmcode-labs/<lab>/docker-compose.yml`.
 - Invoking the package as `ulmcode` sets `OPENCODE_APP_NAME=ulmcode`; core global paths then use the `ulmcode` app name.
