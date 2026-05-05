@@ -173,6 +173,61 @@ describe("ULM artifact ledger", () => {
     expect(result.gaps.some((gap) => gap.includes("too sparse"))).toBe(true)
   })
 
+  test("lints sparse per-finding report sections even when total report is long", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "reporting",
+      status: "running",
+      summary: "Reporting started.",
+    })
+    await writeEvidence(worktree, {
+      operationID: "school",
+      evidenceID: "ev-1",
+      title: "IdP policy export",
+      kind: "file",
+      summary: "MFA policy export.",
+      path: "evidence/raw/idp-policy.json",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "report_ready",
+      severity: "high",
+      confidence: 0.9,
+      affectedAssets: ["IdP"],
+      evidence: [{ id: "ev-1", path: "evidence/raw/idp-policy.json" }],
+      description: "MFA is not enforced for administrators.",
+      impact: "Administrator takeover is more likely after password compromise.",
+      remediation: "Require phishing-resistant MFA for privileged accounts.",
+    })
+
+    const root = path.join(worktree, ".ulmcode", "operations", "school")
+    await fs.mkdir(path.join(root, "reports"), { recursive: true })
+    await fs.writeFile(
+      path.join(root, "reports", "report.md"),
+      [
+        "# Report",
+        "",
+        "## Methodology",
+        "methodology ".repeat(150),
+        "",
+        "## Weak MFA coverage",
+        "Admins lack MFA.",
+      ].join("\n"),
+    )
+
+    const result = await lintReport(worktree, "school", {
+      requireReport: true,
+      minWords: 100,
+      requireFindingSections: true,
+      minFindingWords: 50,
+    })
+    expect(result.ok).toBe(false)
+    expect(result.gaps).toContain("weak-mfa-coverage: report section is too sparse: 3 words, expected at least 50")
+  })
+
   test("reads operation status for resumable runs", async () => {
     const worktree = await tmpdir()
     await writeOperationCheckpoint(worktree, {

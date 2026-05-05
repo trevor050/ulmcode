@@ -131,6 +131,8 @@ export type ReportOutlineInput = {
 export type ReportLintOptions = {
   requireReport?: boolean
   minWords?: number
+  requireFindingSections?: boolean
+  minFindingWords?: number
   finalHandoff?: boolean
   requireOperationPlan?: boolean
   requireRenderedDeliverables?: boolean
@@ -1190,6 +1192,43 @@ async function readReportText(root: string) {
   return undefined
 }
 
+function markdownHeadingPattern(value: string) {
+  return new RegExp(`^#{1,6}\\s+.*${escapeRegExp(value)}.*$`, "im")
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+function plainReportText(report: string) {
+  return report
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+}
+
+function wordCount(value: string) {
+  return value.trim().split(/\s+/).filter(Boolean).length
+}
+
+function reportSectionForFinding(report: string, finding: FindingRecord) {
+  const heading =
+    markdownHeadingPattern(finding.findingID).exec(report) ?? markdownHeadingPattern(finding.title).exec(report)
+  if (heading?.index !== undefined) {
+    const bodyStart = heading.index + heading[0].length
+    const rest = report.slice(bodyStart)
+    const nextHeading = /\n#{1,6}\s+\S/.exec(rest)
+    return plainReportText(nextHeading ? rest.slice(0, nextHeading.index) : rest)
+  }
+
+  const lower = report.toLowerCase()
+  const titleIndex = lower.indexOf(finding.title.toLowerCase())
+  const idIndex = lower.indexOf(finding.findingID.toLowerCase())
+  const anchors = [titleIndex, idIndex].filter((index) => index >= 0)
+  if (!anchors.length) return undefined
+  return plainReportText(report.slice(Math.min(...anchors)))
+}
+
 export async function writeReportOutline(worktree: string, input: ReportOutlineInput) {
   const root = operationPath(worktree, input.operationID)
   const operation = await readJson<OperationRecord>(path.join(root, "operation.json"))
@@ -1424,8 +1463,25 @@ export async function lintReport(
   const report = await readReportText(root)
   if (options.requireReport && !report) gaps.push("reports/report.md or reports/report.html is required")
   if (report && options.minWords) {
-    const words = report.trim().split(/\s+/).filter(Boolean).length
+    const words = wordCount(plainReportText(report))
     if (words < options.minWords) gaps.push(`report is too sparse: ${words} words, expected at least ${options.minWords}`)
+  }
+  if (report && (options.requireFindingSections || options.minFindingWords)) {
+    for (const finding of findings.filter((item) => item.state === "report_ready" || item.state === "validated")) {
+      const section = reportSectionForFinding(report, finding)
+      if (!section) {
+        gaps.push(`${finding.findingID}: report section is missing`)
+        continue
+      }
+      if (options.minFindingWords) {
+        const words = wordCount(section)
+        if (words < options.minFindingWords) {
+          gaps.push(
+            `${finding.findingID}: report section is too sparse: ${words} words, expected at least ${options.minFindingWords}`,
+          )
+        }
+      }
+    }
   }
   if (requireOperationPlan && !(await exists(path.join(root, "plans", "operation-plan.json")))) {
     gaps.push("plans/operation-plan.json is required")
