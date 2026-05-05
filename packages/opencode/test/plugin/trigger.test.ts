@@ -13,6 +13,7 @@ process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = "1"
 const { Plugin } = await import("../../src/plugin/index")
 const it = testEffect(Layer.mergeAll(Plugin.defaultLayer, CrossSpawnSpawner.defaultLayer))
 const systemHook = "experimental.chat.system.transform"
+const preChatHook = "pre_chat.messages.transform"
 
 afterAll(() => {
   if (disableDefault === undefined) {
@@ -66,6 +67,32 @@ const triggerSystemTransform = Effect.fn("PluginTriggerTest.triggerSystemTransfo
   return out.system
 })
 
+const triggerPreChatTransform = Effect.fn("PluginTriggerTest.triggerPreChatTransform")(function* () {
+  const plugin = yield* Plugin.Service
+  const out = {
+    messages: [
+      {
+        info: { id: "msg_1", role: "user" },
+        parts: [{ id: "prt_1", type: "text", text: "before" }],
+      },
+    ],
+  } as any
+  const result = yield* plugin.trigger(
+    preChatHook,
+    {
+      sessionID: "ses_1",
+      agent: "build",
+      model: {
+        providerID: ProviderID.make("test"),
+        modelID: ModelID.make("test-model"),
+      },
+      messages: out.messages,
+    },
+    out,
+  )
+  return result.messages
+})
+
 describe("plugin.trigger", () => {
   it.live("runs synchronous hooks without crashing", () =>
     withProject(
@@ -96,6 +123,24 @@ describe("plugin.trigger", () => {
       ].join("\n"),
       Effect.gen(function* () {
         expect(yield* triggerSystemTransform()).toEqual(["async"])
+      }),
+    ),
+  )
+
+  it.live("allows pre-chat hooks to replace messages", () =>
+    withProject(
+      [
+        "export default async () => ({",
+        `  ${JSON.stringify(preChatHook)}: (_input, output) => {`,
+        '    output.messages = [{ info: { id: "msg_2", role: "user" }, parts: [{ id: "prt_2", type: "text", text: "after" }] }]',
+        "  },",
+        "})",
+        "",
+      ].join("\n"),
+      Effect.gen(function* () {
+        const messages = yield* triggerPreChatTransform()
+        expect(messages).toHaveLength(1)
+        expect(messages[0]?.parts[0]).toMatchObject({ type: "text", text: "after" })
       }),
     ),
   )

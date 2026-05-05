@@ -139,6 +139,7 @@ const table = sqliteTable("session", {
 - ULM artifact writers await best-effort `operation.updated` publication after durable writes. Keep that ordering; fire-and-forget publication can race persistent TUI dashboards and tests after enriched event payloads read disk state.
 - Config caching tracks file fingerprints for global and instance config. Keep `Config.invalidate()` usable without an instance context; instance config should refresh from fingerprints on the next read.
 - TUI plugins can intercept prompt keydown events with `api.input.intercept(handler)`. Handlers return `true` to consume the event and are automatically disposed with the plugin scope.
+- Server plugins can transform assembled chat messages with `pre_chat.messages.transform`; preserve replacement-output semantics because image-stripping and vision-summary plugins may assign a fresh `output.messages` array instead of mutating in place.
 - Queued user messages should be cancelled with `session.deleteMessage(..., force: "true")`, not `session.abort`; abort is for the active run and should not be used to discard a queued prompt.
 - ACP prompt/command returns wait for the completed `message.updated` event before sending `end_turn`; this keeps final streamed chunks from appearing after the RPC reply.
 - Session cost rollups are served by `Session.cost` / `GET /session/:id/cost`; they include self spend plus all descendant subagent sessions and should 404 for missing root sessions.

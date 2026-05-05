@@ -113,6 +113,8 @@ async function auditOperationRuntime() {
   const providerTransform = await read("packages/opencode/src/provider/transform.ts")
   const codexPlugin = await read("packages/opencode/src/plugin/codex.ts")
   const codexTests = await read("packages/opencode/test/plugin/codex.test.ts")
+  const pluginTypes = await read("packages/plugin/src/index.ts")
+  const sessionPrompt = await read("packages/opencode/src/session/prompt.ts")
   const v2ModelGroup = await read("packages/opencode/src/server/routes/instance/httpapi/groups/v2/model.ts")
   const v2ModelHandler = await read("packages/opencode/src/server/routes/instance/httpapi/handlers/v2/model.ts")
   const sdk = await read("packages/sdk/js/src/v2/gen/sdk.gen.ts")
@@ -170,6 +172,15 @@ async function auditOperationRuntime() {
     "preserves existing refresh_token",
     "uses rotated refresh_token",
     "requires refresh_token for initial OAuth",
+  ])
+  requireText("packages/plugin/src/index.ts", pluginTypes, [
+    "pre_chat.messages.transform",
+    "@deprecated Use `pre_chat.messages.transform`",
+  ])
+  requireText("packages/opencode/src/session/prompt.ts", sessionPrompt, [
+    "pre_chat.messages.transform",
+    "msgs = preChat.messages",
+    "msgs = legacyChat.messages",
   ])
   requireText("packages/opencode/src/server/routes/instance/httpapi/groups/v2/model.ts", v2ModelGroup, [
     "v2.model.list",
