@@ -14,7 +14,7 @@ The installer writes `~/.config/ulmcode/opencode.json`, copies compact skills, U
 
 The verifier also runs `bun run --cwd packages/opencode test:ulm-skills` so compact skills and commands stay discoverable, placeholder-free, and wired to durable ULM tools.
 
-It also runs the bundled lab replay catalog, proving the manifest-driven replay harness can turn each lab scenario into final ULM artifacts with validation stage gates, final handoff, report-budget lint, and operation audit gates. The same verifier starts and probes the bundled lab target services.
+It also runs the bundled lab replay catalog, proving the manifest-driven replay harness can turn each lab scenario into final ULM artifacts with validation stage gates, final handoff, report-budget lint, and operation audit gates. The same verifier starts and probes the bundled lab target services, then runs `test:ulm-rebuild-audit` to check that the rebuild evidence checklist is still wired.
 
 ## Runtime Defaults
 
