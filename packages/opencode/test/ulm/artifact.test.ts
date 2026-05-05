@@ -230,14 +230,33 @@ describe("ULM artifact ledger", () => {
       impact: "Administrator takeover is more likely after password compromise.",
       remediation: "Require phishing-resistant MFA for privileged accounts.",
     })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Legacy TLS suspicion",
+      state: "rejected",
+      severity: "medium",
+      confidence: 0.2,
+      affectedAssets: ["vpn.example.edu"],
+      evidence: [],
+      description: "Initial suspicion was rejected during validation.",
+    })
 
     const result = await renderReport(worktree, { operationID: "school", title: "Assessment Report" })
-    expect(await fs.readFile(result.html, "utf8")).toContain("Weak MFA coverage")
+    const html = await fs.readFile(result.html, "utf8")
+    expect(html).toContain("Weak MFA coverage")
+    expect(html).toContain("Evidence Index")
+    expect(html).toContain("Legacy TLS suspicion")
     expect(await fs.readFile(result.pdf, "utf8")).toStartWith("%PDF-")
-    expect(await fs.readFile(result.readme, "utf8")).toContain("Assessment Report")
+    const readme = await fs.readFile(result.readme, "utf8")
+    expect(readme).toContain("Assessment Report")
+    expect(readme).toContain("Non-Reportable Findings")
     const manifest = JSON.parse(await fs.readFile(result.manifest, "utf8"))
     expect(manifest.findings).toEqual(["weak-mfa-coverage"])
+    expect(manifest.nonReportableFindings).toEqual(["legacy-tls-suspicion"])
     expect(manifest.artifacts.operationPlan).toContain("operation-plan.json")
+    expect(manifest.counts.findings).toBe(2)
+    expect(manifest.counts.reportableFindings).toBe(1)
+    expect(manifest.counts.byState.rejected).toBe(1)
     expect(manifest.counts.evidence).toBe(1)
     const status = await readOperationStatus(worktree, "school")
     expect(status.reports.pdf).toBe(true)

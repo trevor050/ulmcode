@@ -499,21 +499,35 @@ function wrapPdfLine(input: string, width = 86) {
   return lines.length ? lines : [""]
 }
 
-function buildPdf(title: string, operationID: string, operation: OperationRecord | undefined, findings: FindingRecord[]) {
+function findingCounts(findings: FindingRecord[]) {
+  return Object.fromEntries(FINDING_STATES.map((state) => [state, findings.filter((item) => item.state === state).length])) as Record<
+    FindingState,
+    number
+  >
+}
+
+function buildPdf(input: {
+  title: string
+  operationID: string
+  operation?: OperationRecord
+  reportable: FindingRecord[]
+  nonReportable: FindingRecord[]
+  evidence: EvidenceRecord[]
+}) {
   const lines = [
-    title,
-    `Operation: ${operationID}`,
-    `Stage: ${operation?.stage ?? "unknown"} | Status: ${operation?.status ?? "unknown"}`,
+    input.title,
+    `Operation: ${input.operationID}`,
+    `Stage: ${input.operation?.stage ?? "unknown"} | Status: ${input.operation?.status ?? "unknown"}`,
     "",
     "Executive Summary",
-    operation?.summary ?? "No operation summary has been recorded.",
+    input.operation?.summary ?? "No operation summary has been recorded.",
     "",
     "Scope And Methodology",
-    operation?.objective ?? "No objective has been recorded.",
+    input.operation?.objective ?? "No objective has been recorded.",
     "",
     "Findings",
-    ...(findings.length
-      ? findings.flatMap((finding) => [
+    ...(input.reportable.length
+      ? input.reportable.flatMap((finding) => [
           `${finding.severity.toUpperCase()}: ${finding.title}`,
           `ID: ${finding.findingID} | State: ${finding.state} | Confidence: ${finding.confidence}`,
           `Affected Assets: ${finding.affectedAssets.join(", ")}`,
@@ -524,6 +538,26 @@ function buildPdf(title: string, operationID: string, operation: OperationRecord
           "",
         ])
       : ["No validated or report-ready findings were recorded."]),
+    "",
+    "Evidence Index",
+    ...(input.evidence.length
+      ? input.evidence.flatMap((item) => [
+          `${item.evidenceID}: ${item.title}`,
+          `Kind: ${item.kind} | Path: ${item.path ?? "not recorded"}`,
+          `Summary: ${item.summary}`,
+          "",
+        ])
+      : ["No evidence records were recorded."]),
+    "",
+    "Non-Reportable Findings",
+    ...(input.nonReportable.length
+      ? input.nonReportable.flatMap((finding) => [
+          `${finding.findingID}: ${finding.title}`,
+          `State: ${finding.state} | Severity: ${finding.severity} | Confidence: ${finding.confidence}`,
+          `Reason retained: not promoted to validated/report-ready state at handoff.`,
+          "",
+        ])
+      : ["No rejected, candidate, or needs-validation findings were recorded."]),
   ].flatMap((line) => wrapPdfLine(line))
 
   const pages = Array.from({ length: Math.max(1, Math.ceil(lines.length / 44)) }, (_, index) =>
@@ -571,7 +605,9 @@ function finalReadme(input: {
   title: string
   operationID: string
   operation?: OperationRecord
-  findings: FindingRecord[]
+  reportable: FindingRecord[]
+  nonReportable: FindingRecord[]
+  evidence: EvidenceRecord[]
 }) {
   return [
     `# ${input.title}`,
@@ -589,9 +625,21 @@ function finalReadme(input: {
     "",
     "## Findings",
     "",
-    ...(input.findings.length
-      ? input.findings.map((finding) => `- ${finding.findingID}: ${finding.title} (${finding.severity})`)
+    ...(input.reportable.length
+      ? input.reportable.map((finding) => `- ${finding.findingID}: ${finding.title} (${finding.severity})`)
       : ["- No validated or report-ready findings were recorded."]),
+    "",
+    "## Evidence",
+    "",
+    ...(input.evidence.length
+      ? input.evidence.map((item) => `- ${item.evidenceID}: ${item.title}${item.path ? ` (${item.path})` : ""}`)
+      : ["- No evidence records were recorded."]),
+    "",
+    "## Non-Reportable Findings",
+    "",
+    ...(input.nonReportable.length
+      ? input.nonReportable.map((finding) => `- ${finding.findingID}: ${finding.title} (${finding.state})`)
+      : ["- No rejected, candidate, or needs-validation findings were recorded."]),
     "",
     "## Source Artifacts",
     "",
@@ -1002,6 +1050,8 @@ export async function renderReport(worktree: string, input: ReportRenderInput): 
   const findings = await readFindings(root)
   const evidence = await readEvidenceRecords(root)
   const reportable = findings.filter((finding) => finding.state === "report_ready" || finding.state === "validated")
+  const nonReportable = findings.filter((finding) => finding.state !== "report_ready" && finding.state !== "validated")
+  const counts = findingCounts(findings)
   const title = input.title ?? operation?.objective ?? `ULMCode Operation ${operationID}`
   const finalDir = path.join(root, "deliverables", "final")
   const html = `<!doctype html>
@@ -1033,17 +1083,26 @@ export async function renderReport(worktree: string, input: ReportRenderInput): 
   <table>
     <thead><tr><th>ID</th><th>Severity</th><th>Title</th><th>State</th><th>Evidence</th></tr></thead>
     <tbody>
-      ${reportable
-        .map(
-          (finding) =>
-            `<tr><td>${escapeHtml(finding.findingID)}</td><td>${escapeHtml(finding.severity)}</td><td>${escapeHtml(
-              finding.title,
-            )}</td><td>${escapeHtml(finding.state)}</td><td>${escapeHtml(
-              finding.evidence.map((item) => item.path ?? item.id).join(", "),
-            )}</td></tr>`,
-        )
-        .join("\n")}
+      ${
+        reportable.length
+          ? reportable
+              .map(
+                (finding) =>
+                  `<tr><td>${escapeHtml(finding.findingID)}</td><td>${escapeHtml(finding.severity)}</td><td>${escapeHtml(
+                    finding.title,
+                  )}</td><td>${escapeHtml(finding.state)}</td><td>${escapeHtml(
+                    finding.evidence.map((item) => item.path ?? item.id).join(", "),
+                  )}</td></tr>`,
+              )
+              .join("\n")
+          : '<tr><td colspan="5">No validated or report-ready findings were recorded.</td></tr>'
+      }
     </tbody>
+  </table>
+  <h2>Finding State Counts</h2>
+  <table>
+    <thead><tr><th>Candidate</th><th>Needs Validation</th><th>Validated</th><th>Report Ready</th><th>Rejected</th></tr></thead>
+    <tbody><tr><td>${counts.candidate}</td><td>${counts.needs_validation}</td><td>${counts.validated}</td><td>${counts.report_ready}</td><td>${counts.rejected}</td></tr></tbody>
   </table>
   <h2>Detailed Findings</h2>
   ${
@@ -1063,6 +1122,44 @@ export async function renderReport(worktree: string, input: ReportRenderInput): 
           .join("\n")
       : "<p>No validated or report-ready findings were recorded.</p>"
   }
+  <h2>Evidence Index</h2>
+  <table>
+    <thead><tr><th>ID</th><th>Kind</th><th>Title</th><th>Path</th><th>Summary</th></tr></thead>
+    <tbody>
+      ${
+        evidence.length
+          ? evidence
+              .map(
+                (item) =>
+                  `<tr><td>${escapeHtml(item.evidenceID)}</td><td>${escapeHtml(item.kind)}</td><td>${escapeHtml(
+                    item.title,
+                  )}</td><td>${escapeHtml(item.path ?? "")}</td><td>${escapeHtml(item.summary)}</td></tr>`,
+              )
+              .join("\n")
+          : '<tr><td colspan="5">No evidence records were recorded.</td></tr>'
+      }
+    </tbody>
+  </table>
+  <h2>Non-Reportable Findings</h2>
+  <table>
+    <thead><tr><th>ID</th><th>State</th><th>Severity</th><th>Title</th><th>Reason Retained</th></tr></thead>
+    <tbody>
+      ${
+        nonReportable.length
+          ? nonReportable
+              .map(
+                (finding) =>
+                  `<tr><td>${escapeHtml(finding.findingID)}</td><td>${escapeHtml(finding.state)}</td><td>${escapeHtml(
+                    finding.severity,
+                  )}</td><td>${escapeHtml(
+                    finding.title,
+                  )}</td><td>Not promoted to validated/report-ready state at handoff.</td></tr>`,
+              )
+              .join("\n")
+          : '<tr><td colspan="5">No rejected, candidate, or needs-validation findings were recorded.</td></tr>'
+      }
+    </tbody>
+  </table>
   <h2>Known Unknowns And Blockers</h2>
   <ul>${(operation?.blockers?.length ? operation.blockers : ["No blockers recorded."])
     .map((item) => `<li>${escapeHtml(item)}</li>`)
@@ -1076,8 +1173,8 @@ export async function renderReport(worktree: string, input: ReportRenderInput): 
   const readmePath = path.join(finalDir, "README.md")
   const manifestPath = path.join(finalDir, "manifest.json")
   await fs.writeFile(htmlPath, html)
-  await fs.writeFile(pdfPath, buildPdf(title, operationID, operation, reportable))
-  await fs.writeFile(readmePath, finalReadme({ title, operationID, operation, findings: reportable }))
+  await fs.writeFile(pdfPath, buildPdf({ title, operationID, operation, reportable, nonReportable, evidence }))
+  await fs.writeFile(readmePath, finalReadme({ title, operationID, operation, reportable, nonReportable, evidence }))
   await writeJson(manifestPath, {
     operationID,
     title,
@@ -1093,10 +1190,20 @@ export async function renderReport(worktree: string, input: ReportRenderInput): 
       runtimeSummary: path.join(root, "deliverables", "runtime-summary.json"),
     },
     counts: {
-      findings: reportable.length,
+      findings: findings.length,
+      reportableFindings: reportable.length,
+      nonReportableFindings: nonReportable.length,
+      byState: counts,
       evidence: evidence.length,
     },
     findings: reportable.map((finding) => finding.findingID),
+    nonReportableFindings: nonReportable.map((finding) => finding.findingID),
+    evidence: evidence.map((item) => ({
+      id: item.evidenceID,
+      kind: item.kind,
+      title: item.title,
+      path: item.path,
+    })),
   })
   return {
     operationID,
