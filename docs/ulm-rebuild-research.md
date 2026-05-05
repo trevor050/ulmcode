@@ -15,6 +15,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `#25634` v2 message rendering matters for tool/result visibility.
 - `#25787` patch boundary preservation matters for evidence-grade diffs.
 - `#25788` known-tool malformed-input classification reduces wasted agent repair loops; adopted locally.
+- `#25775` Anthropic tool-call/tool-result pairing matters for tool-heavy turns; adopted locally.
 - `#25712` subagent cost rollup is a future target for operation budgets.
 - `#25180` subagent auto-compaction is a future target for 20-hour operation stability.
 - `#25728` codex overload retry matters for provider instability during long operations; adopted locally.
@@ -50,6 +51,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `task` supports `background: true` plus optional `operationID`; background launches persist prompt/subagent/operation metadata; `task_status` polls running subagents and prints restart args for stale persisted jobs; `task_list` recovers persisted background job metadata, filters by operation, marks restartable orphaned jobs as `stale`, `task_restart` relaunches a specific stale lane from saved metadata, and `operation_recover` restarts all restartable stale lanes for one operation.
 - `max_retries` caps session-level transient model/provider retries. The isolated ULM profile sets it to 8 so 20-hour runs tolerate short provider instability without looping indefinitely.
 - Malformed input for a valid tool is now routed through `invalid` with `type: "known_tool_invalid_input"` and an explicit retry hint, while nonexistent tools use `type: "unknown_tool"`.
+- Anthropic/Vertex-Anthropic normalization now keeps `tool-call` and `tool-result` parts paired when splitting assistant text away from tool blocks, preventing provider rejections about orphaned tool_use IDs.
 - `/global/event` now assigns SSE ids to recoverable global events and honors `Last-Event-ID` on reconnect through a 1024-event replay ring, so browser/network reconnects can catch up on missed global operation updates.
 - Config file fingerprints are tracked for cached global and instance config. Changed project/global config files force reload on the next config read; `Config.invalidate()` remains safe outside an instance context.
 - TUI plugins can now register `api.input.intercept(handler)` to observe prompt keydown events before built-in handling. Returning `true` consumes the event, and plugin-scoped registrations clean up on deactivate/dispose.
