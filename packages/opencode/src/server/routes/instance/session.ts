@@ -805,7 +805,7 @@ export const SessionRoutes = lazy(() =>
       validator(
         "query",
         z.object({
-          force: QueryBoolean.optional(),
+          force: z.enum(["true", "false"]).optional(),
         }),
       ),
       async (c) =>
