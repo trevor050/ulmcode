@@ -586,7 +586,9 @@ describe("ULM artifact ledger", () => {
     expect(brief.health.gaps).toContain("background task task-recon-1 is stale")
     expect(brief.recommendedTools).toContain("operation_checkpoint")
     expect(brief.recommendedTools).toContain("task_status")
+    expect(brief.recommendedTools).toContain("task_restart")
     expect(formatOperationResumeBrief(brief)).toContain("operation checkpoint is stale")
+    expect(formatOperationResumeBrief(brief)).toContain("task_restart task_id=task-recon-1")
     expect(formatOperationResumeBrief(brief)).toContain('"prompt":"resume recon lane"')
   })
 
