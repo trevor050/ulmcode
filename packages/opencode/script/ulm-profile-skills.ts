@@ -110,7 +110,11 @@ for (const tool of [
   "operation_plan",
   "evidence_record",
   "finding_record",
+  "report_outline",
   "report_lint",
+  "report_render",
+  "runtime_summary",
+  "task_status",
 ]) {
   if (!toolCoverage.has(tool)) throw new Error(`skill pack never references ${tool}`)
 }

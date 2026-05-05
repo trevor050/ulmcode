@@ -70,6 +70,7 @@
       "k12-agent-orchestration-and-quality": "allow",
       "k12-engagement-safety-and-change-control": "allow",
       "k12-identity-and-privilege-escalation": "allow",
+      "k12-long-report-production": "allow",
       "k12-recon-and-infrastructure-testing": "allow",
       "k12-risk-mapping-and-reporting": "allow"
     }
@@ -77,7 +78,7 @@
   "plugin": [
     "__ULMCODE_PROFILE_DIR__/plugins/ulmcode-runtime-guard.js",
     "@khalilgharbaoui/opencode-claude-code-plugin",
-    "oh-my-openagent@latest"
+    "oh-my-openagent"
   ],
   "mcp": {
     "playwright": {

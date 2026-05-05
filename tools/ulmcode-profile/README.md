@@ -22,9 +22,9 @@ It also runs the bundled lab replay catalog, proving the manifest-driven replay 
 - `gpt-5.4-mini-fast` handles quick recon and evidence normalization.
 - `gpt-5.5-fast` handles operation control, attack-path mapping, validation, reporting, report review, and hard reasoning lanes.
 - Session retries are capped with `max_retries: 8` so a long unattended operation can ride out transient provider failures without spinning forever.
-- Skills are allowlisted to the bundled K-12 pentest profile.
+- Skills are allowlisted to the bundled K-12 pentest profile, including a dedicated long-report production skill for dense report drafting and sparse-report prevention.
 - Playwright and pentest MCP are configured, with Vercel and Context7 present but disabled by default.
-- The plugin stack mirrors the current local OpenCode setup: Oh My OpenAgent routing, the Claude Code bridge plugin, Playwright MCP, optional Vercel/Context7 MCP, and LAN LM Studio fallback models.
+- The plugin stack mirrors the current local OpenCode setup: Oh My OpenAgent routing from the vendored profile dependency, the Claude Code bridge plugin, Playwright MCP, optional Vercel/Context7 MCP, and LAN LM Studio fallback models.
 - The profile includes a local `ulmcode-runtime-guard` server plugin that injects ULM operation-resume, background-task, report-lint, runtime-summary, and final-handoff guardrails into the runtime without depending on npm availability.
 - Third-party plugin source is vendored for audit/fork work under `plugins/vendor/`; currently this includes `@khalilgharbaoui/opencode-claude-code-plugin@0.2.2` and `oh-my-openagent@3.17.12`. The profile npm manifest points OMO dependencies at the vendored package directory so installs are tied to the audited copy.
 - The profile vendors the current local OMO markdown layer under `local-opencode/`: 12 agents, 16 prompts, Feature Forge, and 8 root commands. The installer copies those into the isolated ULMCode config so category routing and manual commands survive a fresh install.

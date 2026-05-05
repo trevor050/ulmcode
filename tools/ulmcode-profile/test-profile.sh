@@ -23,6 +23,12 @@ grep -q '"frontend-builder"' "$PROFILE_DIR/oh-my-openagent.jsonc"
 grep -q '"product-taste-pass"' "$PROFILE_DIR/oh-my-openagent.jsonc"
 grep -q '"background_task"' "$PROFILE_DIR/oh-my-openagent.jsonc"
 grep -q 'ulmcode-runtime-guard.js' "$PROFILE_DIR/opencode.json"
+grep -q '"k12-long-report-production": "allow"' "$PROFILE_DIR/opencode.json"
+grep -q '"oh-my-openagent"' "$PROFILE_DIR/opencode.json"
+if grep -q 'oh-my-openagent@latest' "$PROFILE_DIR/opencode.json"; then
+  echo "profile must use vendored oh-my-openagent dependency, not @latest" >&2
+  exit 1
+fi
 grep -q 'finalHandoff: true' "$PROFILE_DIR/commands/ulm-final-handoff.md"
 test -f "$PROFILE_DIR/plugins/ulmcode-runtime-guard.js"
 test -f "$PROFILE_DIR/plugins/vendor/opencode-claude-code-plugin-0.2.2/package.json"
