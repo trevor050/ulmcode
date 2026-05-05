@@ -35,7 +35,6 @@ import { useConnected } from "@tui/component/use-connected"
 import { DialogMcp } from "@tui/component/dialog-mcp"
 import { DialogStatus } from "@tui/component/dialog-status"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
-import { DialogUlmOperations } from "@tui/component/dialog-ulm-operations"
 import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
@@ -45,6 +44,7 @@ import { KeybindProvider, useKeybind } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
+import { UlmOperations } from "@tui/routes/ulm-operations"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
@@ -334,6 +334,11 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
 
     if (route.data.type === "plugin") {
       renderer.setTerminalTitle(`OC | ${route.data.id}`)
+      return
+    }
+
+    if (route.data.type === "ulmOperations") {
+      renderer.setTerminalTitle("OC | ULM Operations")
     }
   })
 
@@ -598,7 +603,8 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         aliases: ["operations"],
       },
       onSelect: () => {
-        dialog.replace(() => <DialogUlmOperations />)
+        route.navigate({ type: "ulmOperations" })
+        dialog.clear()
       },
       category: "System",
     },
@@ -916,6 +922,9 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
           </Match>
           <Match when={route.data.type === "session"}>
             <Session />
+          </Match>
+          <Match when={route.data.type === "ulmOperations"}>
+            <UlmOperations />
           </Match>
         </Switch>
       </Show>

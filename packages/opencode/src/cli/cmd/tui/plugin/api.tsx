@@ -82,6 +82,15 @@ function routeNavigate(route: ReturnType<typeof useRoute>, name: string, params?
     return
   }
 
+  if (name === "ulm.operations") {
+    const operationID = params?.operationID
+    route.navigate({
+      type: "ulmOperations",
+      operationID: typeof operationID === "string" ? operationID : undefined,
+    })
+    return
+  }
+
   route.navigate({ type: "plugin", id: name, data: params })
 }
 
@@ -93,6 +102,14 @@ function routeCurrent(route: ReturnType<typeof useRoute>): TuiPluginApi["route"]
       params: {
         sessionID: route.data.sessionID,
         prompt: route.data.prompt,
+      },
+    }
+  }
+  if (route.data.type === "ulmOperations") {
+    return {
+      name: "ulm.operations",
+      params: {
+        operationID: route.data.operationID,
       },
     }
   }
