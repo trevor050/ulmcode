@@ -76,6 +76,13 @@ describe("ULM artifact ledger", () => {
       expect.objectContaining({
         operationID: "school-assessment",
         artifact: "checkpoint",
+        operation: expect.objectContaining({
+          stage: "recon",
+          status: "running",
+          summary: "Recon lane started.",
+        }),
+        findings: { total: 0 },
+        evidence: { total: 0 },
       }),
     )
   })

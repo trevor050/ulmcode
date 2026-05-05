@@ -97,6 +97,27 @@ function readyReports(item: OperationStatus) {
     .map(([key]) => key)
 }
 
+function mergeOperationUpdate(
+  previous: OperationStatus | undefined,
+  update: {
+    operationID: string
+    operation?: OperationStatus["operation"]
+    findings?: OperationStatus["findings"]
+    evidence?: OperationStatus["evidence"]
+    reports?: OperationStatus["reports"]
+    runtimeSummary?: boolean
+  },
+): OperationStatus {
+  return {
+    operationID: update.operationID,
+    operation: update.operation ? { ...previous?.operation, ...update.operation } : previous?.operation,
+    findings: update.findings ?? previous?.findings,
+    evidence: update.evidence ?? previous?.evidence,
+    reports: update.reports ?? previous?.reports,
+    runtimeSummary: update.runtimeSummary ?? previous?.runtimeSummary,
+  }
+}
+
 export function UlmOperations() {
   const sdk = useSDK()
   const event = useEvent()
@@ -182,8 +203,20 @@ export function UlmOperations() {
   onCleanup(() => clearInterval(interval))
 
   event.on("operation.updated", (evt) => {
-    if (data.operationID && evt.properties.operationID !== data.operationID) return
-    refresh()
+    itemsActions.mutate((current) => {
+      const items = current ?? []
+      const index = items.findIndex((item) => item.operationID === evt.properties.operationID)
+      if (index === -1) return [mergeOperationUpdate(undefined, evt.properties), ...items]
+      return items.map((item, itemIndex) =>
+        itemIndex === index ? mergeOperationUpdate(item, evt.properties) : item,
+      )
+    })
+    if (data.operationID !== evt.properties.operationID) return
+    detailActions.mutate((current) => ({
+      status: mergeOperationUpdate(current?.status, evt.properties),
+      audit: current?.audit,
+    }))
+    if (evt.properties.artifact === "operation_audit") void detailActions.refetch()
   })
 
   return (

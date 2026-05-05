@@ -2598,6 +2598,25 @@ export type EventOperationUpdated = {
       | "stage_gate"
       | "operation_audit"
     path?: string
+    operation?: {
+      objective?: string
+      stage?: string
+      status?: string
+      summary?: string
+      riskLevel?: string
+      nextActions?: Array<string>
+      blockers?: Array<string>
+    }
+    findings?: {
+      total: number
+    }
+    evidence?: {
+      total: number
+    }
+    reports?: {
+      [key: string]: boolean
+    }
+    runtimeSummary?: boolean
   }
 }
 

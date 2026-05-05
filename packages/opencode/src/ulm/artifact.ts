@@ -27,8 +27,31 @@ export type EvidenceRef = {
   createdAt?: string
 }
 
-function publishOperationUpdated(input: { operationID: string; artifact: OperationUpdatedArtifact; path?: string }) {
-  void Bus.publish(OperationEvent.Updated, input).catch(() => undefined)
+function publishOperationUpdated(
+  worktree: string,
+  input: { operationID: string; artifact: OperationUpdatedArtifact; path?: string },
+) {
+  void (async () => {
+    const status = await readOperationStatus(worktree, input.operationID, { eventLimit: 0 }).catch(() => undefined)
+    await Bus.publish(OperationEvent.Updated, {
+      ...input,
+      operation: status?.operation
+        ? {
+            objective: status.operation.objective,
+            stage: status.operation.stage,
+            status: status.operation.status,
+            summary: status.operation.summary,
+            riskLevel: status.operation.riskLevel,
+            nextActions: status.operation.nextActions,
+            blockers: status.operation.blockers,
+          }
+        : undefined,
+      findings: status?.findings ? { total: status.findings.total } : undefined,
+      evidence: status?.evidence ? { total: status.evidence.total } : undefined,
+      reports: status?.reports,
+      runtimeSummary: status?.runtimeSummary,
+    })
+  })().catch(() => undefined)
 }
 
 export type OperationCheckpointInput = {
@@ -977,7 +1000,7 @@ export async function buildOperationAudit(
   await fs.mkdir(path.dirname(files.json), { recursive: true })
   await writeJson(files.json, audit)
   await fs.writeFile(files.markdown, formatOperationAudit(audit))
-  publishOperationUpdated({ operationID: audit.operationID, artifact: "operation_audit", path: files.json })
+  publishOperationUpdated(worktree, { operationID: audit.operationID, artifact: "operation_audit", path: files.json })
   return audit
 }
 
@@ -1088,7 +1111,7 @@ export async function buildOperationStageGate(
   await fs.mkdir(path.dirname(files.json), { recursive: true })
   await writeJson(files.json, gate)
   await fs.writeFile(files.markdown, formatOperationStageGate(gate))
-  publishOperationUpdated({ operationID: gate.operationID, artifact: "stage_gate", path: files.json })
+  publishOperationUpdated(worktree, { operationID: gate.operationID, artifact: "stage_gate", path: files.json })
   return gate
 }
 
@@ -1433,7 +1456,7 @@ export async function writeOperationCheckpoint(worktree: string, input: Operatio
   await fs.mkdir(path.join(root, "evidence"), { recursive: true })
   await fs.mkdir(path.join(root, "findings"), { recursive: true })
   await fs.mkdir(path.join(root, "reports"), { recursive: true })
-  publishOperationUpdated({ operationID, artifact: "checkpoint", path: path.join(root, "operation.json") })
+  publishOperationUpdated(worktree, { operationID, artifact: "checkpoint", path: path.join(root, "operation.json") })
   return { root, record }
 }
 
@@ -1468,7 +1491,7 @@ export async function writeFinding(worktree: string, input: FindingInput) {
   }
   await writeJson(file, record)
   await appendJsonl(path.join(root, "findings.jsonl"), { type: "finding", ...record })
-  publishOperationUpdated({ operationID: input.operationID, artifact: "finding", path: file })
+  publishOperationUpdated(worktree, { operationID: input.operationID, artifact: "finding", path: file })
   return { root, record }
 }
 
@@ -1535,7 +1558,7 @@ export async function writeEvidence(worktree: string, input: EvidenceInput): Pro
   }
   await writeJson(json, record)
   await appendJsonl(path.join(root, "evidence.jsonl"), { type: "evidence", ...record })
-  publishOperationUpdated({ operationID, artifact: "evidence", path: json })
+  publishOperationUpdated(worktree, { operationID, artifact: "evidence", path: json })
   return { operationID, evidenceID, json, rawPath, record }
 }
 
@@ -1651,7 +1674,7 @@ export async function writeReportOutline(worktree: string, input: ReportOutlineI
   const file = path.join(root, "reports", "report-outline.md")
   await fs.mkdir(path.dirname(file), { recursive: true })
   await fs.writeFile(file, body)
-  publishOperationUpdated({ operationID: slug(input.operationID, "operation"), artifact: "report_outline", path: file })
+  publishOperationUpdated(worktree, { operationID: slug(input.operationID, "operation"), artifact: "report_outline", path: file })
   return { root, file, targetPages, reportReady: reportReady.length }
 }
 
@@ -1765,7 +1788,7 @@ export async function writeRuntimeSummary(
   const markdown = path.join(finalDir, "runtime-summary.md")
   await writeJson(json, record)
   await fs.writeFile(markdown, runtimeSummaryMarkdown(record))
-  publishOperationUpdated({ operationID, artifact: "runtime_summary", path: json })
+  publishOperationUpdated(worktree, { operationID, artifact: "runtime_summary", path: json })
   return { operationID, json, markdown, finalDir }
 }
 
@@ -1795,7 +1818,7 @@ export async function writeOperationPlan(
     phases: record.phases.length,
     writtenAt: record.writtenAt,
   })
-  publishOperationUpdated({ operationID, artifact: "operation_plan", path: json })
+  publishOperationUpdated(worktree, { operationID, artifact: "operation_plan", path: json })
   return { operationID, json, markdown, phases: record.phases.length }
 }
 
@@ -2078,7 +2101,7 @@ export async function renderReport(worktree: string, input: ReportRenderInput): 
       path: item.path,
     })),
   })
-  publishOperationUpdated({ operationID, artifact: "report_render", path: manifestPath })
+  publishOperationUpdated(worktree, { operationID, artifact: "report_render", path: manifestPath })
   return {
     operationID,
     html: htmlPath,
