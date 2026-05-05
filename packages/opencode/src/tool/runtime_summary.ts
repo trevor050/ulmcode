@@ -2,6 +2,9 @@ import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
 import DESCRIPTION from "./runtime_summary.txt"
 import { Instance } from "@/project/instance"
+import { Session } from "@/session/session"
+import type { SessionID } from "@/session/schema"
+import type { MessageV2 } from "@/session/message-v2"
 import { writeRuntimeSummary } from "@/ulm/artifact"
 
 const ModelCalls = Schema.Struct({
@@ -63,30 +66,50 @@ type Metadata = {
   finalDir: string
 }
 
-export const RuntimeSummaryTool = Tool.define<typeof Parameters, Metadata, never>(
+function collectChildMessages(session: Session.Interface, sessionID: SessionID): Effect.Effect<MessageV2.WithParts[]> {
+  return Effect.gen(function* () {
+    const children = yield* session.children(sessionID)
+    const batches = yield* Effect.all(
+      children.map((child) =>
+        Effect.gen(function* () {
+          const messages = yield* session.messages({ sessionID: child.id })
+          const descendants = yield* collectChildMessages(session, child.id)
+          return [...messages, ...descendants]
+        }),
+      ),
+    )
+    return batches.flat()
+  })
+}
+
+export const RuntimeSummaryTool = Tool.define<typeof Parameters, Metadata, Session.Service>(
   "runtime_summary",
-  Effect.succeed({
-    description: DESCRIPTION,
-    parameters: Parameters,
-    execute: (params: Schema.Schema.Type<typeof Parameters>, ctx) =>
-      Effect.gen(function* () {
-        const worktree = Instance.worktree
-        const result = yield* Effect.tryPromise(() =>
-          writeRuntimeSummary(worktree, {
-            ...params,
-            sessionMessages: ctx.messages.map((message) => message.info),
-          }),
-        ).pipe(Effect.orDie)
-        return {
-          title: "Wrote ULMCode runtime summary",
-          output: [
-            `operation_id: ${result.operationID}`,
-            `json: ${result.json}`,
-            `markdown: ${result.markdown}`,
-            `deliverables: ${result.finalDir}`,
-          ].join("\n"),
-          metadata: result,
-        }
-      }),
+  Effect.gen(function* () {
+    const session = yield* Session.Service
+    return {
+      description: DESCRIPTION,
+      parameters: Parameters,
+      execute: (params: Schema.Schema.Type<typeof Parameters>, ctx) =>
+        Effect.gen(function* () {
+          const worktree = Instance.worktree
+          const childMessages = yield* collectChildMessages(session, ctx.sessionID)
+          const result = yield* Effect.tryPromise(() =>
+            writeRuntimeSummary(worktree, {
+              ...params,
+              sessionMessages: [...ctx.messages, ...childMessages].map((message) => message.info),
+            }),
+          ).pipe(Effect.orDie)
+          return {
+            title: "Wrote ULMCode runtime summary",
+            output: [
+              `operation_id: ${result.operationID}`,
+              `json: ${result.json}`,
+              `markdown: ${result.markdown}`,
+              `deliverables: ${result.finalDir}`,
+            ].join("\n"),
+            metadata: result,
+          }
+        }).pipe(Effect.orDie)
+    }
   }),
 )
