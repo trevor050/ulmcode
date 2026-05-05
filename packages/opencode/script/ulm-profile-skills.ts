@@ -7,6 +7,7 @@ const repoRoot = path.resolve(import.meta.dir, "../../..")
 const profileRoot = path.join(repoRoot, "tools", "ulmcode-profile")
 const skillsRoot = path.join(profileRoot, "skills")
 const commandsRoot = path.join(profileRoot, "commands")
+const profileConfig = path.join(profileRoot, "opencode.json")
 const durableTools = [
   "operation_audit",
   "operation_recover",
@@ -102,6 +103,22 @@ const commandFiles = await walk(commandsRoot, (file) => file.endsWith(".md"))
 const skills = await Promise.all(skillFiles.map(validateSkill))
 const commands = await Promise.all(commandFiles.map(validateCommand))
 const toolCoverage = new Set(skills.flatMap((skill) => skill.tools))
+const opencodeConfig = JSON.parse(await fs.readFile(profileConfig, "utf8")) as { instructions?: string[] }
+
+if (!opencodeConfig.instructions?.includes("__ULMCODE_PROFILE_DIR__/plugins/shell-strategy/shell_strategy.md")) {
+  throw new Error("profile config must load the bundled shell non-interactive strategy")
+}
+
+const shellStrategy = await fs.readFile(path.join(profileRoot, "plugins", "shell-strategy", "shell_strategy.md"), "utf8")
+for (const needle of ["Shell Non-Interactive Strategy", "GIT_TERMINAL_PROMPT", "Process Continuity"]) {
+  if (!shellStrategy.includes(needle)) throw new Error(`shell strategy is missing ${needle}`)
+}
+
+for (const command of ["btw.md", "ship.md", "review.md", "handoff.md"]) {
+  if (!commandFiles.some((file) => path.basename(file) === command)) {
+    throw new Error(`profile commands missing ${command}`)
+  }
+}
 
 for (const tool of [
   "operation_audit",

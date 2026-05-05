@@ -17,6 +17,6 @@ describe("ULM profile skills verifier", () => {
     expect(stderr).toBe("")
     expect(stdout).toContain("ulm_profile_skills: ok")
     expect(stdout).toContain("skills: 6")
-    expect(stdout).toContain("commands: 3")
+    expect(stdout).toContain("commands: 7")
   })
 })

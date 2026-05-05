@@ -9,6 +9,9 @@
       "__ULMCODE_PROFILE_DIR__/skills/pentest-compact"
     ]
   },
+  "instructions": [
+    "__ULMCODE_PROFILE_DIR__/plugins/shell-strategy/shell_strategy.md"
+  ],
   "agent": {
     "pentest": {
       "model": "openai/gpt-5.5-fast",
