@@ -17,6 +17,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `#25788` known-tool malformed-input classification reduces wasted agent repair loops; adopted locally.
 - `#25712` subagent cost rollup is a future target for operation budgets.
 - `#25180` subagent auto-compaction is a future target for 20-hour operation stability.
+- `#25728` codex overload retry matters for provider instability during long operations; adopted locally.
 - `#25805` session retry caps matter for unattended operations; adopted locally as `max_retries`.
 - `#25658` SSE reconnect replay matters for long-running operation visibility; adopted locally for global event streams.
 - `#25778` config cache refresh matters for live profile/plugin edits during long runs; adopted locally with direct `getGlobal()` refresh coverage.
@@ -53,6 +54,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - TUI plugins can now register `api.input.intercept(handler)` to observe prompt keydown events before built-in handling. Returning `true` consumes the event, and plugin-scoped registrations clean up on deactivate/dispose.
 - Session cost rollups now expose parent/session spend plus transitive descendant subagent spend through `GET /session/:id/cost`, generated SDK support, TUI sidebar cost lines, and completed Task footers.
 - Session processing now estimates outgoing prompt size before opening the LLM stream and returns `compact` early when the estimate exceeds 85% of the model's reported context limit; extra z.ai/GLM-style overflow strings also classify as context overflow instead of retryable generic API errors.
+- Codex/OpenAI `server_is_overloaded` stream chunks now parse as retryable API errors, and retry classification recognizes nested overloaded/rate-limit codes instead of only top-level provider codes.
 - `tools/ulmcode-profile` provides an isolated K-12 pentest profile, compact skill pack, plugin dependency manifest, and Oh My OpenAgent routing file. The isolated profile now carries over the useful local OMO routing lanes: backend architect/builder, frontend taste/builder, product taste pass, sparse human-taste review, test coverage, background concurrency, runtime fallback, auto-resume, aggressive truncation, and tmux layout settings.
 - `bun run --cwd packages/opencode test:ulm-skills` validates the bundled profile skills/commands for frontmatter, placeholder-free content, and durable ULM tool references.
 - `bun run --cwd packages/opencode test:ulm-smoke` exercises a synthetic ULM lifecycle outside the unit-test helpers: operation plan, evidence, finding, report outline, validation stage gate, final render, runtime summary, operation audit, final handoff lint, and status dashboard.
