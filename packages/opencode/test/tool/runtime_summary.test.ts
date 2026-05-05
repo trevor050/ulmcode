@@ -257,4 +257,86 @@ describe("tool.runtime_summary", () => {
         ),
     })
   })
+
+  test("includes persisted background job session usage outside the child tree", async () => {
+    await using dir = await tmpdir({ git: true })
+    await provideTestInstance({
+      directory: dir.path,
+      fn: () =>
+        Effect.runPromise(
+          Effect.gen(function* () {
+            const worktree = Instance.worktree
+            yield* Effect.promise(() =>
+              writeOperationCheckpoint(worktree, {
+                operationID: "school",
+                objective: "Authorized school assessment",
+                stage: "validation",
+                status: "running",
+                summary: "Validation is still running.",
+              }),
+            )
+
+            const sessions = yield* Session.Service
+            const jobs = yield* BackgroundJob.Service
+            const storage = yield* Storage.Service
+            const parent = yield* sessions.create({ title: "parent" })
+            const detached = yield* sessions.create({ title: "detached validator" })
+            yield* sessions.updateMessage({
+              id: MessageID.ascending(),
+              role: "assistant",
+              parentID: MessageID.ascending(),
+              sessionID: detached.id,
+              mode: "validator",
+              agent: "validator",
+              cost: 0.75,
+              path: { cwd: worktree, root: worktree },
+              tokens: {
+                input: 700,
+                output: 250,
+                reasoning: 50,
+                cache: { read: 0, write: 0 },
+              },
+              modelID: "gpt-5.5",
+              providerID: "openai",
+              time: { created: Date.now(), completed: Date.now() },
+            } as any)
+
+            yield* Effect.addFinalizer(() => storage.remove(["background_job", detached.id]).pipe(Effect.ignore))
+            yield* jobs.start({
+              id: detached.id,
+              type: "task",
+              title: "detached validation",
+              metadata: {
+                sessionID: detached.id,
+                subagent: "validator",
+              },
+              run: Effect.succeed("validation completed"),
+            })
+            expect((yield* jobs.wait({ id: detached.id })).info?.status).toBe("completed")
+
+            const tool = yield* RuntimeSummaryTool
+            const def = yield* tool.init()
+            const result = yield* def.execute(
+              {
+                operationID: "school",
+              },
+              {
+                sessionID: parent.id,
+                messageID: MessageID.ascending(),
+                agent: "build",
+                abort: new AbortController().signal,
+                messages: [],
+                metadata: () => Effect.void,
+                ask: () => Effect.void,
+              },
+            )
+
+            const record = yield* Effect.promise(() => fs.readFile(result.metadata.json, "utf8").then(JSON.parse))
+            expect(record.modelCalls.total).toBe(1)
+            expect(record.usage.totalTokens).toBe(1000)
+            expect(record.usage.byAgent.validator.costUSD).toBe(0.75)
+          }).pipe(Effect.scoped, Effect.provide(layer)),
+        ),
+    })
+  })
 })

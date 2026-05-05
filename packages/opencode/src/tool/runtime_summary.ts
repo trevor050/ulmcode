@@ -4,7 +4,7 @@ import DESCRIPTION from "./runtime_summary.txt"
 import { Instance } from "@/project/instance"
 import { Session } from "@/session/session"
 import { BackgroundJob } from "@/background/job"
-import type { SessionID } from "@/session/schema"
+import { SessionID, type SessionID as SessionIDT } from "@/session/schema"
 import type { MessageV2 } from "@/session/message-v2"
 import { writeRuntimeSummary } from "@/ulm/artifact"
 
@@ -67,7 +67,7 @@ type Metadata = {
   finalDir: string
 }
 
-function collectChildMessages(session: Session.Interface, sessionID: SessionID): Effect.Effect<MessageV2.WithParts[]> {
+function collectChildMessages(session: Session.Interface, sessionID: SessionIDT): Effect.Effect<MessageV2.WithParts[]> {
   return Effect.gen(function* () {
     const children = yield* session.children(sessionID)
     const batches = yield* Effect.all(
@@ -81,6 +81,47 @@ function collectChildMessages(session: Session.Interface, sessionID: SessionID):
     )
     return batches.flat()
   })
+}
+
+function jobSessionID(job: BackgroundJob.Info): SessionIDT | undefined {
+  const sessionID = job.metadata?.sessionID
+  if (typeof sessionID !== "string" || !sessionID) return undefined
+  try {
+    return SessionID.make(sessionID)
+  } catch {
+    return undefined
+  }
+}
+
+function collectBackgroundJobMessages(
+  session: Session.Interface,
+  jobs: BackgroundJob.Info[],
+): Effect.Effect<MessageV2.WithParts[]> {
+  return Effect.gen(function* () {
+    const sessionIDs = Array.from(new Set(jobs.map(jobSessionID).filter((id): id is SessionIDT => id !== undefined)))
+    const batches = yield* Effect.all(
+      sessionIDs.map((sessionID) =>
+        Effect.gen(function* () {
+          const messages = yield* session.messages({ sessionID })
+          const descendants = yield* collectChildMessages(session, sessionID)
+          return [...messages, ...descendants]
+        }).pipe(Effect.catch(() => Effect.succeed<MessageV2.WithParts[]>([]))),
+      ),
+    )
+    return batches.flat()
+  })
+}
+
+function uniqueMessages(messages: MessageV2.WithParts[]) {
+  const seen = new Set<string>()
+  const result: MessageV2.WithParts[] = []
+  for (const message of messages) {
+    const key = `${message.info.sessionID}:${message.info.id}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(message)
+  }
+  return result
 }
 
 function backgroundStatus(status: BackgroundJob.Status): Schema.Schema.Type<typeof BackgroundTask>["status"] {
@@ -112,10 +153,13 @@ export const RuntimeSummaryTool = Tool.define<typeof Parameters, Metadata, Sessi
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx) =>
         Effect.gen(function* () {
           const worktree = Instance.worktree
+          const jobItems = yield* jobs.list()
           const childMessages = yield* collectChildMessages(session, ctx.sessionID)
+          const backgroundMessages = yield* collectBackgroundJobMessages(session, jobItems)
+          const sessionMessages = uniqueMessages([...ctx.messages, ...childMessages, ...backgroundMessages])
           const backgroundTasks =
             params.backgroundTasks ??
-            (yield* jobs.list()).map((job) => ({
+            jobItems.map((job) => ({
               id: job.id,
               agent: backgroundAgent(job),
               status: backgroundStatus(job.status),
@@ -125,7 +169,7 @@ export const RuntimeSummaryTool = Tool.define<typeof Parameters, Metadata, Sessi
             writeRuntimeSummary(worktree, {
               ...params,
               backgroundTasks,
-              sessionMessages: [...ctx.messages, ...childMessages].map((message) => ({
+              sessionMessages: sessionMessages.map((message) => ({
                 role: message.info.role,
                 agent: message.info.agent,
                 modelID: message.info.role === "assistant" ? message.info.modelID : message.info.model?.modelID,
