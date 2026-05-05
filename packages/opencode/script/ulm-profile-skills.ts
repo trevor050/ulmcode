@@ -22,6 +22,7 @@ const durableTools = [
   "runtime_summary",
   "task",
   "task_list",
+  "task_restart",
   "task_status",
 ]
 

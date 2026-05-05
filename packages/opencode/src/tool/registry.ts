@@ -8,6 +8,7 @@ import { GrepTool } from "./grep"
 import { ReadTool } from "./read"
 import { TaskTool } from "./task"
 import { TaskListTool } from "./task_list"
+import { TaskRestartTool } from "./task_restart"
 import { TaskStatusTool } from "./task_status"
 import { TodoWriteTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
@@ -118,6 +119,7 @@ export const layer: Layer.Layer<
     const invalid = yield* InvalidTool
     const task = yield* TaskTool
     const taskList = yield* TaskListTool
+    const taskRestart = yield* TaskRestartTool
     const taskStatus = yield* TaskStatusTool
     const read = yield* ReadTool
     const question = yield* QuestionTool
@@ -235,6 +237,7 @@ export const layer: Layer.Layer<
           write: Tool.init(writetool),
           task: Tool.init(task),
           taskList: Tool.init(taskList),
+          taskRestart: Tool.init(taskRestart),
           taskStatus: Tool.init(taskStatus),
           fetch: Tool.init(webfetch),
           todo: Tool.init(todo),
@@ -271,6 +274,7 @@ export const layer: Layer.Layer<
             tool.write,
             tool.task,
             tool.taskList,
+            tool.taskRestart,
             tool.taskStatus,
             tool.fetch,
             tool.todo,

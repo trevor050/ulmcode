@@ -1,0 +1,5 @@
+Restart a persisted background subagent task from its saved restart arguments.
+
+Use this when `task_status` or `task_list` reports a stale, error, or cancelled background task with restart args. The tool reads the persisted task metadata, validates that the task is not currently running, then relaunches the same subagent session in the background with the original prompt, description, subagent type, command, and ULMCode operation ID.
+
+Prefer this over manually copying `restart_args` into `task` when recovering after process restart or service reload.

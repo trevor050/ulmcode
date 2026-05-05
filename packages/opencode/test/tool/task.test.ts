@@ -11,6 +11,7 @@ import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
 import { TaskListTool } from "@/tool/task_list"
+import { TaskRestartTool } from "@/tool/task_restart"
 import { TaskStatusTool } from "@/tool/task_status"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
@@ -708,6 +709,61 @@ describe("tool.task", () => {
       expect(listed.output).toContain(schoolID)
       expect(listed.output).not.toContain(otherID)
       expect(listed.metadata.count).toBe(1)
+    }),
+  )
+
+  it.instance("task_restart relaunches a stale persisted background task", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const sessions = yield* Session.Service
+      const storage = yield* Storage.Service
+      const jobs = yield* BackgroundJob.Service
+      const taskSession = yield* sessions.create({ parentID: chat.id, title: "stale validation lane" })
+      yield* Effect.addFinalizer(() => storage.remove(["background_job", taskSession.id]).pipe(Effect.ignore))
+      yield* jobs.start({
+        id: taskSession.id,
+        type: "task",
+        title: "stale validation lane",
+        metadata: {
+          parentSessionID: chat.id,
+          sessionID: taskSession.id,
+          subagent: "validator",
+          subagent_type: "validator",
+          description: "stale validation lane",
+          prompt: "continue validating stale findings",
+          operationID: "school",
+        },
+        run: Effect.never,
+      })
+
+      const restarted = yield* Effect.gen(function* () {
+        const restart = yield* TaskRestartTool
+        const restartDef = yield* restart.init()
+        const jobsAfterReload = yield* BackgroundJob.Service
+        const promptOps = stubOps({ text: "restarted validation output" })
+        const result = yield* restartDef.execute(
+          { task_id: taskSession.id },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+        const waited = yield* jobsAfterReload.wait({ id: taskSession.id })
+        return { result, waited }
+      }).pipe(Effect.provide(Layer.fresh(BackgroundJob.layer)))
+
+      expect(restarted.result.metadata.previous_status).toBe("stale")
+      expect(restarted.result.metadata.restarted).toBe(true)
+      expect(restarted.result.output).toContain("state: running")
+      expect(restarted.waited.info?.status).toBe("completed")
+      expect(restarted.waited.info?.output).toBe("restarted validation output")
+      expect(restarted.waited.info?.metadata?.operationID).toBe("school")
     }),
   )
 
