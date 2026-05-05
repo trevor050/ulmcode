@@ -24,6 +24,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `#25760` queued-message cancellation matters for TUI safety during busy long runs; adopted locally.
 - `#25683` ACP end-turn event draining matters for external harness protocol correctness; adopted locally.
 - `#25670` MCP reconnect-on-transport-error matters for long-running remote tools; adopted locally.
+- `#25694` InstanceRef propagation through `ScopedCache.get` matters for context-safe long-running services; adopted locally.
 - `#25778` config cache refresh matters for live profile/plugin edits during long runs; adopted locally with direct `getGlobal()` refresh coverage.
 
 ## External Cyber Harness Ideas
@@ -62,6 +63,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - ACP prompt and command calls now wait for the corresponding assistant `message.updated` completion event before returning `end_turn`, with a bounded timeout, so clients do not receive trailing chunks after the turn is marked done.
 - Session cost rollups now expose parent/session spend plus transitive descendant subagent spend through `GET /session/:id/cost`, generated SDK support, TUI sidebar cost lines, and completed Task footers.
 - Session processing now estimates outgoing prompt size before opening the LLM stream and returns `compact` early when the estimate exceeds 85% of the model's reported context limit; extra z.ai/GLM-style overflow strings also classify as context overflow instead of retryable generic API errors.
+- `InstanceState.get` now passes the resolved `InstanceRef` into `ScopedCache.get`, keeping lazy cache initialization aligned with the selected instance context.
 - Codex/OpenAI `server_is_overloaded` stream chunks now parse as retryable API errors, and retry classification recognizes nested overloaded/rate-limit codes instead of only top-level provider codes.
 - `tools/ulmcode-profile` provides an isolated K-12 pentest profile, compact skill pack, plugin dependency manifest, and Oh My OpenAgent routing file. The isolated profile now carries over the useful local OMO routing lanes: backend architect/builder, frontend taste/builder, product taste pass, sparse human-taste review, test coverage, background concurrency, runtime fallback, auto-resume, aggressive truncation, and tmux layout settings.
 - `bun run --cwd packages/opencode test:ulm-skills` validates the bundled profile skills/commands for frontmatter, placeholder-free content, and durable ULM tool references.
