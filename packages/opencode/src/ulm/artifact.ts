@@ -729,6 +729,11 @@ function resumeGaps(status: OperationStatusSummary, options: OperationResumeOpti
   ) {
     gaps.push(`runtime budget exhausted: spent $${costUSD} of $${budgetUSD}`)
   }
+  for (const note of status.runtime?.notes ?? []) {
+    if (note.startsWith("runtime blind spot:")) {
+      gaps.push(`runtime usage blind spot recorded: ${note}`)
+    }
+  }
   if (operation?.status === "running" && staleAfter !== undefined) {
     const age = minutesSince(operation.time.updated, now)
     if (age !== undefined && age >= staleAfter) {
@@ -761,7 +766,8 @@ function resumeToolRecommendations(status: OperationStatusSummary, gaps: string[
   if (gaps.includes("operation plan is missing")) tools.push("operation_plan")
   if (
     gaps.includes("runtime summary is missing") ||
-    gaps.some((gap) => gap.startsWith("runtime budget exhausted"))
+    gaps.some((gap) => gap.startsWith("runtime budget exhausted")) ||
+    gaps.some((gap) => gap.startsWith("runtime usage blind spot recorded"))
   ) {
     tools.push("runtime_summary")
   }
