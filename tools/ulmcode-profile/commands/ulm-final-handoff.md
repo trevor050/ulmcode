@@ -11,9 +11,10 @@ Process:
 4. call `report_render` if final deliverables are missing or stale
 5. call `runtime_summary`
 6. call `report_lint` with `finalHandoff: true` again
-7. summarize final paths in `deliverables/final/` and any residual risk
+7. call `operation_audit` with `finalHandoff: true`
+8. summarize final paths in `deliverables/final/`, audit paths in `deliverables/`, and any residual risk
 
-Do not claim final handoff is ready unless the second `report_lint` returns ok.
+Do not claim final handoff is ready unless the second `report_lint` and `operation_audit` both return ok.
 
 Operation:
 $ARGUMENTS

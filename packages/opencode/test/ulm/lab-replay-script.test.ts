@@ -65,8 +65,10 @@ describe("ULM lab replay script", () => {
       expect(stdout).toContain("ulm_lab_replay: ok")
       expect(stdout).toContain(`lab: ${path.basename(path.dirname(manifest))}`)
       expect(stdout).toContain("final_lint: ok")
+      expect(stdout).toContain("operation_audit: ok")
       expect(stdout).toContain("report.pdf")
       expect(stdout).toContain("runtime-summary.json")
+      expect(stdout).toContain("operation-audit.json")
     }
   })
 })

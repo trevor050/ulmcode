@@ -10,11 +10,11 @@ tools/ulmcode-profile/scripts/install-profile.sh
 
 The installer writes `~/.config/ulmcode/opencode.json`, copies compact skills and ULM commands, installs the profile npm manifest, writes both root and `.opencode/` Oh My OpenAgent routing files, and creates `~/.config/ulmcode/ulmcode-launch.sh`.
 
-`test-profile.sh` also runs the package-level ULM lifecycle smoke command, which creates a synthetic operation, records evidence/finding artifacts, renders final HTML/PDF/manifest outputs, writes a runtime summary, and requires final handoff lint to pass.
+`test-profile.sh` also runs the package-level ULM lifecycle smoke command, which creates a synthetic operation, records evidence/finding artifacts, renders final HTML/PDF/manifest outputs, writes a runtime summary and operation audit, and requires final handoff lint to pass.
 
 The verifier also runs `bun run --cwd packages/opencode test:ulm-skills` so compact skills and commands stay discoverable, placeholder-free, and wired to durable ULM tools.
 
-It also runs the bundled lab replay catalog, proving the manifest-driven replay harness can turn each lab scenario into final ULM artifacts with final handoff and report-budget lint. The same verifier starts and probes the bundled lab target services.
+It also runs the bundled lab replay catalog, proving the manifest-driven replay harness can turn each lab scenario into final ULM artifacts with final handoff, report-budget lint, and operation audit gates. The same verifier starts and probes the bundled lab target services.
 
 ## Runtime Defaults
 

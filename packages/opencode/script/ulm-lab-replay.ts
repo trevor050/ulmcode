@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import os from "os"
 import path from "path"
 import {
+  buildOperationAudit,
   formatOperationStatusDashboard,
   lintReport,
   readOperationStatus,
@@ -123,6 +124,13 @@ const finalLint = await lintReport(worktree, lab.operationID, {
 })
 assert(finalLint.ok, `final handoff lint failed: ${finalLint.gaps.join("; ")}`)
 
+const audit = await buildOperationAudit(worktree, lab.operationID, {
+  finalHandoff: true,
+  requireOutlineBudget: true,
+  minOutlineWordsPerPage: lab.report?.minOutlineWordsPerPage ?? 80,
+})
+assert(audit.ok, `operation audit failed: ${audit.blockers.join("; ")}`)
+
 const status = await readOperationStatus(worktree, lab.operationID)
 const dashboard = formatOperationStatusDashboard(status)
 for (const expected of lab.expected?.dashboardIncludes ?? []) {
@@ -146,6 +154,8 @@ console.log("ulm_lab_replay: ok")
 console.log(`lab: ${lab.id}`)
 console.log(`operation: ${lab.operationID}`)
 console.log("final_lint: ok")
+console.log("operation_audit: ok")
 console.log(`report.pdf: ${rendered.pdf}`)
 console.log(`runtime-summary.json: ${runtime.json}`)
+console.log(`operation-audit.json: ${audit.files.json}`)
 console.log(`manifest.json: ${rendered.manifest}`)

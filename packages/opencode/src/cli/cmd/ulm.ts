@@ -5,7 +5,9 @@ import { cmd } from "./cmd"
 import { effectCmd } from "../effect-cmd"
 import { Instance } from "@/project/instance"
 import {
+  buildOperationAudit,
   buildOperationResumeBrief,
+  formatOperationAudit,
   formatOperationResumeBrief,
   formatOperationStatusDashboard,
   listOperationStatuses,
@@ -19,7 +21,7 @@ export const UlmCommand = cmd({
   command: "ulm",
   describe: "manage ULMCode operations",
   builder: (yargs: Argv) =>
-    yargs.command(UlmListCommand).command(UlmStatusCommand).command(UlmResumeCommand).demandCommand(),
+    yargs.command(UlmListCommand).command(UlmStatusCommand).command(UlmResumeCommand).command(UlmAuditCommand).demandCommand(),
   async handler() {},
 })
 
@@ -114,6 +116,68 @@ export const UlmResumeCommand = effectCmd({
       }),
     ).pipe(Effect.orDie)
     console.log(args.format === "json" ? JSON.stringify(brief, null, 2) : formatOperationResumeBrief(brief))
+  }),
+})
+
+export const UlmAuditCommand = effectCmd({
+  command: "audit <operationID>",
+  describe: "run final readiness audit for a ULMCode operation",
+  builder: (yargs) =>
+    yargs
+      .positional("operationID", {
+        describe: "operation ID to audit",
+        type: "string",
+        demandOption: true,
+      })
+      .option("event-limit", {
+        describe: "number of recent operation events to load",
+        type: "number",
+        default: 10,
+      })
+      .option("stale-after-minutes", {
+        describe: "mark running checkpoints stale after this many minutes",
+        type: "number",
+      })
+      .option("min-words", {
+        describe: "minimum report word count",
+        type: "number",
+      })
+      .option("require-outline-budget", {
+        describe: "require the rendered report to satisfy report-outline page budget",
+        type: "boolean",
+      })
+      .option("min-outline-words-per-page", {
+        describe: "minimum report words per target outline page",
+        type: "number",
+      })
+      .option("require-finding-sections", {
+        describe: "require every validated/report-ready finding to have a report section",
+        type: "boolean",
+      })
+      .option("min-finding-words", {
+        describe: "minimum words per validated/report-ready finding section",
+        type: "number",
+      })
+      .option("format", {
+        describe: "output format",
+        type: "string",
+        choices: ["brief", "json"],
+        default: "brief",
+      }),
+  handler: Effect.fn("Cli.ulm.audit")(function* (args) {
+    const audit = yield* Effect.tryPromise(() =>
+      buildOperationAudit(Instance.worktree, args.operationID, {
+        eventLimit: args.eventLimit,
+        staleAfterMinutes: args.staleAfterMinutes,
+        minWords: args.minWords,
+        requireOutlineBudget: args.requireOutlineBudget,
+        minOutlineWordsPerPage: args.minOutlineWordsPerPage,
+        requireFindingSections: args.requireFindingSections,
+        minFindingWords: args.minFindingWords,
+        finalHandoff: true,
+      }),
+    ).pipe(Effect.orDie)
+    console.log(args.format === "json" ? JSON.stringify(audit, null, 2) : formatOperationAudit(audit))
   }),
 })
 

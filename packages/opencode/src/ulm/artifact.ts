@@ -209,6 +209,34 @@ export type OperationResumeOptions = {
   now?: string
 }
 
+export type OperationAuditOptions = OperationResumeOptions & ReportLintOptions
+
+export type OperationAuditResult = {
+  operationID: string
+  root: string
+  generatedAt: string
+  ok: boolean
+  checks: {
+    resume: {
+      ok: boolean
+      status: OperationResumeBrief["health"]["status"]
+      gaps: string[]
+    }
+    finalHandoff: {
+      ok: boolean
+      status: "ready" | "attention_required"
+      gaps: string[]
+      counts: ReportLintResult["counts"]
+    }
+  }
+  blockers: string[]
+  recommendedTools: string[]
+  files: {
+    json: string
+    markdown: string
+  }
+}
+
 export type ReportRenderInput = {
   operationID: string
   title?: string
@@ -813,6 +841,111 @@ function statusMarkdown(record: OperationRecord) {
       : ["- none recorded"]),
     "",
   ].join("\n")
+}
+
+function lintToolRecommendations(gaps: string[]) {
+  const tools = ["report_lint"]
+  if (gaps.some((gap) => gap.includes("plans/operation-plan.json") || gap.includes("operation plan"))) {
+    tools.push("operation_plan")
+  }
+  if (gaps.some((gap) => gap.includes("deliverables/final/") || gap.includes("report is required"))) {
+    tools.push("report_render")
+  }
+  if (gaps.some((gap) => gap.includes("runtime-summary.json"))) {
+    tools.push("runtime_summary")
+  }
+  if (gaps.some((gap) => gap.includes("finding") || gap.includes("findings"))) {
+    tools.push("finding_record")
+  }
+  if (gaps.some((gap) => gap.includes("evidence"))) {
+    tools.push("evidence_record")
+  }
+  if (gaps.some((gap) => gap.includes("outline budget") || gap.includes("report-outline.md"))) {
+    tools.push("report_outline")
+  }
+  return tools
+}
+
+export function formatOperationAudit(audit: OperationAuditResult) {
+  return [
+    `# Operation Audit ${audit.operationID}`,
+    "",
+    `status: ${audit.ok ? "ready" : "attention_required"}`,
+    `root: ${audit.root}`,
+    `generated_at: ${audit.generatedAt}`,
+    "",
+    `resume: ${audit.checks.resume.status}`,
+    ...listLines(audit.checks.resume.gaps, "none"),
+    "",
+    `final_handoff: ${audit.checks.finalHandoff.status}`,
+    ...listLines(audit.checks.finalHandoff.gaps, "none"),
+    "",
+    "blockers:",
+    ...listLines(audit.blockers, "none"),
+    "",
+    "recommended_tools:",
+    ...listLines(audit.recommendedTools, "none"),
+    "",
+  ].join("\n")
+}
+
+export async function buildOperationAudit(
+  worktree: string,
+  operationID: string,
+  options: OperationAuditOptions = {},
+): Promise<OperationAuditResult> {
+  const resume = await buildOperationResumeBrief(worktree, operationID, {
+    eventLimit: options.eventLimit,
+    staleAfterMinutes: options.staleAfterMinutes,
+    now: options.now,
+  })
+  const finalHandoff = await lintReport(worktree, operationID, {
+    requireReport: options.requireReport,
+    minWords: options.minWords,
+    requireOutlineBudget: options.requireOutlineBudget,
+    minOutlineWordsPerPage: options.minOutlineWordsPerPage,
+    requireFindingSections: options.requireFindingSections,
+    minFindingWords: options.minFindingWords,
+    finalHandoff: options.finalHandoff ?? true,
+    requireOperationPlan: options.requireOperationPlan,
+    requireRenderedDeliverables: options.requireRenderedDeliverables,
+    requireRuntimeSummary: options.requireRuntimeSummary,
+  })
+  const root = operationPath(worktree, operationID)
+  const generatedAt = new Date().toISOString()
+  const files = {
+    json: path.join(root, "deliverables", "operation-audit.json"),
+    markdown: path.join(root, "deliverables", "operation-audit.md"),
+  }
+  const audit: OperationAuditResult = {
+    operationID: slug(operationID, "operation"),
+    root,
+    generatedAt,
+    ok: resume.health.ready && finalHandoff.ok,
+    checks: {
+      resume: {
+        ok: resume.health.ready,
+        status: resume.health.status,
+        gaps: resume.health.gaps,
+      },
+      finalHandoff: {
+        ok: finalHandoff.ok,
+        status: finalHandoff.ok ? "ready" : "attention_required",
+        gaps: finalHandoff.gaps,
+        counts: finalHandoff.counts,
+      },
+    },
+    blockers: [
+      ...resume.health.gaps.map((gap) => `resume: ${gap}`),
+      ...finalHandoff.gaps.map((gap) => `final_handoff: ${gap}`),
+    ],
+    recommendedTools: unique([...resume.recommendedTools, ...lintToolRecommendations(finalHandoff.gaps)]),
+    files,
+  }
+  await fs.mkdir(path.dirname(files.json), { recursive: true })
+  await writeJson(files.json, audit)
+  await fs.writeFile(files.markdown, formatOperationAudit(audit))
+  return audit
 }
 
 function runtimeSummaryMarkdown(record: RuntimeSummaryRecord) {

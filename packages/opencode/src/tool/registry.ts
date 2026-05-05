@@ -14,6 +14,7 @@ import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
+import { OperationAuditTool } from "./operation_audit"
 import { OperationCheckpointTool } from "./operation_checkpoint"
 import { OperationPlanTool } from "./operation_plan"
 import { OperationResumeTool } from "./operation_resume"
@@ -131,6 +132,7 @@ export const layer: Layer.Layer<
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const operationAudit = yield* OperationAuditTool
     const operationCheckpoint = yield* OperationCheckpointTool
     const operationPlan = yield* OperationPlanTool
     const operationResume = yield* OperationResumeTool
@@ -236,6 +238,7 @@ export const layer: Layer.Layer<
           todo: Tool.init(todo),
           search: Tool.init(websearch),
           skill: Tool.init(skilltool),
+          operationAudit: Tool.init(operationAudit),
           operationCheckpoint: Tool.init(operationCheckpoint),
           operationPlan: Tool.init(operationPlan),
           operationResume: Tool.init(operationResume),
@@ -270,6 +273,7 @@ export const layer: Layer.Layer<
             tool.todo,
             tool.search,
             tool.skill,
+            tool.operationAudit,
             tool.operationCheckpoint,
             tool.operationPlan,
             tool.operationResume,

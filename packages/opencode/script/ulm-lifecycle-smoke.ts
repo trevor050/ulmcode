@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import os from "os"
 import path from "path"
 import {
+  buildOperationAudit,
   formatOperationStatusDashboard,
   lintReport,
   readOperationStatus,
@@ -48,13 +49,13 @@ await writeOperationPlan(worktree, {
     {
       stage: "reporting",
       objective: "Produce final handoff artifacts.",
-      actions: ["Run report_lint", "Run report_render", "Run runtime_summary"],
+      actions: ["Run report_lint", "Run report_render", "Run runtime_summary", "Run operation_audit"],
       successCriteria: ["Final handoff lint passes"],
       subagents: ["report-writer"],
       noSubagents: ["final acceptance remains with the primary operator"],
     },
   ],
-  reportingCloseout: ["Run report_lint", "Run report_render", "Run runtime_summary"],
+  reportingCloseout: ["Run report_lint", "Run report_render", "Run runtime_summary", "Run operation_audit"],
 })
 
 await writeOperationCheckpoint(worktree, {
@@ -151,6 +152,9 @@ const runtime = await writeRuntimeSummary(worktree, {
 const finalLint = await lintReport(worktree, operationID, { finalHandoff: true })
 assert(finalLint.ok, `final handoff lint failed: ${finalLint.gaps.join("; ")}`)
 
+const audit = await buildOperationAudit(worktree, operationID, { finalHandoff: true })
+assert(audit.ok, `operation audit failed: ${audit.blockers.join("; ")}`)
+
 const status = await readOperationStatus(worktree, operationID)
 const dashboard = formatOperationStatusDashboard(status)
 assert(dashboard.includes("# school-assessment - handoff/complete"), "dashboard did not include final handoff state")
@@ -167,6 +171,8 @@ assert(manifest.counts?.evidence === 1, "manifest did not record one evidence it
 console.log("ulm_lifecycle_smoke: ok")
 console.log(`operation: ${operationID}`)
 console.log("final_lint: ok")
+console.log("operation_audit: ok")
 console.log(`report.pdf: ${rendered.pdf}`)
 console.log(`runtime-summary.json: ${runtime.json}`)
+console.log(`operation-audit.json: ${audit.files.json}`)
 console.log(`manifest.json: ${rendered.manifest}`)

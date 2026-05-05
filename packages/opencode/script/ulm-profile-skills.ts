@@ -8,6 +8,7 @@ const profileRoot = path.join(repoRoot, "tools", "ulmcode-profile")
 const skillsRoot = path.join(profileRoot, "skills")
 const commandsRoot = path.join(profileRoot, "commands")
 const durableTools = [
+  "operation_audit",
   "operation_resume",
   "operation_status",
   "operation_plan",
@@ -87,6 +88,9 @@ async function validateCommand(file: string) {
   if (path.basename(file) === "ulm-final-handoff.md" && !content.includes("finalHandoff: true")) {
     throw new Error(`${file}: final handoff command must require finalHandoff lint`)
   }
+  if (path.basename(file) === "ulm-final-handoff.md" && !content.includes("operation_audit")) {
+    throw new Error(`${file}: final handoff command must call operation_audit`)
+  }
   return { file }
 }
 
@@ -96,7 +100,7 @@ const skills = await Promise.all(skillFiles.map(validateSkill))
 const commands = await Promise.all(commandFiles.map(validateCommand))
 const toolCoverage = new Set(skills.flatMap((skill) => skill.tools))
 
-for (const tool of ["operation_resume", "operation_plan", "evidence_record", "finding_record", "report_lint"]) {
+for (const tool of ["operation_audit", "operation_resume", "operation_plan", "evidence_record", "finding_record", "report_lint"]) {
   if (!toolCoverage.has(tool)) throw new Error(`skill pack never references ${tool}`)
 }
 

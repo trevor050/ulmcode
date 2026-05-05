@@ -23,6 +23,7 @@ describe("ULM native surface", () => {
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service
       const ids = yield* registry.ids()
+      expect(ids).toContain("operation_audit")
       expect(ids).toContain("operation_checkpoint")
       expect(ids).toContain("operation_plan")
       expect(ids).toContain("operation_status")

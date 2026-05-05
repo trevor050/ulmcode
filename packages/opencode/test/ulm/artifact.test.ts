@@ -3,6 +3,7 @@ import fs from "fs/promises"
 import os from "os"
 import path from "path"
 import {
+  buildOperationAudit,
   buildOperationResumeBrief,
   formatOperationStatusDashboard,
   formatOperationResumeBrief,
@@ -614,6 +615,30 @@ describe("ULM artifact ledger", () => {
     expect(brief.health.gaps).toContain("runtime budget exhausted: spent $12.4 of $10")
     expect(brief.recommendedTools).toContain("runtime_summary")
     expect(formatOperationResumeBrief(brief)).toContain("runtime budget exhausted")
+  })
+
+  test("writes durable operation audits for final handoff gates", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "handoff",
+      status: "complete",
+      summary: "Ready for handoff review.",
+      nextActions: ["Review final package"],
+    })
+
+    const audit = await buildOperationAudit(worktree, "school", { finalHandoff: true })
+
+    expect(audit.ok).toBe(false)
+    expect(audit.blockers).toContain("resume: operation plan is missing")
+    expect(audit.blockers).toContain("final_handoff: plans/operation-plan.json is required")
+    expect(audit.recommendedTools).toContain("operation_plan")
+    expect(audit.recommendedTools).toContain("report_lint")
+    expect(audit.recommendedTools).toContain("report_render")
+    expect(audit.recommendedTools).toContain("runtime_summary")
+    expect(JSON.parse(await fs.readFile(audit.files.json, "utf8")).operationID).toBe("school")
+    expect(await fs.readFile(audit.files.markdown, "utf8")).toContain("final_handoff: attention_required")
   })
 
   test("derives runtime usage from assistant messages when usage is not provided", async () => {
