@@ -16,8 +16,8 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `#25787` patch boundary preservation matters for evidence-grade diffs.
 - `#25788` known-tool malformed-input classification reduces wasted agent repair loops; adopted locally.
 - `#25775` / `#25861` Anthropic tool-call/tool-result pairing matters for tool-heavy turns; adopted locally with provider-executed server-tool pairs preserved in assistant content.
-- `#25712` subagent cost rollup is a future target for operation budgets.
-- `#25180` subagent auto-compaction is a future target for 20-hour operation stability.
+- `#25712` subagent cost rollup matters for operation budgets; adopted locally through `Session.cost`, SDK/API support, TUI sidebar rollups, and task footers.
+- `#25180` subagent auto-compaction matters for 20-hour operation stability; adopted locally through pre-stream context estimates and early compaction before oversized prompts are sent.
 - `#25728` codex overload retry matters for provider instability during long operations; adopted locally.
 - `#25765` ChatGPT OAuth refresh token preservation matters for Codex Gold/long operations; adopted locally so refresh responses that omit `refresh_token` keep the existing token while initial OAuth success still requires one.
 - `#25493` pre-chat message transforms matter for ULM profile plugins that need to strip images, inject vision summaries, or normalize message history before inference; adopted locally with replacement-output semantics instead of mutation-only behavior.
