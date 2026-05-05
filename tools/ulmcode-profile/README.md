@@ -8,7 +8,7 @@ This profile is the distributable ULMCode runtime layer for authorized K-12 secu
 tools/ulmcode-profile/scripts/install-profile.sh
 ```
 
-The installer writes `~/.config/ulmcode/opencode.json`, copies compact skills, ULM commands, the vetted local OpenCode command set, the local OMO agents/prompts/Feature Forge command, installs the profile npm manifest, writes both root and `.opencode/` Oh My OpenAgent routing files, and creates `~/.config/ulmcode/ulmcode-launch.sh`.
+The installer writes `~/.config/ulmcode/opencode.json`, copies compact skills, ULM commands, the vetted local OpenCode command set, the local OMO agents/prompts/Feature Forge command, vendored profile plugins, installs the profile npm manifest, writes both root and `.opencode/` Oh My OpenAgent routing files, and creates `~/.config/ulmcode/ulmcode-launch.sh`.
 
 `test-profile.sh` also runs the package-level ULM lifecycle smoke command, which creates a synthetic operation, records evidence/finding artifacts, enforces the validation stage gate, renders final HTML/PDF/manifest outputs, writes a runtime summary and operation audit, and requires final handoff lint to pass.
 
@@ -25,6 +25,8 @@ It also runs the bundled lab replay catalog, proving the manifest-driven replay 
 - Skills are allowlisted to the bundled K-12 pentest profile.
 - Playwright and pentest MCP are configured, with Vercel and Context7 present but disabled by default.
 - The plugin stack mirrors the current local OpenCode setup: Oh My OpenAgent routing, the Claude Code bridge plugin, Playwright MCP, optional Vercel/Context7 MCP, and LAN LM Studio fallback models.
+- The profile includes a local `ulmcode-runtime-guard` server plugin that injects ULM operation-resume, background-task, report-lint, runtime-summary, and final-handoff guardrails into the runtime without depending on npm availability.
+- Third-party plugin source is vendored for audit/fork work under `plugins/vendor/`; currently this includes `@khalilgharbaoui/opencode-claude-code-plugin@0.2.2`.
 - The profile vendors the current local OMO markdown layer under `local-opencode/`: 12 agents, 16 prompts, Feature Forge, and 8 root commands. The installer copies those into the isolated ULMCode config so category routing and manual commands survive a fresh install.
 - The OMO profile preserves the user routing doctrine: 5.4 Mini Fast for quick/recon/docs/evidence lanes, GPT-5.5 high/xhigh for operation control, validation, backend architecture/build, report writing, and final review; Kimi handles frontend taste/build; Gemini handles semantic product taste; Claude Sonnet is sparse human-feel review only.
 - Background-task concurrency, runtime fallback, auto-resume, aggressive truncation, and tmux layout settings are carried over from the current local OpenCode profile.
