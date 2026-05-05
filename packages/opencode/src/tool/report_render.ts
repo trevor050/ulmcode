@@ -13,6 +13,7 @@ type Metadata = {
   operationID: string
   html: string
   pdf: string
+  readme: string
   manifest: string
   findings: number
 }
@@ -31,6 +32,7 @@ export const ReportRenderTool = Tool.define<typeof Parameters, Metadata, never>(
             `operation_id: ${result.operationID}`,
             `html: ${result.html}`,
             `pdf: ${result.pdf}`,
+            `readme: ${result.readme}`,
             `manifest: ${result.manifest}`,
             `findings: ${result.findings}`,
           ].join("\n"),
@@ -38,6 +40,7 @@ export const ReportRenderTool = Tool.define<typeof Parameters, Metadata, never>(
             operationID: result.operationID,
             html: result.html,
             pdf: result.pdf,
+            readme: result.readme,
             manifest: result.manifest,
             findings: result.findings,
           },

@@ -171,6 +171,7 @@ export type ReportRenderResult = {
   operationID: string
   html: string
   pdf: string
+  readme: string
   manifest: string
   finalDir: string
   findings: number
@@ -563,6 +564,39 @@ function buildPdf(title: string, operationID: string, operation: OperationRecord
   return pdf
 }
 
+function finalReadme(input: {
+  title: string
+  operationID: string
+  operation?: OperationRecord
+  findings: FindingRecord[]
+}) {
+  return [
+    `# ${input.title}`,
+    "",
+    `Operation: ${input.operationID}`,
+    `Stage: ${input.operation?.stage ?? "unknown"}`,
+    `Status: ${input.operation?.status ?? "unknown"}`,
+    "",
+    "## Files",
+    "",
+    "- `report.html`: browser-readable final report.",
+    "- `report.pdf`: print-ready PDF report.",
+    "- `manifest.json`: machine-readable artifact map and counts.",
+    "- `README.md`: this handoff note.",
+    "",
+    "## Findings",
+    "",
+    ...(input.findings.length
+      ? input.findings.map((finding) => `- ${finding.findingID}: ${finding.title} (${finding.severity})`)
+      : ["- No validated or report-ready findings were recorded."]),
+    "",
+    "## Source Artifacts",
+    "",
+    "See the parent operation folder for status, plans, evidence records, report outline, and runtime summary.",
+    "",
+  ].join("\n")
+}
+
 export async function writeOperationCheckpoint(worktree: string, input: OperationCheckpointInput) {
   const now = new Date().toISOString()
   const operationID = makeOperationID(input)
@@ -929,6 +963,9 @@ export async function lintReport(
     if (!(await exists(path.join(root, "deliverables", "final", "report.pdf")))) {
       gaps.push("deliverables/final/report.pdf is required")
     }
+    if (!(await exists(path.join(root, "deliverables", "final", "README.md")))) {
+      gaps.push("deliverables/final/README.md is required")
+    }
     if (!(await exists(path.join(root, "deliverables", "final", "manifest.json")))) {
       gaps.push("deliverables/final/manifest.json is required")
     }
@@ -1024,9 +1061,11 @@ export async function renderReport(worktree: string, input: ReportRenderInput): 
   await fs.mkdir(finalDir, { recursive: true })
   const htmlPath = path.join(finalDir, "report.html")
   const pdfPath = path.join(finalDir, "report.pdf")
+  const readmePath = path.join(finalDir, "README.md")
   const manifestPath = path.join(finalDir, "manifest.json")
   await fs.writeFile(htmlPath, html)
   await fs.writeFile(pdfPath, buildPdf(title, operationID, operation, reportable))
+  await fs.writeFile(readmePath, finalReadme({ title, operationID, operation, findings: reportable }))
   await writeJson(manifestPath, {
     operationID,
     title,
@@ -1036,6 +1075,7 @@ export async function renderReport(worktree: string, input: ReportRenderInput): 
       operationPlan: path.join(root, "plans", "operation-plan.json"),
       html: htmlPath,
       pdf: pdfPath,
+      readme: readmePath,
       reportOutline: path.join(root, "reports", "report-outline.md"),
       evidence: path.join(root, "evidence"),
       runtimeSummary: path.join(root, "deliverables", "runtime-summary.json"),
@@ -1050,6 +1090,7 @@ export async function renderReport(worktree: string, input: ReportRenderInput): 
     operationID,
     html: htmlPath,
     pdf: pdfPath,
+    readme: readmePath,
     manifest: manifestPath,
     finalDir,
     findings: reportable.length,
