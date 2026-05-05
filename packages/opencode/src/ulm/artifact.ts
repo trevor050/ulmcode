@@ -174,6 +174,31 @@ export type OperationStatusSummary = {
   lastEvents: unknown[]
 }
 
+export type OperationResumeBrief = {
+  operationID: string
+  root: string
+  generatedAt: string
+  checkpoint?: Pick<
+    OperationRecord,
+    "objective" | "stage" | "status" | "summary" | "riskLevel" | "nextActions" | "blockers" | "activeTasks" | "time"
+  >
+  health: {
+    ready: boolean
+    status: "ready" | "attention_required"
+    gaps: string[]
+  }
+  artifacts: OperationStatusSummary["plans"] & {
+    reports: OperationStatusSummary["reports"]
+    runtimeSummary: boolean
+    findings: OperationStatusSummary["findings"]["total"]
+    evidence: OperationStatusSummary["evidence"]["total"]
+  }
+  runtime?: OperationStatusSummary["runtime"]
+  recommendedTools: string[]
+  continuationPrompt: string
+  lastEvents: unknown[]
+}
+
 export type ReportRenderInput = {
   operationID: string
   title?: string
@@ -513,6 +538,146 @@ export function formatOperationStatusDashboard(status: OperationStatusSummary) {
       : ["- none recorded"]),
     "",
   ].join("\n")
+}
+
+function unique(items: string[]) {
+  return [...new Set(items)]
+}
+
+function resumeGaps(status: OperationStatusSummary) {
+  const gaps: string[] = []
+  const operation = status.operation
+  if (!operation) gaps.push("operation checkpoint is missing")
+  if (!status.plans.operation) gaps.push("operation plan is missing")
+  if (!status.runtimeSummary) gaps.push("runtime summary is missing")
+  if (operation?.status === "running" && operation.nextActions.length === 0) {
+    gaps.push("running operation has no next actions")
+  }
+  if (operation?.status === "blocked" && operation.blockers.length === 0) {
+    gaps.push("blocked operation has no blockers recorded")
+  }
+  if (
+    operation?.stage === "handoff" &&
+    operation.status === "complete" &&
+    (!status.reports.html || !status.reports.pdf || !status.reports.manifest || !status.reports.readme)
+  ) {
+    gaps.push("complete handoff is missing final deliverables")
+  }
+  return gaps
+}
+
+function resumeToolRecommendations(status: OperationStatusSummary, gaps: string[]) {
+  const operation = status.operation
+  const background = status.runtime?.backgroundTasks ?? []
+  const tools = ["operation_status"]
+  if (gaps.includes("operation plan is missing")) tools.push("operation_plan")
+  if (gaps.includes("runtime summary is missing")) tools.push("runtime_summary")
+  if (operation?.activeTasks.length || background.length) tools.push("task_list", "task_status")
+  if (operation?.stage === "validation") tools.push("evidence_record", "finding_record")
+  if (operation?.stage === "reporting" || operation?.stage === "handoff") tools.push("report_lint")
+  if (operation?.stage === "handoff" && (!status.reports.html || !status.reports.pdf)) tools.push("report_render")
+  return unique(tools)
+}
+
+function resumeContinuationPrompt(status: OperationStatusSummary, recommendedTools: string[]) {
+  const operation = status.operation
+  if (!operation) {
+    return `Resume ULMCode operation ${status.operationID}. First recreate or inspect the missing operation checkpoint, then use ${recommendedTools.join(
+      ", ",
+    )}.`
+  }
+  const nextActions = operation.nextActions.length ? operation.nextActions.join("; ") : "no next actions recorded"
+  const blockers = operation.blockers.length ? ` Blockers: ${operation.blockers.join("; ")}.` : ""
+  return `Resume ULMCode operation ${status.operationID} from ${operation.stage}/${operation.status}. First use ${recommendedTools[0]} to refresh disk state, then continue: ${nextActions}.${blockers}`
+}
+
+export async function buildOperationResumeBrief(
+  worktree: string,
+  operationID: string,
+  options: { eventLimit?: number } = {},
+): Promise<OperationResumeBrief> {
+  const status = await readOperationStatus(worktree, operationID, { eventLimit: options.eventLimit ?? 10 })
+  const gaps = resumeGaps(status)
+  const recommendedTools = resumeToolRecommendations(status, gaps)
+  return {
+    operationID: status.operationID,
+    root: status.root,
+    generatedAt: new Date().toISOString(),
+    checkpoint: status.operation
+      ? {
+          objective: status.operation.objective,
+          stage: status.operation.stage,
+          status: status.operation.status,
+          summary: status.operation.summary,
+          riskLevel: status.operation.riskLevel,
+          nextActions: status.operation.nextActions,
+          blockers: status.operation.blockers,
+          activeTasks: status.operation.activeTasks,
+          time: status.operation.time,
+        }
+      : undefined,
+    health: {
+      ready: gaps.length === 0,
+      status: gaps.length === 0 ? "ready" : "attention_required",
+      gaps,
+    },
+    artifacts: {
+      ...status.plans,
+      reports: status.reports,
+      runtimeSummary: status.runtimeSummary,
+      findings: status.findings.total,
+      evidence: status.evidence.total,
+    },
+    runtime: status.runtime,
+    recommendedTools,
+    continuationPrompt: resumeContinuationPrompt(status, recommendedTools),
+    lastEvents: status.lastEvents,
+  }
+}
+
+export function formatOperationResumeBrief(brief: OperationResumeBrief) {
+  const checkpoint = brief.checkpoint
+  const background = brief.runtime?.backgroundTasks ?? []
+  return [
+    `# Resume ${brief.operationID}`,
+    "",
+    `health: ${brief.health.status}`,
+    `root: ${brief.root}`,
+    `stage: ${checkpoint?.stage ?? "unknown"}`,
+    `status: ${checkpoint?.status ?? "unknown"}`,
+    `risk: ${checkpoint?.riskLevel ?? "unknown"}`,
+    `summary: ${checkpoint?.summary ?? "No checkpoint recorded."}`,
+    checkpoint?.time.updated ? `updated: ${checkpoint.time.updated}` : undefined,
+    "",
+    "gaps:",
+    ...listLines(brief.health.gaps, "none"),
+    "",
+    "recommended_tools:",
+    ...listLines(brief.recommendedTools, "none"),
+    "",
+    "next_actions:",
+    ...listLines(checkpoint?.nextActions, "none recorded"),
+    "",
+    "blockers:",
+    ...listLines(checkpoint?.blockers, "none recorded"),
+    "",
+    "active_tasks:",
+    ...listLines(checkpoint?.activeTasks, "none recorded"),
+    "",
+    "background:",
+    ...(background.length
+      ? background.map(
+          (task) =>
+            `- ${task.id} ${task.status}${task.agent ? ` (${task.agent})` : ""}${task.summary ? ` - ${task.summary}` : ""}`,
+        )
+      : ["- none recorded"]),
+    "",
+    "continuation_prompt:",
+    brief.continuationPrompt,
+    "",
+  ]
+    .filter((line): line is string => line !== undefined)
+    .join("\n")
 }
 
 function statusMarkdown(record: OperationRecord) {

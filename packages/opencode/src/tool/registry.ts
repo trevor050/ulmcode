@@ -16,6 +16,7 @@ import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
 import { OperationCheckpointTool } from "./operation_checkpoint"
 import { OperationPlanTool } from "./operation_plan"
+import { OperationResumeTool } from "./operation_resume"
 import { OperationStatusTool } from "./operation_status"
 import { EvidenceRecordTool } from "./evidence_record"
 import { FindingRecordTool } from "./finding_record"
@@ -132,6 +133,7 @@ export const layer: Layer.Layer<
     const skilltool = yield* SkillTool
     const operationCheckpoint = yield* OperationCheckpointTool
     const operationPlan = yield* OperationPlanTool
+    const operationResume = yield* OperationResumeTool
     const operationStatus = yield* OperationStatusTool
     const evidenceRecord = yield* EvidenceRecordTool
     const findingRecord = yield* FindingRecordTool
@@ -236,6 +238,7 @@ export const layer: Layer.Layer<
           skill: Tool.init(skilltool),
           operationCheckpoint: Tool.init(operationCheckpoint),
           operationPlan: Tool.init(operationPlan),
+          operationResume: Tool.init(operationResume),
           operationStatus: Tool.init(operationStatus),
           evidenceRecord: Tool.init(evidenceRecord),
           findingRecord: Tool.init(findingRecord),
@@ -269,6 +272,7 @@ export const layer: Layer.Layer<
             tool.skill,
             tool.operationCheckpoint,
             tool.operationPlan,
+            tool.operationResume,
             tool.operationStatus,
             tool.evidenceRecord,
             tool.findingRecord,

@@ -3,7 +3,9 @@ import fs from "fs/promises"
 import os from "os"
 import path from "path"
 import {
+  buildOperationResumeBrief,
   formatOperationStatusDashboard,
+  formatOperationResumeBrief,
   lintReport,
   readOperationStatus,
   renderReport,
@@ -374,6 +376,45 @@ describe("ULM artifact ledger", () => {
     expect(status.runtimeSummary).toBe(true)
     expect(status.runtime?.usage?.remainingUSD).toBe(7.55)
     expect(status.runtime?.backgroundTasks?.[0]?.id).toBe("task-recon-1")
+  })
+
+  test("builds restart-ready operation resume briefs", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "validation",
+      status: "running",
+      summary: "Validation is still running.",
+      nextActions: ["Finish exploit reproduction", "Promote confirmed findings"],
+      activeTasks: ["task-recon-1"],
+    })
+    await writeRuntimeSummary(worktree, {
+      operationID: "school",
+      modelCalls: { total: 3, byModel: { "gpt-5.5": 2, "gpt-5.4-mini": 1 } },
+      usage: { totalTokens: 4200, costUSD: 0.85 },
+      backgroundTasks: [
+        { id: "task-recon-1", agent: "recon", status: "running", summary: "Enumerating login surface." },
+      ],
+    })
+
+    const brief = await buildOperationResumeBrief(worktree, "school")
+    expect(brief.operationID).toBe("school")
+    expect(brief.checkpoint?.stage).toBe("validation")
+    expect(brief.health.ready).toBe(false)
+    expect(brief.health.gaps).toContain("operation plan is missing")
+    expect(brief.recommendedTools).toContain("operation_status")
+    expect(brief.recommendedTools).toContain("operation_plan")
+    expect(brief.recommendedTools).toContain("task_list")
+    expect(brief.recommendedTools).toContain("task_status")
+    expect(brief.continuationPrompt).toContain("Resume ULMCode operation school")
+    expect(brief.continuationPrompt).toContain("Finish exploit reproduction")
+
+    const markdown = formatOperationResumeBrief(brief)
+    expect(markdown).toStartWith("# Resume school")
+    expect(markdown).toContain("health: attention_required")
+    expect(markdown).toContain("task-recon-1 running (recon) - Enumerating login surface.")
+    expect(markdown).toContain("operation_status")
   })
 
   test("derives runtime usage from assistant messages when usage is not provided", async () => {
