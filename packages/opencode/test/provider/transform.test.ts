@@ -997,6 +997,52 @@ describe("ProviderTransform.schema - moonshot $ref siblings", () => {
       type: "number",
     })
   })
+
+  test("flattens deeply nested object schemas before Kimi depth limits", () => {
+    const schema: any = { type: "object", properties: {} }
+    let current = schema.properties
+    for (let i = 0; i < 12; i++) {
+      current[`level${i}`] = {
+        type: "object",
+        properties: {},
+      }
+      current = current[`level${i}`].properties
+    }
+    current.leaf = { type: "string", description: "deep primitive" }
+
+    const result = ProviderTransform.schema(moonshotModel, schema) as any
+
+    expect(result.type).toBe("object")
+    expect(result.properties.level0).toBeDefined()
+
+    let node = result.properties
+    let flattened: any
+    for (let i = 0; i < 12; i++) {
+      node = node?.[`level${i}`]
+      if (!node) break
+      if (node.additionalProperties === true && !node.properties) {
+        flattened = node
+        break
+      }
+      node = node.properties
+    }
+
+    expect(flattened).toEqual({ type: "object", additionalProperties: true })
+  })
+
+  test("preserves primitive Moonshot schemas", () => {
+    const result = ProviderTransform.schema(moonshotModel, {
+      type: "string",
+      enum: ["one", "two"],
+      description: "primitive values should not be flattened",
+    } as any) as any
+
+    expect(result).toEqual({
+      type: "string",
+      enum: ["one", "two"],
+      description: "primitive values should not be flattened",
+    })
+  })
 })
 
 describe("ProviderTransform.message - DeepSeek reasoning content", () => {

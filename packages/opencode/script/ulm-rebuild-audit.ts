@@ -162,6 +162,9 @@ async function auditOperationRuntime() {
     "providerExecuted",
     "isClientToolPart",
     "tool-result",
+    "MAX_DEPTH",
+    "sanitizeMoonshot",
+    "additionalProperties: true",
   ])
   requireText("packages/opencode/src/plugin/codex.ts", codexPlugin, [
     "requireRefreshToken",
