@@ -111,7 +111,7 @@ const table = sqliteTable("session", {
 - `operation_status` is the post-compaction/interruption resume reader for ledgers, finding counts, reports, and recent events.
 - `evidence_record` writes durable evidence JSON plus optional raw text under `evidence/`; findings should cite evidence IDs/paths from this tool rather than chat-only observations.
 - `finding_record` is the evidence-backed finding state tool; validated/report-ready findings require evidence refs.
-- `report_outline` creates a long-form report page budget before drafting; `report_lint` can require a report file and minimum word count to catch sparse deliverables.
+- `report_outline` creates a long-form report page budget before drafting; `report_lint` can require a report file and minimum word count to catch sparse deliverables. For final handoff, prefer `report_lint` with `finalHandoff: true` instead of remembering the separate operation-plan/render/runtime flags.
 - `report_render` publishes print-ready HTML, a lightweight PDF, and a manifest to `.ulmcode/operations/<id>/deliverables/final/`.
 - `runtime_summary` writes `.ulmcode/operations/<id>/deliverables/runtime-summary.json` and `.md` for long-run handoff, including model-call split, compaction pressure, repeated fetches, background task state, notes, and canonical artifact paths.
 - `task` supports `background: true`; list recoverable background jobs with `task_list` and poll a returned `task_id` with `task_status` for long-running subagent lanes.
