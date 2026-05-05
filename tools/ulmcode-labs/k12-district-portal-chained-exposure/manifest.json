@@ -75,7 +75,8 @@
   "report": {
     "targetPages": 5,
     "minOutlineWordsPerPage": 80,
-    "minOutlineSectionWords": 15
+    "minOutlineSectionWords": 15,
+    "authoredMarkdownFile": "reports/report.md"
   },
   "evidence": [
     {
@@ -218,6 +219,16 @@
       "# k12-district-portal-chained-exposure - handoff/complete",
       "risk: high",
       "findings: 2 total"
+    ],
+    "reportIncludes": [
+      "Authored District Portal Assessment",
+      "district-authored-report-marker",
+      "Cross-district student export is the highest-priority risk"
+    ],
+    "pdfIncludes": [
+      "Authored District Portal Assessment",
+      "district-authored-report-marker",
+      "Cross-district student export"
     ]
   }
 }

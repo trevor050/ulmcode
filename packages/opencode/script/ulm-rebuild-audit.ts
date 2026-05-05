@@ -79,13 +79,20 @@ async function labManifests() {
         .map(async (entry) => {
           const manifest = path.join(labsRoot, entry.name, "manifest.json")
           try {
-            return JSON.parse(await fs.readFile(manifest, "utf8")) as { id?: string; findings?: unknown[] }
+            return JSON.parse(await fs.readFile(manifest, "utf8")) as {
+              id?: string
+              findings?: unknown[]
+              report?: { authoredMarkdownFile?: string }
+            }
           } catch {
             return undefined
           }
         }),
     )
-  ).filter((manifest): manifest is { id?: string; findings?: unknown[] } => manifest !== undefined)
+  ).filter(
+    (manifest): manifest is { id?: string; findings?: unknown[]; report?: { authoredMarkdownFile?: string } } =>
+      manifest !== undefined,
+  )
 }
 
 async function auditUpstream() {
@@ -269,6 +276,10 @@ async function auditLabCatalog() {
     manifests.some((manifest) => (manifest.findings?.length ?? 0) >= 2),
     "expected at least one bundled multi-finding lab",
   )
+  assert(
+    manifests.some((manifest) => typeof manifest.report?.authoredMarkdownFile === "string"),
+    "expected at least one bundled authored-report lab",
+  )
   for (const id of labs) {
     assert(await exists(`tools/ulmcode-labs/${id}/service/server.js`), `${id}: service/server.js is missing`)
     assert(await exists(`tools/ulmcode-labs/${id}/docker-compose.yml`), `${id}: docker-compose.yml is missing`)
@@ -276,7 +287,7 @@ async function auditLabCatalog() {
   return {
     id: "lab_catalog",
     status: "ok",
-    detail: `${labs.length} bundled labs include Docker targets and at least one multi-finding chain`,
+    detail: `${labs.length} bundled labs include Docker targets, a multi-finding chain, and an authored-report replay`,
     summary: `lab_catalog: ok (${labs.length})`,
   } satisfies CheckResult
 }

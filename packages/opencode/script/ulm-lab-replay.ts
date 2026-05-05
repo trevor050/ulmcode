@@ -35,11 +35,14 @@ type LabManifest = {
     targetPages?: number
     minOutlineWordsPerPage?: number
     minOutlineSectionWords?: number
+    authoredMarkdownFile?: string
   }
   expected?: {
     reportableFindings?: number
     evidence?: number
     dashboardIncludes?: string[]
+    reportIncludes?: string[]
+    pdfIncludes?: string[]
   }
 }
 
@@ -47,6 +50,7 @@ const repoRoot = path.resolve(import.meta.dir, "../../..")
 const defaultLab = path.join(repoRoot, "tools", "ulmcode-labs", "k12-login-mfa-gap", "manifest.json")
 const labPath = path.resolve(process.argv[2] ?? defaultLab)
 const lab = JSON.parse(await fs.readFile(labPath, "utf8")) as LabManifest
+const labRoot = path.dirname(labPath)
 const worktree = await fs.mkdtemp(path.join(os.tmpdir(), `ulm-lab-${lab.id}-`))
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -94,6 +98,13 @@ await writeReportOutline(worktree, {
   targetPages: lab.report?.targetPages ?? 2,
   includeAppendix: true,
 })
+
+if (lab.report?.authoredMarkdownFile) {
+  const authoredReport = await fs.readFile(path.resolve(labRoot, lab.report.authoredMarkdownFile), "utf8")
+  const reportPath = path.join(worktree, ".ulmcode", "operations", lab.operationID, "reports", "report.md")
+  await fs.mkdir(path.dirname(reportPath), { recursive: true })
+  await fs.writeFile(reportPath, authoredReport)
+}
 
 const validationGate = await buildOperationStageGate(worktree, lab.operationID, { stage: "validation" })
 assert(validationGate.ok, `validation stage gate failed: ${validationGate.gaps.join("; ")}`)
@@ -144,6 +155,15 @@ const status = await readOperationStatus(worktree, lab.operationID)
 const dashboard = formatOperationStatusDashboard(status)
 for (const expected of lab.expected?.dashboardIncludes ?? []) {
   assert(dashboard.includes(expected), `dashboard missing expected text: ${expected}`)
+}
+
+const reportHtml = await fs.readFile(rendered.html, "utf8")
+const reportPdf = await fs.readFile(rendered.pdf, "utf8")
+for (const expected of lab.expected?.reportIncludes ?? []) {
+  assert(reportHtml.includes(expected), `final report html missing expected text: ${expected}`)
+}
+for (const expected of lab.expected?.pdfIncludes ?? []) {
+  assert(reportPdf.includes(expected), `final report pdf missing expected text: ${expected}`)
 }
 
 const manifest = JSON.parse(await fs.readFile(rendered.manifest, "utf8")) as {
