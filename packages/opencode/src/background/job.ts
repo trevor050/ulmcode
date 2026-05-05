@@ -1,5 +1,6 @@
 import { InstanceState } from "@/effect/instance-state"
 import { Identifier } from "@/id/id"
+import { Storage } from "@/storage/storage"
 import { Cause, Context, Deferred, Effect, Fiber, Layer, Scope } from "effect"
 
 export type Status = "running" | "completed" | "error" | "cancelled"
@@ -55,6 +56,8 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/BackgroundJob") {}
 
+const STORAGE_PREFIX = ["background_job"] as const
+
 function snapshot(job: Active): Info {
   return {
     ...job.info,
@@ -78,6 +81,23 @@ export const layer = Layer.effect(
         }
       }),
     )
+    const storage = yield* Storage.Service
+
+    const persist = Effect.fn("BackgroundJob.persist")(function* (info: Info) {
+      yield* storage.write([...STORAGE_PREFIX, info.id], info).pipe(Effect.ignore)
+    })
+
+    const getPersisted = Effect.fn("BackgroundJob.getPersisted")(function* (id: string) {
+      return yield* storage.read<Info>([...STORAGE_PREFIX, id]).pipe(Effect.catch(() => Effect.succeed(undefined)))
+    })
+
+    const listPersisted = Effect.fn("BackgroundJob.listPersisted")(function* () {
+      const keys = yield* storage.list([...STORAGE_PREFIX]).pipe(Effect.catch(() => Effect.succeed<string[][]>([])))
+      const jobs = yield* Effect.all(
+        keys.map((key) => storage.read<Info>(key).pipe(Effect.catch(() => Effect.succeed(undefined)))),
+      )
+      return jobs.filter((job): job is Info => job !== undefined)
+    })
 
     const finish = Effect.fn("BackgroundJob.finish")(function* (
       job: Active,
@@ -91,19 +111,22 @@ export const layer = Layer.effect(
       if (data?.error !== undefined) job.info.error = data.error
       job.fiber = undefined
       const info = snapshot(job)
+      yield* persist(info)
       yield* Deferred.succeed(job.done, info).pipe(Effect.ignore)
       return info
     })
 
     const list: Interface["list"] = Effect.fn("BackgroundJob.list")(function* () {
-      return Array.from((yield* InstanceState.get(state)).jobs.values())
-        .map(snapshot)
+      const items = new Map<string, Info>()
+      for (const job of yield* listPersisted()) items.set(job.id, job)
+      for (const job of (yield* InstanceState.get(state)).jobs.values()) items.set(job.info.id, snapshot(job))
+      return Array.from(items.values())
         .toSorted((a, b) => a.startedAt - b.startedAt)
     })
 
     const get: Interface["get"] = Effect.fn("BackgroundJob.get")(function* (id) {
       const job = (yield* InstanceState.get(state)).jobs.get(id)
-      if (!job) return
+      if (!job) return yield* getPersisted(id)
       return snapshot(job)
     })
 
@@ -125,6 +148,7 @@ export const layer = Layer.effect(
         done: yield* Deferred.make<Info>(),
       }
       s.jobs.set(id, job)
+      yield* persist(snapshot(job))
       job.fiber = yield* input.run.pipe(
         Effect.matchCauseEffect({
           onSuccess: (output) => finish(job, "completed", { output }),
@@ -163,6 +187,6 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer
+export const defaultLayer = layer.pipe(Layer.provide(Storage.defaultLayer))
 
 export * as BackgroundJob from "./job"

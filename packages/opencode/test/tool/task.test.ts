@@ -17,6 +17,7 @@ import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { Bus } from "@/bus"
 import { BackgroundJob } from "@/background/job"
+import { Storage } from "@/storage/storage"
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -36,6 +37,7 @@ const it = testEffect(
     SessionStatus.defaultLayer,
     Bus.layer,
     BackgroundJob.defaultLayer,
+    Storage.defaultLayer,
     Truncate.defaultLayer,
     ToolRegistry.defaultLayer,
   ),
@@ -480,6 +482,37 @@ describe("tool.task", () => {
       const polled = yield* statusDef.execute({ task_id: result.metadata.sessionId }, ctx)
       expect(polled.output).toContain("state: completed")
       expect(polled.output).toContain("background complete")
+    }),
+  )
+
+  it.instance("background job metadata survives BackgroundJob service reload", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const id = `tool_${crypto.randomUUID().replaceAll("-", "")}`
+      yield* Effect.addFinalizer(() => storage.remove(["background_job", id]).pipe(Effect.ignore))
+
+      const startAndComplete = Effect.gen(function* () {
+        const jobs = yield* BackgroundJob.Service
+        yield* jobs.start({
+          id,
+          type: "task",
+          title: "persisted background task",
+          run: Effect.succeed("persisted output"),
+        })
+        expect((yield* jobs.wait({ id })).info?.status).toBe("completed")
+      }).pipe(Effect.provide(Layer.fresh(BackgroundJob.layer)))
+
+      const reloadAndGet = Effect.gen(function* () {
+        const jobs = yield* BackgroundJob.Service
+        return yield* jobs.get(id)
+      }).pipe(Effect.provide(Layer.fresh(BackgroundJob.layer)))
+
+      yield* startAndComplete
+      const reloaded = yield* reloadAndGet
+
+      expect(reloaded?.id).toBe(id)
+      expect(reloaded?.status).toBe("completed")
+      expect(reloaded?.output).toBe("persisted output")
     }),
   )
 })
