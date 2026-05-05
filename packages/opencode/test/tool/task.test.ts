@@ -516,6 +516,51 @@ describe("tool.task", () => {
     }),
   )
 
+  it.instance("task_status reads completed background metadata after BackgroundJob service reload", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const storage = yield* Storage.Service
+      const task = yield* TaskTool
+      const taskDef = yield* task.init()
+      const promptOps = stubOps({ text: "persisted status output" })
+      const ctx = {
+        sessionID: chat.id,
+        messageID: assistant.id,
+        agent: "build",
+        abort: new AbortController().signal,
+        extra: { promptOps },
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      }
+
+      const result = yield* taskDef.execute(
+        {
+          description: "inspect persistence",
+          prompt: "return persisted status output",
+          subagent_type: "general",
+          background: true,
+        },
+        ctx,
+      )
+      yield* Effect.addFinalizer(() =>
+        storage.remove(["background_job", result.metadata.sessionId]).pipe(Effect.ignore),
+      )
+
+      const jobs = yield* BackgroundJob.Service
+      expect((yield* jobs.wait({ id: result.metadata.sessionId })).info?.status).toBe("completed")
+
+      const polledAfterReload = yield* Effect.gen(function* () {
+        const status = yield* TaskStatusTool
+        const statusDef = yield* status.init()
+        return yield* statusDef.execute({ task_id: result.metadata.sessionId }, ctx)
+      }).pipe(Effect.provide(Layer.fresh(BackgroundJob.layer)))
+
+      expect(polledAfterReload.metadata.state).toBe("completed")
+      expect(polledAfterReload.output).toContain("persisted status output")
+    }),
+  )
+
   it.instance("background job cancellation interrupts the running fiber", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service
