@@ -7,6 +7,7 @@ import { buildOperationResumeBrief, formatOperationResumeBrief } from "@/ulm/art
 export const Parameters = Schema.Struct({
   operationID: Schema.String,
   eventLimit: Schema.optional(Schema.Number),
+  staleAfterMinutes: Schema.optional(Schema.Number),
 })
 
 type Metadata = {
@@ -27,7 +28,10 @@ export const OperationResumeTool = Tool.define<typeof Parameters, Metadata, neve
     execute: (params: Schema.Schema.Type<typeof Parameters>) =>
       Effect.gen(function* () {
         const result = yield* Effect.tryPromise(() =>
-          buildOperationResumeBrief(Instance.worktree, params.operationID, { eventLimit: params.eventLimit }),
+          buildOperationResumeBrief(Instance.worktree, params.operationID, {
+            eventLimit: params.eventLimit,
+            staleAfterMinutes: params.staleAfterMinutes,
+          }),
         ).pipe(Effect.orDie)
         return {
           title: `Resume ${result.operationID}: ${result.health.status}`,

@@ -201,6 +201,12 @@ export type OperationResumeBrief = {
   lastEvents: unknown[]
 }
 
+export type OperationResumeOptions = {
+  eventLimit?: number
+  staleAfterMinutes?: number
+  now?: string
+}
+
 export type ReportRenderInput = {
   operationID: string
   title?: string
@@ -573,12 +579,27 @@ function unique(items: string[]) {
   return [...new Set(items)]
 }
 
-function resumeGaps(status: OperationStatusSummary) {
+function minutesSince(value: string | undefined, now: Date) {
+  if (!value) return undefined
+  const time = new Date(value).getTime()
+  if (!Number.isFinite(time)) return undefined
+  return Math.max(0, Math.floor((now.getTime() - time) / 60_000))
+}
+
+function resumeGaps(status: OperationStatusSummary, options: OperationResumeOptions = {}) {
   const gaps: string[] = []
   const operation = status.operation
+  const staleAfter = options.staleAfterMinutes
+  const now = new Date(options.now ?? Date.now())
   if (!operation) gaps.push("operation checkpoint is missing")
   if (!status.plans.operation) gaps.push("operation plan is missing")
   if (!status.runtimeSummary) gaps.push("runtime summary is missing")
+  if (operation?.status === "running" && staleAfter !== undefined) {
+    const age = minutesSince(operation.time.updated, now)
+    if (age !== undefined && age >= staleAfter) {
+      gaps.push(`operation checkpoint is stale: last update was ${age} minutes ago`)
+    }
+  }
   if (operation?.status === "running" && operation.nextActions.length === 0) {
     gaps.push("running operation has no next actions")
   }
@@ -592,6 +613,9 @@ function resumeGaps(status: OperationStatusSummary) {
   ) {
     gaps.push("complete handoff is missing final deliverables")
   }
+  for (const task of status.runtime?.backgroundTasks ?? []) {
+    if (task.status === "stale") gaps.push(`background task ${task.id} is stale`)
+  }
   return gaps
 }
 
@@ -601,6 +625,7 @@ function resumeToolRecommendations(status: OperationStatusSummary, gaps: string[
   const tools = ["operation_status"]
   if (gaps.includes("operation plan is missing")) tools.push("operation_plan")
   if (gaps.includes("runtime summary is missing")) tools.push("runtime_summary")
+  if (gaps.some((gap) => gap.startsWith("operation checkpoint is stale"))) tools.push("operation_checkpoint")
   if (operation?.activeTasks.length || background.length) tools.push("task_list", "task_status")
   if (operation?.stage === "validation") tools.push("evidence_record", "finding_record")
   if (operation?.stage === "reporting" || operation?.stage === "handoff") tools.push("report_lint")
@@ -623,10 +648,10 @@ function resumeContinuationPrompt(status: OperationStatusSummary, recommendedToo
 export async function buildOperationResumeBrief(
   worktree: string,
   operationID: string,
-  options: { eventLimit?: number } = {},
+  options: OperationResumeOptions = {},
 ): Promise<OperationResumeBrief> {
   const status = await readOperationStatus(worktree, operationID, { eventLimit: options.eventLimit ?? 10 })
-  const gaps = resumeGaps(status)
+  const gaps = resumeGaps(status, options)
   const recommendedTools = resumeToolRecommendations(status, gaps)
   return {
     operationID: status.operationID,

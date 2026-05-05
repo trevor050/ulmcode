@@ -472,6 +472,41 @@ describe("ULM artifact ledger", () => {
     expect(markdown).toContain("operation_status")
   })
 
+  test("marks stale running operations and tasks in resume briefs", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "validation",
+      status: "running",
+      summary: "Validation is still running.",
+      nextActions: ["Check stale subagent output"],
+      activeTasks: ["task-recon-1"],
+    })
+    const operationFile = path.join(worktree, ".ulmcode", "operations", "school", "operation.json")
+    const operation = JSON.parse(await fs.readFile(operationFile, "utf8"))
+    operation.time.updated = "2026-05-05T12:00:00.000Z"
+    await fs.writeFile(operationFile, JSON.stringify(operation, null, 2) + "\n")
+    await writeRuntimeSummary(worktree, {
+      operationID: "school",
+      backgroundTasks: [
+        { id: "task-recon-1", agent: "recon", status: "stale", summary: "No heartbeat after scan launch." },
+      ],
+    })
+
+    const brief = await buildOperationResumeBrief(worktree, "school", {
+      now: "2026-05-05T14:30:00.000Z",
+      staleAfterMinutes: 60,
+    })
+
+    expect(brief.health.ready).toBe(false)
+    expect(brief.health.gaps).toContain("operation checkpoint is stale: last update was 150 minutes ago")
+    expect(brief.health.gaps).toContain("background task task-recon-1 is stale")
+    expect(brief.recommendedTools).toContain("operation_checkpoint")
+    expect(brief.recommendedTools).toContain("task_status")
+    expect(formatOperationResumeBrief(brief)).toContain("operation checkpoint is stale")
+  })
+
   test("derives runtime usage from assistant messages when usage is not provided", async () => {
     const worktree = await tmpdir()
     await writeOperationCheckpoint(worktree, {
