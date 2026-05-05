@@ -724,4 +724,90 @@ describe("acp.agent event subscription", () => {
       },
     })
   })
+
+  test("prompt awaits message.updated for response message before returning end_turn", async () => {
+    await using tmp = await tmpdir()
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, sdk, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+        const messageID = "msg_completion_test_1"
+
+        let resolvePrompt: (() => void) | undefined
+        const promptResponse = new Promise<any>((resolve) => {
+          resolvePrompt = () =>
+            resolve({
+              data: {
+                info: {
+                  id: messageID,
+                  sessionID: sessionId,
+                  role: "assistant",
+                  time: { created: 1, completed: 2 },
+                  tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                  cost: 0,
+                  parentID: "u1",
+                  modelID: "big-pickle",
+                  providerID: "opencode",
+                  mode: "build",
+                  agent: "build",
+                  path: { cwd, root: cwd },
+                },
+              },
+            })
+        })
+        sdk.session.prompt = async () => promptResponse
+
+        let promptDone = false
+        const prompt = (agent as any)
+          .prompt({
+            sessionId,
+            prompt: [{ type: "text", text: "test" }],
+          })
+          .then((result: any) => {
+            promptDone = true
+            return result
+          })
+          .catch((error: unknown) => {
+            promptDone = true
+            throw error
+          })
+
+        await new Promise((resolve) => setTimeout(resolve, 20))
+        resolvePrompt?.()
+        await new Promise((resolve) => setTimeout(resolve, 60))
+        expect(promptDone).toBe(false)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "message.updated",
+            properties: {
+              sessionID: sessionId,
+              info: {
+                id: messageID,
+                sessionID: sessionId,
+                role: "assistant",
+                time: { created: 1, completed: 2 },
+                parentID: "u1",
+                modelID: "big-pickle",
+                providerID: "opencode",
+                mode: "build",
+                agent: "build",
+                path: { cwd, root: cwd },
+                cost: 0,
+                tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              },
+            },
+          } as any,
+        })
+
+        const result = await prompt
+        expect(promptDone).toBe(true)
+        expect(result.stopReason).toBe("end_turn")
+        stop()
+      },
+    })
+  })
 })
