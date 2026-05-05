@@ -258,6 +258,70 @@ describe("tool.runtime_summary", () => {
     })
   })
 
+  test("records blind-spot notes for background jobs with no recoverable usage ledger", async () => {
+    await using dir = await tmpdir({ git: true })
+    await provideTestInstance({
+      directory: dir.path,
+      fn: () =>
+        Effect.runPromise(
+          Effect.gen(function* () {
+            const worktree = Instance.worktree
+            yield* Effect.promise(() =>
+              writeOperationCheckpoint(worktree, {
+                operationID: "school",
+                objective: "Authorized school assessment",
+                stage: "validation",
+                status: "running",
+                summary: "Validation is still running.",
+              }),
+            )
+
+            const jobs = yield* BackgroundJob.Service
+            const storage = yield* Storage.Service
+            const id = `tool_${crypto.randomUUID().replaceAll("-", "")}`
+            yield* Effect.addFinalizer(() => storage.remove(["background_job", id]).pipe(Effect.ignore))
+            yield* jobs.start({
+              id,
+              type: "task",
+              title: "legacy validation with missing ledger",
+              metadata: {
+                subagent: "validator",
+                operationID: "school",
+              },
+              run: Effect.succeed("validation completed before runtime snapshots existed"),
+            })
+            expect((yield* jobs.wait({ id })).info?.status).toBe("completed")
+
+            const tool = yield* RuntimeSummaryTool
+            const def = yield* tool.init()
+            const result = yield* def.execute(
+              {
+                operationID: "school",
+                notes: ["operator note"],
+              },
+              {
+                sessionID: "session-1" as any,
+                messageID: MessageID.ascending(),
+                agent: "build",
+                abort: new AbortController().signal,
+                messages: [],
+                metadata: () => Effect.void,
+                ask: () => Effect.void,
+              },
+            )
+
+            const record = yield* Effect.promise(() => fs.readFile(result.metadata.json, "utf8").then(JSON.parse))
+            const markdown = yield* Effect.promise(() => fs.readFile(result.metadata.markdown, "utf8"))
+            expect(record.notes).toContain("operator note")
+            expect(record.notes).toContain(
+              `runtime blind spot: background task ${id} (validator) has no readable session ledger or runtime snapshot; token/cost totals may be undercounted.`,
+            )
+            expect(markdown).toContain(`background task ${id} (validator) has no readable session ledger`)
+          }).pipe(Effect.scoped, Effect.provide(layer)),
+        ),
+    })
+  })
+
   test("includes stale background job restart args when backgroundTasks is omitted", async () => {
     await using dir = await tmpdir({ git: true })
     await provideTestInstance({

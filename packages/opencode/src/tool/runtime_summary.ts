@@ -129,6 +129,19 @@ function runtimeMessages(job: BackgroundJob.Info) {
   return Array.isArray(value) ? (value as RuntimeUsageMessage[]) : []
 }
 
+function terminalOrRecoverableStatus(status: BackgroundJob.Status) {
+  return status === "completed" || status === "error" || status === "cancelled" || status === "stale"
+}
+
+function usageBlindSpotNote(job: BackgroundJob.Info, backgroundSessionIDs: Set<SessionIDT>) {
+  const sessionID = jobSessionID(job)
+  if (sessionID && backgroundSessionIDs.has(sessionID)) return undefined
+  if (runtimeMessages(job).length > 0) return undefined
+  if (!terminalOrRecoverableStatus(job.status)) return undefined
+  const agent = backgroundAgent(job)
+  return `runtime blind spot: background task ${job.id}${agent ? ` (${agent})` : ""} has no readable session ledger or runtime snapshot; token/cost totals may be undercounted.`
+}
+
 function uniqueMessages(messages: MessageV2.WithParts[]) {
   const seen = new Set<string>()
   const result: MessageV2.WithParts[] = []
@@ -215,6 +228,10 @@ export const RuntimeSummaryTool = Tool.define<typeof Parameters, Metadata, Sessi
             if (sessionID && backgroundSessionIDs.has(sessionID)) return []
             return runtimeMessages(job)
           })
+          const blindSpotNotes = backgroundJobItems
+            .map((job) => usageBlindSpotNote(job, backgroundSessionIDs))
+            .filter((note): note is string => note !== undefined)
+          const notes = Array.from(new Set([...(params.notes ?? []), ...blindSpotNotes]))
           const sessionMessages = uniqueMessages([...ctx.messages, ...childMessages, ...backgroundMessages])
           const backgroundTasks =
             params.backgroundTasks ??
@@ -228,6 +245,7 @@ export const RuntimeSummaryTool = Tool.define<typeof Parameters, Metadata, Sessi
           const result = yield* Effect.tryPromise(() =>
             writeRuntimeSummary(worktree, {
               ...params,
+              notes: notes.length ? notes : params.notes,
               backgroundTasks,
               sessionMessages: uniqueRuntimeMessages([
                 ...sessionMessages.map((message) => ({
