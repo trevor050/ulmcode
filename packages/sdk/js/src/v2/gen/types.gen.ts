@@ -28,6 +28,7 @@ export type Event =
   | EventTuiCommandExecute
   | EventTuiToastShow1
   | EventTuiSessionSelect
+  | EventOperationUpdated
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
   | EventCommandExecuted
@@ -794,6 +795,7 @@ export type GlobalEvent = {
     | EventTuiCommandExecute
     | EventTuiToastShow
     | EventTuiSessionSelect
+    | EventOperationUpdated
     | EventMcpToolsChanged
     | EventMcpBrowserOpenFailed
     | EventCommandExecuted
@@ -2577,6 +2579,25 @@ export type EventSessionCompacted = {
   type: "session.compacted"
   properties: {
     sessionID: string
+  }
+}
+
+export type EventOperationUpdated = {
+  id: string
+  type: "operation.updated"
+  properties: {
+    operationID: string
+    artifact:
+      | "checkpoint"
+      | "operation_plan"
+      | "evidence"
+      | "finding"
+      | "report_outline"
+      | "report_render"
+      | "runtime_summary"
+      | "stage_gate"
+      | "operation_audit"
+    path?: string
   }
 }
 

@@ -1,7 +1,9 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
+import { Bus } from "@/bus"
+import { WithInstance } from "@/project/with-instance"
 import {
   buildOperationAudit,
   buildOperationResumeBrief,
@@ -20,12 +22,16 @@ import {
   writeReportOutline,
   writeRuntimeSummary,
 } from "@/ulm/artifact"
+import { OperationEvent } from "@/ulm/event"
+import { disposeAllInstances } from "../fixture/fixture"
 
 async function tmpdir() {
   return fs.mkdtemp(path.join(os.tmpdir(), "ulm-artifact-"))
 }
 
 describe("ULM artifact ledger", () => {
+  afterEach(() => disposeAllInstances())
+
   test("writes resumable operation checkpoints", async () => {
     const worktree = await tmpdir()
     const result = await writeOperationCheckpoint(worktree, {
@@ -42,6 +48,36 @@ describe("ULM artifact ledger", () => {
     expect(result.record.operationID).toBe("school-assessment")
     expect(await fs.readFile(path.join(result.root, "status.md"), "utf8")).toContain("Recon lane started.")
     expect(await fs.readFile(path.join(result.root, "events.jsonl"), "utf8")).toContain("\"type\":\"checkpoint\"")
+  })
+
+  test("publishes operation update events after durable writes", async () => {
+    const worktree = await tmpdir()
+    const received: Array<{ operationID: string; artifact: string; path?: string }> = []
+
+    await WithInstance.provide({
+      directory: worktree,
+      fn: async () => {
+        Bus.subscribe(OperationEvent.Updated, (evt) => {
+          received.push(evt.properties)
+        })
+        await Bun.sleep(10)
+        await writeOperationCheckpoint(worktree, {
+          operationID: "School Assessment",
+          objective: "Authorized school assessment",
+          stage: "recon",
+          status: "running",
+          summary: "Recon lane started.",
+        })
+        await Bun.sleep(10)
+      },
+    })
+
+    expect(received).toContainEqual(
+      expect.objectContaining({
+        operationID: "school-assessment",
+        artifact: "checkpoint",
+      }),
+    )
   })
 
   test("requires evidence before validated findings", () => {

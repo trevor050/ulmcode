@@ -1,5 +1,6 @@
 import { TextAttributes } from "@opentui/core"
 import { useKeyboard } from "@opentui/solid"
+import { useEvent } from "@tui/context/event"
 import { useRoute, useRouteData } from "@tui/context/route"
 import { useSDK } from "@tui/context/sdk"
 import { useTheme } from "@tui/context/theme"
@@ -98,6 +99,7 @@ function readyReports(item: OperationStatus) {
 
 export function UlmOperations() {
   const sdk = useSDK()
+  const event = useEvent()
   const route = useRoute()
   const data = useRouteData("ulmOperations")
   const { theme } = useTheme()
@@ -178,6 +180,11 @@ export function UlmOperations() {
 
   const interval = setInterval(refresh, 15000)
   onCleanup(() => clearInterval(interval))
+
+  event.on("operation.updated", (evt) => {
+    if (data.operationID && evt.properties.operationID !== data.operationID) return
+    refresh()
+  })
 
   return (
     <box flexGrow={1} paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1} gap={1}>
