@@ -332,6 +332,10 @@ exports[`tool parameters JSON Schema (wire shape) task 1`] = `
       "description": "A short (3-5 words) description of the task",
       "type": "string",
     },
+    "operationID": {
+      "description": "Optional ULMCode operation ID used to scope persisted background task metadata.",
+      "type": "string",
+    },
     "prompt": {
       "description": "The task for the agent to perform",
       "type": "string",
