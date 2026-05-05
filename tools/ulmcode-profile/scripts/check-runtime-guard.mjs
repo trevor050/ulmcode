@@ -15,6 +15,9 @@ await hooks["experimental.chat.system.transform"]({}, system)
 if (!system.system.some((line) => line.includes("operation_resume"))) {
   throw new Error("runtime guard did not inject operation_resume guidance")
 }
+if (!system.system.some((line) => line.includes("recoverStaleTasks=true"))) {
+  throw new Error("runtime guard did not inject unattended stale-lane recovery guidance")
+}
 
 const env = { env: {} }
 await hooks["shell.env"]({}, env)

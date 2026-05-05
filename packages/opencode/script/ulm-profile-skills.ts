@@ -89,6 +89,9 @@ async function validateCommand(file: string) {
   if (path.basename(file) === "ulm-resume.md" && !content.includes("operation_resume")) {
     throw new Error(`${file}: resume command must call operation_resume`)
   }
+  if (path.basename(file) === "ulm-resume.md" && !content.includes("recoverStaleTasks: true")) {
+    throw new Error(`${file}: resume command must recover stale tasks during unattended resumes`)
+  }
   if (path.basename(file) === "ulm-final-handoff.md" && !content.includes("finalHandoff: true")) {
     throw new Error(`${file}: final handoff command must require finalHandoff lint`)
   }

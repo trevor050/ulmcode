@@ -1,8 +1,8 @@
 const SYSTEM_NOTE = [
   "ULMCode runtime guardrails:",
-  "- Start or resume authorized security operations with operation_resume before broad execution.",
+  "- Start or resume authorized security operations with operation_resume before broad execution; include staleAfterMinutes and recoverStaleTasks=true for unattended resumes.",
   "- Keep durable state current with operation_checkpoint, evidence_record, finding_record, runtime_summary, operation_audit, and final handoff tools.",
-  "- Prefer background task lanes for long validation/reporting work, then poll task_status or recover stale lanes with operation_recover.",
+  "- Prefer background task lanes for long validation/reporting work, then poll task_status or recover stale lanes with operation_resume recoverStaleTasks=true or operation_recover.",
   "- Treat sparse reports as failures: write dense, evidence-linked findings and run report_lint/report_render before handoff.",
 ].join("\n")
 
