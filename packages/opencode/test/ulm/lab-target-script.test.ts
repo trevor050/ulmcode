@@ -30,5 +30,7 @@ describe("ULM lab target smoke script", () => {
     expect(stdout).toContain("password_reset_token_leak: confirmed")
     expect(stdout).toContain("target: k12-lti-shared-secret-leak")
     expect(stdout).toContain("forged_lti_instructor_launch: confirmed")
+    expect(stdout).toContain("target: k12-sis-webhook-signature-bypass")
+    expect(stdout).toContain("sis_webhook_signature_bypass: confirmed")
   })
 })

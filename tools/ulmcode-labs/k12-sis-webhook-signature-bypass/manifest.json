@@ -1,0 +1,180 @@
+{
+  "id": "k12-sis-webhook-signature-bypass",
+  "operationID": "k12-sis-webhook-signature-bypass",
+  "objective": "Replay a synthetic authorized K-12 SIS webhook assessment where unsigned roster events can update guardian contact records.",
+  "assumptions": [
+    "The lab uses synthetic evidence only.",
+    "No real external target is contacted.",
+    "Students, guardian contacts, webhook events, and secrets are intentionally fake."
+  ],
+  "plan": {
+    "phases": [
+      {
+        "stage": "recon",
+        "objective": "Map SIS webhook ingestion controls and documented signature policy.",
+        "actions": [
+          "Review the synthetic webhook policy endpoint",
+          "Identify whether event signatures are enforced or only logged",
+          "Record baseline guardian-contact state before replay"
+        ],
+        "successCriteria": [
+          "Webhook policy and baseline guardian evidence are recorded"
+        ],
+        "subagents": [
+          "recon"
+        ],
+        "noSubagents": [
+          "school-impact interpretation stays with the primary operator"
+        ]
+      },
+      {
+        "stage": "validation",
+        "objective": "Validate an unsigned SIS event can modify a guardian contact.",
+        "actions": [
+          "Replay a synthetic guardian-contact update without an HMAC signature",
+          "Confirm the event is accepted through the trusted-source bypass",
+          "Fetch the student guardian record to prove the unauthorized state change"
+        ],
+        "successCriteria": [
+          "A report-ready finding cites policy, unsigned webhook acceptance, and resulting guardian record evidence"
+        ],
+        "subagents": [
+          "validator",
+          "evidence"
+        ],
+        "noSubagents": [
+          "final exploitability and remediation wording stay with the primary operator"
+        ]
+      },
+      {
+        "stage": "reporting",
+        "objective": "Render final handoff artifacts.",
+        "actions": [
+          "Run report_lint",
+          "Run report_render",
+          "Run runtime_summary"
+        ],
+        "successCriteria": [
+          "Final handoff lint passes"
+        ],
+        "subagents": [
+          "report-writer"
+        ],
+        "noSubagents": [
+          "client-facing delivery approval is manual"
+        ]
+      }
+    ],
+    "reportingCloseout": [
+      "Run report_lint",
+      "Run report_render",
+      "Run runtime_summary"
+    ]
+  },
+  "report": {
+    "targetPages": 3,
+    "minOutlineWordsPerPage": 80
+  },
+  "evidence": [
+    {
+      "evidenceID": "ev-sis-webhook-policy",
+      "title": "Synthetic SIS webhook policy response",
+      "kind": "http_response",
+      "summary": "The webhook policy states signatures are logged as warnings instead of enforced when the trusted-source bypass is present.",
+      "url": "http://127.0.0.1/api/webhooks/sis/policy",
+      "content": "{\"signatureMode\":\"warn\",\"trustedSourceBypass\":\"source=trusted-sis\",\"acceptedEventTypes\":[\"student.guardian.updated\"],\"labFinding\":\"sis_webhook_signature_not_enforced\"}"
+    },
+    {
+      "evidenceID": "ev-sis-unsigned-event-accepted",
+      "title": "Synthetic unsigned SIS guardian update accepted",
+      "kind": "http_response",
+      "summary": "An unsigned guardian-contact update was accepted when the trusted-source bypass parameter was supplied.",
+      "url": "http://127.0.0.1/api/webhooks/sis/events?source=trusted-sis",
+      "content": "{\"accepted\":true,\"signatureVerified\":false,\"studentId\":\"student-5109\",\"guardianEmail\":\"attacker-guardian@example.test\",\"labFinding\":\"sis_webhook_signature_bypass\"}"
+    },
+    {
+      "evidenceID": "ev-sis-guardian-record-changed",
+      "title": "Synthetic guardian contact changed after webhook replay",
+      "kind": "http_response",
+      "summary": "The student guardian record reflected the attacker-controlled email after the unsigned webhook replay.",
+      "url": "http://127.0.0.1/api/students/student-5109/guardian",
+      "content": "{\"studentId\":\"student-5109\",\"guardianEmail\":\"attacker-guardian@example.test\",\"verifiedBySchool\":false,\"source\":\"sis-webhook\",\"labFinding\":\"guardian_contact_modified_by_unsigned_webhook\"}"
+    }
+  ],
+  "findings": [
+    {
+      "findingID": "sis-webhook-signature-bypass",
+      "title": "SIS webhook accepts unsigned guardian-contact updates",
+      "state": "report_ready",
+      "severity": "critical",
+      "confidence": 0.9,
+      "affectedAssets": [
+        "SIS webhook ingestion endpoint",
+        "Guardian contact records",
+        "Family communication and account-linking workflow"
+      ],
+      "evidence": [
+        {
+          "id": "ev-sis-webhook-policy",
+          "path": "evidence/raw/ev-sis-webhook-policy.txt"
+        },
+        {
+          "id": "ev-sis-unsigned-event-accepted",
+          "path": "evidence/raw/ev-sis-unsigned-event-accepted.txt"
+        },
+        {
+          "id": "ev-sis-guardian-record-changed",
+          "path": "evidence/raw/ev-sis-guardian-record-changed.txt"
+        }
+      ],
+      "description": "The synthetic SIS webhook endpoint does not require a valid HMAC signature when a trusted-source bypass parameter is present, allowing unsigned events to update guardian contact records.",
+      "impact": "An attacker who can reach the webhook endpoint could replace guardian contact details, intercept family communications, or create a path toward unauthorized guardian-account linking.",
+      "remediation": "Require HMAC verification for every SIS webhook event, remove source-based bypasses, reject unsigned or invalidly signed events before state changes, constrain event schemas, and alert on repeated signature failures."
+    }
+  ],
+  "runtime": {
+    "sessionMessages": [
+      {
+        "role": "assistant",
+        "agent": "pentest",
+        "modelID": "gpt-5.5",
+        "providerID": "openai",
+        "cost": 0.5,
+        "tokens": {
+          "input": 1380,
+          "output": 610,
+          "reasoning": 390,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "role": "assistant",
+        "agent": "validator",
+        "modelID": "gpt-5.4-mini",
+        "providerID": "openai",
+        "cost": 0.15,
+        "tokens": {
+          "input": 720,
+          "output": 330,
+          "reasoning": 150,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      }
+    ]
+  },
+  "expected": {
+    "reportableFindings": 1,
+    "evidence": 3,
+    "dashboardIncludes": [
+      "# k12-sis-webhook-signature-bypass - handoff/complete",
+      "risk: high",
+      "findings: 1 total"
+    ]
+  }
+}

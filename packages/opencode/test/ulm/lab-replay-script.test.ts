@@ -26,6 +26,7 @@ describe("ULM lab replay script", () => {
     expect(stdout).toContain("lab: k12-roster-idor")
     expect(stdout).toContain("lab: k12-password-reset-token-leak")
     expect(stdout).toContain("lab: k12-lti-shared-secret-leak")
+    expect(stdout).toContain("lab: k12-sis-webhook-signature-bypass")
   })
 
   test("runs every bundled lab manifest", async () => {
