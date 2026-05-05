@@ -30,6 +30,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `#25778` config cache refresh matters for live profile/plugin edits during long runs; adopted locally with direct `getGlobal()` refresh coverage.
 - `#25821` v2 model listing matters for plugin/custom-provider visibility in profile dashboards; adopted locally as `/api/model`, backed by the existing provider registry instead of an empty v2-only registry.
 - `#25841` OTEL env preservation matters for operator-controlled tracing/logging during long runs; adopted locally so service identity, version, and deployment environment are not overwritten.
+- `#25855` wide-text paste expansion matters for large pasted findings/reports in the TUI; adopted locally with display-offset-to-string-index tests so summarized paste markers expand in the right order after CJK/wide characters.
 - `#25856` stale todo cleanup matters for long unattended sessions where completed chat todos accumulate; adopted locally for chat todos only, keeping ULM operation ledgers/background jobs as the durable task source.
 
 ## External Cyber Harness Ideas
@@ -54,6 +55,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `/ulm/operation`, `/ulm/operation/:operationID/status`, `/resume`, and `/audit` now expose typed ULM operation dashboard data through the instance HttpApi and generated JS SDK for TUI/plugin consumers.
 - `/api/model` now exposes configured/provider-registered models through the v2 HttpApi and generated JS SDK. The route uses workspace routing and instance context middleware so profile/plugin providers are visible to clients that need model-picker or custom-agent diagnostics.
 - Observability resource setup respects `OTEL_SERVICE_NAME` plus `service.name`, `service.version`, and `deployment.environment.name` from `OTEL_RESOURCE_ATTRIBUTES`; operator-provided trace/log identity should survive unattended run wrappers.
+- TUI summarized paste expansion converts display-column extmark offsets back to string indices before replacing virtual paste markers, preserving wide-character prompts and multi-paste ordering.
 - Completed/cancelled chat todos are pruned on write/read, and `/clear-tasks` plus `/清除任务` clear active todos via `todowrite`. Do not use chat todos as the durable operation ledger; ULM checkpoints, stage gates, runtime summaries, and background job metadata remain canonical.
 - The TUI now registers `ulm.operations` plus `/ulm`/`/operations`, opening a persistent operation route with list, status, audit, and report readiness panels. ULM artifact writers emit typed `operation.updated` events after durable writes so the route can update immediately from compact event payloads for checkpoints, evidence, findings, plans, reports, runtime summaries, stage gates, and audits while keeping a poll/API fallback. The compact dialog still exists for modal use.
 - `operation_plan` records execution-ready phase order, success criteria, subagent/no-subagent policy, assumptions, and report closeout.
