@@ -604,6 +604,7 @@ describe("tool.task", () => {
       const storage = yield* Storage.Service
       const jobs = yield* BackgroundJob.Service
       const id = `tool_${crypto.randomUUID().replaceAll("-", "")}`
+      const started = yield* Deferred.make<void>()
       const interrupted = yield* Deferred.make<void>()
       yield* Effect.addFinalizer(() => storage.remove(["background_job", id]).pipe(Effect.ignore))
 
@@ -611,9 +612,14 @@ describe("tool.task", () => {
         id,
         type: "task",
         title: "cancellable background task",
-        run: Effect.never.pipe(Effect.ensuring(Deferred.succeed(interrupted, undefined))),
+        run: Deferred.succeed(started, undefined).pipe(
+          Effect.andThen(Effect.never),
+          Effect.as("unreachable"),
+          Effect.ensuring(Deferred.succeed(interrupted, undefined)),
+        ),
       })
 
+      yield* Deferred.await(started).pipe(Effect.timeout("1 second"))
       const cancelled = yield* jobs.cancel(id)
       const signal = yield* Deferred.await(interrupted).pipe(Effect.timeoutOption("1 second"))
 
