@@ -127,6 +127,7 @@ export type ReportRenderInput = {
 export type ReportRenderResult = {
   operationID: string
   html: string
+  pdf: string
   manifest: string
   finalDir: string
   findings: number
@@ -237,6 +238,99 @@ function escapeHtml(input: string) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;")
+}
+
+function pdfText(input: string) {
+  return input.replace(/[^\x09\x0a\x0d\x20-\x7e]/g, "?")
+}
+
+function escapePdfString(input: string) {
+  return pdfText(input).replaceAll("\\", "\\\\").replaceAll("(", "\\(").replaceAll(")", "\\)")
+}
+
+function wrapPdfLine(input: string, width = 86) {
+  const words = pdfText(input).trim().split(/\s+/).filter(Boolean)
+  const lines: string[] = []
+  let line = ""
+  for (const word of words) {
+    const next = line ? `${line} ${word}` : word
+    if (next.length <= width) {
+      line = next
+      continue
+    }
+    if (line) lines.push(line)
+    line = word
+  }
+  if (line) lines.push(line)
+  return lines.length ? lines : [""]
+}
+
+function buildPdf(title: string, operationID: string, operation: OperationRecord | undefined, findings: FindingRecord[]) {
+  const lines = [
+    title,
+    `Operation: ${operationID}`,
+    `Stage: ${operation?.stage ?? "unknown"} | Status: ${operation?.status ?? "unknown"}`,
+    "",
+    "Executive Summary",
+    operation?.summary ?? "No operation summary has been recorded.",
+    "",
+    "Scope And Methodology",
+    operation?.objective ?? "No objective has been recorded.",
+    "",
+    "Findings",
+    ...(findings.length
+      ? findings.flatMap((finding) => [
+          `${finding.severity.toUpperCase()}: ${finding.title}`,
+          `ID: ${finding.findingID} | State: ${finding.state} | Confidence: ${finding.confidence}`,
+          `Affected Assets: ${finding.affectedAssets.join(", ")}`,
+          `Description: ${finding.description}`,
+          `Impact: ${finding.impact ?? "Not recorded."}`,
+          `Remediation: ${finding.remediation ?? "Not recorded."}`,
+          `Evidence: ${finding.evidence.map((item) => item.path ?? item.id).join(", ")}`,
+          "",
+        ])
+      : ["No validated or report-ready findings were recorded."]),
+  ].flatMap((line) => wrapPdfLine(line))
+
+  const pages = Array.from({ length: Math.max(1, Math.ceil(lines.length / 44)) }, (_, index) =>
+    lines.slice(index * 44, index * 44 + 44),
+  )
+  const pageIDs = pages.map((_, index) => 4 + index * 2)
+  const contentIDs = pages.map((_, index) => 5 + index * 2)
+  const objects: string[] = []
+  objects[1] = "<< /Type /Catalog /Pages 2 0 R >>"
+  objects[2] = `<< /Type /Pages /Kids [${pageIDs.map((id) => `${id} 0 R`).join(" ")}] /Count ${pages.length} >>`
+  objects[3] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
+
+  for (let index = 0; index < pages.length; index++) {
+    const pageID = pageIDs[index]!
+    const contentID = contentIDs[index]!
+    const content = [
+      "BT",
+      "/F1 10 Tf",
+      "14 TL",
+      "72 740 Td",
+      ...pages[index]!.flatMap((line) => (line ? [`(${escapePdfString(line)}) Tj`, "T*"] : ["T*"])),
+      "ET",
+    ].join("\n")
+    objects[pageID] =
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${contentID} 0 R >>`
+    objects[contentID] = `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`
+  }
+
+  let pdf = "%PDF-1.4\n"
+  const offsets = [0]
+  for (let id = 1; id < objects.length; id++) {
+    offsets[id] = Buffer.byteLength(pdf)
+    pdf += `${id} 0 obj\n${objects[id]}\nendobj\n`
+  }
+  const xref = Buffer.byteLength(pdf)
+  pdf += `xref\n0 ${objects.length}\n0000000000 65535 f \n`
+  for (let id = 1; id < objects.length; id++) {
+    pdf += `${String(offsets[id]).padStart(10, "0")} 00000 n \n`
+  }
+  pdf += `trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`
+  return pdf
 }
 
 export async function writeOperationCheckpoint(worktree: string, input: OperationCheckpointInput) {
@@ -542,14 +636,17 @@ export async function renderReport(worktree: string, input: ReportRenderInput): 
 `
   await fs.mkdir(finalDir, { recursive: true })
   const htmlPath = path.join(finalDir, "report.html")
+  const pdfPath = path.join(finalDir, "report.pdf")
   const manifestPath = path.join(finalDir, "manifest.json")
   await fs.writeFile(htmlPath, html)
+  await fs.writeFile(pdfPath, buildPdf(title, operationID, operation, reportable))
   await writeJson(manifestPath, {
     operationID,
     title,
     generatedAt: new Date().toISOString(),
     artifacts: {
       html: htmlPath,
+      pdf: pdfPath,
       reportOutline: path.join(root, "reports", "report-outline.md"),
     },
     findings: reportable.map((finding) => finding.findingID),
@@ -557,6 +654,7 @@ export async function renderReport(worktree: string, input: ReportRenderInput): 
   return {
     operationID,
     html: htmlPath,
+    pdf: pdfPath,
     manifest: manifestPath,
     finalDir,
     findings: reportable.length,

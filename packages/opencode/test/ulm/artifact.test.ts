@@ -148,6 +148,7 @@ describe("ULM artifact ledger", () => {
 
     const result = await renderReport(worktree, { operationID: "school", title: "Assessment Report" })
     expect(await fs.readFile(result.html, "utf8")).toContain("Weak MFA coverage")
+    expect(await fs.readFile(result.pdf, "utf8")).toStartWith("%PDF-")
     expect(JSON.parse(await fs.readFile(result.manifest, "utf8")).findings).toEqual(["weak-mfa-coverage"])
   })
 })

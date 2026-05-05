@@ -12,6 +12,7 @@ export const Parameters = Schema.Struct({
 type Metadata = {
   operationID: string
   html: string
+  pdf: string
   manifest: string
   findings: number
 }
@@ -29,12 +30,14 @@ export const ReportRenderTool = Tool.define<typeof Parameters, Metadata, never>(
           output: [
             `operation_id: ${result.operationID}`,
             `html: ${result.html}`,
+            `pdf: ${result.pdf}`,
             `manifest: ${result.manifest}`,
             `findings: ${result.findings}`,
           ].join("\n"),
           metadata: {
             operationID: result.operationID,
             html: result.html,
+            pdf: result.pdf,
             manifest: result.manifest,
             findings: result.findings,
           },
