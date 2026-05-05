@@ -1,5 +1,5 @@
 import { Config } from "@/config/config"
-import { GlobalBus, type GlobalEvent as GlobalBusEvent } from "@/bus/global"
+import { GlobalBus } from "@/bus/global"
 import { EffectBridge } from "@/effect/bridge"
 import { Bus } from "@/bus"
 import { Installation } from "@/installation"
@@ -13,15 +13,19 @@ import { HttpApiBuilder } from "effect/unstable/httpapi"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { RootHttpApi } from "../api"
 import { GlobalUpgradeInput } from "../groups/global"
+import { globalEventReplay } from "@/server/global-event-replay"
+import { parseLastEventId, type StoredEvent } from "@/server/sse-replay"
 
 const log = Log.create({ service: "server" })
 
-function eventData(data: unknown): Sse.Event {
+type QueueItem = { id?: number; data: string }
+
+function eventData(item: QueueItem): Sse.Event {
   return {
     _tag: "Event",
     event: "message",
-    id: undefined,
-    data: JSON.stringify(data),
+    id: item.id === undefined ? undefined : String(item.id),
+    data: item.data,
   }
 }
 
@@ -33,23 +37,52 @@ function parseBody(body: string) {
   }
 }
 
-function eventResponse() {
+function queueItem(data: unknown): QueueItem {
+  return { data: JSON.stringify(data) }
+}
+
+function eventResponse(request: HttpServerRequest.HttpServerRequest) {
   log.info("global event connected")
-  const events = Stream.callback<GlobalBusEvent>((queue) => {
-    const handler = (event: GlobalBusEvent) => Queue.offerUnsafe(queue, event)
+  const replayFrom = parseLastEventId(request.headers["last-event-id"] ?? request.headers["Last-Event-ID"])
+  const events = Stream.callback<QueueItem>((queue) => {
+    let replaying = true
+    const pending: StoredEvent[] = []
+    let lastQueuedId = 0
+    const offerStoredEvent = (event: StoredEvent) => {
+      if (event.id <= lastQueuedId) return
+      lastQueuedId = event.id
+      Queue.offerUnsafe(queue, event)
+    }
+    const handler = (event: StoredEvent) => {
+      if (replaying) pending.push(event)
+      else offerStoredEvent(event)
+    }
     return Effect.acquireRelease(
-      Effect.sync(() => GlobalBus.on("event", handler)),
-      () => Effect.sync(() => GlobalBus.off("event", handler)),
+      Effect.sync(() => {
+        const unsubscribe = globalEventReplay.subscribe(handler)
+        const heartbeat = setInterval(() => {
+          Queue.offerUnsafe(
+            queue,
+            queueItem({ payload: { id: Bus.createID(), type: "server.heartbeat", properties: {} } }),
+          )
+        }, 10_000)
+        Queue.offerUnsafe(queue, queueItem({ payload: { id: Bus.createID(), type: "server.connected", properties: {} } }))
+        const missed = globalEventReplay.eventsAfter(replayFrom)
+        if (missed.length > 0) log.info("global event replay", { lastEventId: replayFrom, replayed: missed.length })
+        for (const event of missed) offerStoredEvent(event)
+        replaying = false
+        for (const event of pending) offerStoredEvent(event)
+        return () => {
+          clearInterval(heartbeat)
+          unsubscribe()
+        }
+      }),
+      (unsubscribe) => Effect.sync(unsubscribe),
     )
   })
-  const heartbeat = Stream.tick("10 seconds").pipe(
-    Stream.drop(1),
-    Stream.map(() => ({ payload: { id: Bus.createID(), type: "server.heartbeat", properties: {} } })),
-  )
 
   return HttpServerResponse.stream(
-    Stream.make({ payload: { id: Bus.createID(), type: "server.connected", properties: {} } }).pipe(
-      Stream.concat(events.pipe(Stream.merge(heartbeat, { haltStrategy: "left" }))),
+    events.pipe(
       Stream.map(eventData),
       Stream.pipeThroughChannel(Sse.encode()),
       Stream.encodeText,
@@ -76,8 +109,10 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
       return { healthy: true as const, version: InstallationVersion }
     })
 
-    const event = Effect.fn("GlobalHttpApi.event")(function* () {
-      return eventResponse()
+    const event = Effect.fn("GlobalHttpApi.event")(function* (ctx: {
+      request: HttpServerRequest.HttpServerRequest
+    }) {
+      return eventResponse(ctx.request)
     })
 
     const configGet = Effect.fn("GlobalHttpApi.configGet")(function* () {
