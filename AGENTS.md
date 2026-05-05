@@ -119,4 +119,5 @@ const table = sqliteTable("session", {
 - The bundled isolated profile lives in `tools/ulmcode-profile`; validate it with `tools/ulmcode-profile/test-profile.sh`. Its installer copies compact skills, ULM slash commands, plugin `package.json`, and both root/`.opencode` Oh My OpenAgent routing files.
 - `bun run --cwd packages/opencode test:ulm-smoke` runs the synthetic ULM lifecycle smoke: plan, evidence, finding, outline, final checkpoint, report render, runtime summary, final handoff lint, and status/dashboard verification.
 - `bun run --cwd packages/opencode test:ulm-lab` runs the manifest-driven lab replay harness using `tools/ulmcode-labs/k12-login-mfa-gap/manifest.json`; this turns a synthetic lab into ULM artifacts and requires final handoff lint to pass.
+- `bun run --cwd packages/opencode test:ulm-lab-target` starts and probes the bundled weak-MFA HTTP lab target; Docker Compose support lives at `tools/ulmcode-labs/k12-login-mfa-gap/docker-compose.yml`.
 - Invoking the package as `ulmcode` sets `OPENCODE_APP_NAME=ulmcode`; core global paths then use the `ulmcode` app name.

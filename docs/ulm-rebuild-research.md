@@ -41,6 +41,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `tools/ulmcode-profile` provides an isolated K-12 pentest profile, compact skill pack, plugin dependency manifest, and Oh My OpenAgent routing file.
 - `bun run --cwd packages/opencode test:ulm-smoke` exercises a synthetic ULM lifecycle outside the unit-test helpers: operation plan, evidence, finding, report outline, final render, runtime summary, final handoff lint, and status dashboard.
 - `bun run --cwd packages/opencode test:ulm-lab` replays a manifest-driven synthetic lab from `tools/ulmcode-labs/k12-login-mfa-gap/manifest.json` into full ULM artifacts and final handoff lint.
+- `bun run --cwd packages/opencode test:ulm-lab-target` starts and probes the bundled intentionally weak MFA HTTP lab target; the same lab can run through Docker Compose.
 
 ## Current Local OpenCode Inventory
 
@@ -58,5 +59,5 @@ Source checked on 2026-05-05 from `~/.config/opencode` without copying secrets.
 - True background job execution resume across process restart. Metadata is persisted and listable, but in-flight fibers are not restarted after process death.
 - Full operation-wide cost/token extraction into budgets. `runtime_summary` now derives current-session and child-session assistant message usage, but it does not yet recover transcripts from long-dead background jobs that no longer have a reachable session tree.
 - Full TUI operation dashboard. The tool output now has a compact dashboard, but there is not yet a dedicated interactive TUI route.
-- Real vulnerable-target lab containers. The manifest-driven replay harness exists for synthetic labs, but it does not yet ship Docker/compose vulnerable targets.
+- Larger vulnerable-target lab catalog. The first weak-MFA HTTP target ships with Docker Compose support, but the catalog is still one scenario.
 - Full vendored plugin source. The isolated profile records plugin dependencies and routing, but does not vendor third-party plugin code into this repo.
