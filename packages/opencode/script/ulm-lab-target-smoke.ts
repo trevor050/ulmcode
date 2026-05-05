@@ -103,11 +103,47 @@ async function probeGradebookMassAssignment() {
   return ["target: k12-gradebook-mass-assignment", "student_grade_mass_assignment: confirmed"]
 }
 
+async function probeStorageConfigLeak() {
+  const { proc, base } = await startTarget("k12-storage-config-leak")
+  const health = await fetch(`${base}/health`).then((res) => res.json()) as { ok?: boolean; lab?: string }
+  if (!health.ok || health.lab !== "k12-storage-config-leak") fail(proc, "health probe failed")
+
+  const config = await fetch(`${base}/api/config/client`).then((res) => res.json()) as {
+    bucket?: string
+    publicPrefix?: string
+    labFinding?: string
+  }
+  if (
+    config.bucket !== "demo-district-student-files" ||
+    config.publicPrefix !== "student-support/" ||
+    config.labFinding !== "public_storage_config_leak"
+  ) {
+    fail(proc, "storage config probe did not confirm public config leak")
+  }
+
+  const download = await fetch(`${base}/api/storage/download?path=student-support/iep-export.csv`).then((res) =>
+    res.json(),
+  ) as { authenticated?: boolean; authorized?: boolean; preview?: string; labFinding?: string }
+  if (
+    download.authenticated ||
+    !download.authorized ||
+    download.preview !== "student_id,plan_type,accommodation" ||
+    download.labFinding !== "unauthenticated_student_file_read"
+  ) {
+    fail(proc, "storage download probe did not confirm unauthenticated student file read")
+  }
+
+  proc.kill()
+  await proc.exited
+  return ["target: k12-storage-config-leak", "unauthenticated_student_file_read: confirmed"]
+}
+
 const lines = [
   "ulm_lab_target: ok",
   ...(await probeMfaGap()),
   ...(await probeRosterIdor()),
   ...(await probeGradebookMassAssignment()),
+  ...(await probeStorageConfigLeak()),
 ]
 
 console.log(lines.join("\n"))
