@@ -237,6 +237,25 @@ export type OperationAuditResult = {
   }
 }
 
+export type OperationStageGateOptions = {
+  stage?: Stage
+}
+
+export type OperationStageGateResult = {
+  operationID: string
+  root: string
+  generatedAt: string
+  stage: Stage
+  ok: boolean
+  gaps: string[]
+  requiredArtifacts: string[]
+  recommendedTools: string[]
+  files: {
+    json: string
+    markdown: string
+  }
+}
+
 export type ReportRenderInput = {
   operationID: string
   title?: string
@@ -946,6 +965,116 @@ export async function buildOperationAudit(
   await writeJson(files.json, audit)
   await fs.writeFile(files.markdown, formatOperationAudit(audit))
   return audit
+}
+
+function stageRequiredArtifacts(stage: Stage) {
+  const common = ["operation.json", "plans/operation-plan.json"]
+  if (stage === "intake") return common
+  if (stage === "recon") return [...common, "evidence/"]
+  if (stage === "mapping") return [...common, "evidence/", "findings/"]
+  if (stage === "validation") return [...common, "evidence/", "findings/"]
+  if (stage === "reporting") return [...common, "findings/", "reports/report-outline.md", "reports/report.md or report.html"]
+  return [...common, "deliverables/final/", "deliverables/runtime-summary.json", "deliverables/operation-audit.json"]
+}
+
+function stageGateToolRecommendations(stage: Stage, gaps: string[]) {
+  const tools = ["operation_status"]
+  if (gaps.some((gap) => gap.includes("checkpoint"))) tools.push("operation_checkpoint")
+  if (gaps.some((gap) => gap.includes("plan"))) tools.push("operation_plan")
+  if (gaps.some((gap) => gap.includes("evidence"))) tools.push("evidence_record")
+  if (gaps.some((gap) => gap.includes("finding") || gap.includes("findings"))) tools.push("finding_record")
+  if (gaps.some((gap) => gap.includes("outline"))) tools.push("report_outline")
+  if (gaps.some((gap) => gap.includes("draft report") || gap.includes("report section"))) tools.push("report_lint")
+  if (gaps.some((gap) => gap.includes("deliverables/final"))) tools.push("report_render")
+  if (gaps.some((gap) => gap.includes("runtime-summary"))) tools.push("runtime_summary")
+  if (stage === "handoff") tools.push("operation_audit")
+  return unique(tools)
+}
+
+async function stageGateGaps(worktree: string, status: OperationStatusSummary, stage: Stage) {
+  const gaps: string[] = []
+  const reportableFindings = status.findings.byState.validated + status.findings.byState.report_ready
+  const unresolvedFindings = status.findings.byState.candidate + status.findings.byState.needs_validation
+  if (!status.operation) gaps.push("operation checkpoint is missing")
+  if (!status.plans.operation) gaps.push("operation plan is missing")
+  if (status.operation?.status === "blocked") {
+    gaps.push(
+      status.operation.blockers.length
+        ? `operation is blocked: ${status.operation.blockers.join("; ")}`
+        : "operation is blocked without recorded blockers",
+    )
+  }
+  if (stage === "recon" && status.evidence.total === 0) gaps.push("recon has no recorded evidence")
+  if (stage === "mapping") {
+    if (status.evidence.total === 0) gaps.push("mapping has no recorded evidence")
+    if (status.findings.total === 0) gaps.push("mapping has no candidate findings")
+  }
+  if (stage === "validation") {
+    if (status.evidence.total === 0) gaps.push("validation has no recorded evidence")
+    if (reportableFindings === 0) gaps.push("validation has no validated or report-ready findings")
+    if (unresolvedFindings > 0) gaps.push("validation has unresolved candidate or needs-validation findings")
+  }
+  if (stage === "reporting") {
+    if (reportableFindings === 0) gaps.push("reporting has no validated or report-ready findings")
+    if (unresolvedFindings > 0) gaps.push("reporting has unresolved candidate or needs-validation findings")
+    if (!status.reports.outline) gaps.push("reporting is missing report outline")
+    if (!status.reports.markdown && !status.reports.html) gaps.push("reporting has no draft report")
+  }
+  if (stage === "handoff") {
+    const finalHandoff = await lintReport(worktree, status.operationID, { finalHandoff: true })
+    gaps.push(...finalHandoff.gaps)
+  }
+  return gaps
+}
+
+export function formatOperationStageGate(gate: OperationStageGateResult) {
+  return [
+    `# Stage Gate ${gate.operationID}/${gate.stage}`,
+    "",
+    `status: ${gate.ok ? "ready" : "attention_required"}`,
+    `root: ${gate.root}`,
+    `generated_at: ${gate.generatedAt}`,
+    "",
+    "required_artifacts:",
+    ...listLines(gate.requiredArtifacts, "none"),
+    "",
+    "gaps:",
+    ...listLines(gate.gaps, "none"),
+    "",
+    "recommended_tools:",
+    ...listLines(gate.recommendedTools, "none"),
+    "",
+  ].join("\n")
+}
+
+export async function buildOperationStageGate(
+  worktree: string,
+  operationID: string,
+  options: OperationStageGateOptions = {},
+): Promise<OperationStageGateResult> {
+  const status = await readOperationStatus(worktree, operationID)
+  const stage = options.stage ?? status.operation?.stage ?? "intake"
+  const root = operationPath(worktree, operationID)
+  const gaps = await stageGateGaps(worktree, status, stage)
+  const files = {
+    json: path.join(root, "deliverables", "stage-gates", `${stage}.json`),
+    markdown: path.join(root, "deliverables", "stage-gates", `${stage}.md`),
+  }
+  const gate: OperationStageGateResult = {
+    operationID: slug(operationID, "operation"),
+    root,
+    generatedAt: new Date().toISOString(),
+    stage,
+    ok: gaps.length === 0,
+    gaps,
+    requiredArtifacts: stageRequiredArtifacts(stage),
+    recommendedTools: stageGateToolRecommendations(stage, gaps),
+    files,
+  }
+  await fs.mkdir(path.dirname(files.json), { recursive: true })
+  await writeJson(files.json, gate)
+  await fs.writeFile(files.markdown, formatOperationStageGate(gate))
+  return gate
 }
 
 function runtimeSummaryMarkdown(record: RuntimeSummaryRecord) {

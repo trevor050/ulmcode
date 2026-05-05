@@ -5,6 +5,7 @@ import path from "path"
 import {
   buildOperationAudit,
   buildOperationResumeBrief,
+  buildOperationStageGate,
   formatOperationStatusDashboard,
   formatOperationResumeBrief,
   listOperationStatuses,
@@ -639,6 +640,63 @@ describe("ULM artifact ledger", () => {
     expect(audit.recommendedTools).toContain("runtime_summary")
     expect(JSON.parse(await fs.readFile(audit.files.json, "utf8")).operationID).toBe("school")
     expect(await fs.readFile(audit.files.markdown, "utf8")).toContain("final_handoff: attention_required")
+  })
+
+  test("blocks validation stage gates until findings are report-ready", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "validation",
+      status: "running",
+      summary: "Validation is reviewing evidence.",
+      nextActions: ["Validate candidate findings"],
+    })
+    await writeOperationPlan(worktree, {
+      operationID: "school",
+      phases: [
+        {
+          stage: "validation",
+          objective: "Validate candidate weaknesses.",
+          actions: ["Check evidence", "Promote confirmed findings"],
+          successCriteria: ["Confirmed findings cite evidence"],
+          subagents: ["validator"],
+          noSubagents: ["risk acceptance stays with primary operator"],
+        },
+      ],
+      reportingCloseout: [
+        "Run report_lint before final handoff.",
+        "Run report_render to produce final deliverables.",
+        "Run runtime_summary and operation_audit before handoff.",
+      ],
+    })
+    await writeEvidence(worktree, {
+      operationID: "school",
+      evidenceID: "ev-1",
+      title: "Policy export",
+      kind: "file",
+      summary: "MFA policy export.",
+      path: "evidence/raw/policy.json",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "candidate",
+      severity: "high",
+      confidence: 0.6,
+      affectedAssets: ["IdP"],
+      evidence: [],
+      description: "MFA may not be enforced for administrators.",
+    })
+
+    const gate = await buildOperationStageGate(worktree, "school", { stage: "validation" })
+
+    expect(gate.ok).toBe(false)
+    expect(gate.gaps).toContain("validation has no validated or report-ready findings")
+    expect(gate.gaps).toContain("validation has unresolved candidate or needs-validation findings")
+    expect(gate.recommendedTools).toContain("finding_record")
+    expect(JSON.parse(await fs.readFile(gate.files.json, "utf8")).stage).toBe("validation")
+    expect(await fs.readFile(gate.files.markdown, "utf8")).toContain("validation has no validated")
   })
 
   test("derives runtime usage from assistant messages when usage is not provided", async () => {

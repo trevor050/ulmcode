@@ -7,8 +7,10 @@ import { Instance } from "@/project/instance"
 import {
   buildOperationAudit,
   buildOperationResumeBrief,
+  buildOperationStageGate,
   formatOperationAudit,
   formatOperationResumeBrief,
+  formatOperationStageGate,
   formatOperationStatusDashboard,
   listOperationStatuses,
   readOperationStatus,
@@ -21,7 +23,13 @@ export const UlmCommand = cmd({
   command: "ulm",
   describe: "manage ULMCode operations",
   builder: (yargs: Argv) =>
-    yargs.command(UlmListCommand).command(UlmStatusCommand).command(UlmResumeCommand).command(UlmAuditCommand).demandCommand(),
+    yargs
+      .command(UlmListCommand)
+      .command(UlmStatusCommand)
+      .command(UlmResumeCommand)
+      .command(UlmStageGateCommand)
+      .command(UlmAuditCommand)
+      .demandCommand(),
   async handler() {},
 })
 
@@ -178,6 +186,37 @@ export const UlmAuditCommand = effectCmd({
       }),
     ).pipe(Effect.orDie)
     console.log(args.format === "json" ? JSON.stringify(audit, null, 2) : formatOperationAudit(audit))
+  }),
+})
+
+export const UlmStageGateCommand = effectCmd({
+  command: "gate <operationID>",
+  describe: "check whether a ULMCode operation stage can continue or advance",
+  builder: (yargs) =>
+    yargs
+      .positional("operationID", {
+        describe: "operation ID to gate",
+        type: "string",
+        demandOption: true,
+      })
+      .option("stage", {
+        describe: "stage to check, defaults to the checkpoint stage",
+        type: "string",
+        choices: ["intake", "recon", "mapping", "validation", "reporting", "handoff"],
+      })
+      .option("format", {
+        describe: "output format",
+        type: "string",
+        choices: ["brief", "json"],
+        default: "brief",
+      }),
+  handler: Effect.fn("Cli.ulm.gate")(function* (args) {
+    const gate = yield* Effect.tryPromise(() =>
+      buildOperationStageGate(Instance.worktree, args.operationID, {
+        stage: args.stage as any,
+      }),
+    ).pipe(Effect.orDie)
+    console.log(args.format === "json" ? JSON.stringify(gate, null, 2) : formatOperationStageGate(gate))
   }),
 })
 

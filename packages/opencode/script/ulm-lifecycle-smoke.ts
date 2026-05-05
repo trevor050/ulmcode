@@ -5,6 +5,7 @@ import os from "os"
 import path from "path"
 import {
   buildOperationAudit,
+  buildOperationStageGate,
   formatOperationStatusDashboard,
   lintReport,
   readOperationStatus,
@@ -99,6 +100,9 @@ await writeReportOutline(worktree, {
   includeAppendix: true,
 })
 
+const validationGate = await buildOperationStageGate(worktree, operationID, { stage: "validation" })
+assert(validationGate.ok, `validation stage gate failed: ${validationGate.gaps.join("; ")}`)
+
 await writeOperationCheckpoint(worktree, {
   operationID,
   objective: "Authorized school assessment smoke test",
@@ -172,7 +176,9 @@ console.log("ulm_lifecycle_smoke: ok")
 console.log(`operation: ${operationID}`)
 console.log("final_lint: ok")
 console.log("operation_audit: ok")
+console.log("operation_stage_gate: ok")
 console.log(`report.pdf: ${rendered.pdf}`)
 console.log(`runtime-summary.json: ${runtime.json}`)
 console.log(`operation-audit.json: ${audit.files.json}`)
+console.log(`validation-gate.json: ${validationGate.files.json}`)
 console.log(`manifest.json: ${rendered.manifest}`)

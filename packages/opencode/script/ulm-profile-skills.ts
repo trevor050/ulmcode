@@ -11,6 +11,7 @@ const durableTools = [
   "operation_audit",
   "operation_resume",
   "operation_status",
+  "operation_stage_gate",
   "operation_plan",
   "operation_checkpoint",
   "evidence_record",
@@ -100,7 +101,15 @@ const skills = await Promise.all(skillFiles.map(validateSkill))
 const commands = await Promise.all(commandFiles.map(validateCommand))
 const toolCoverage = new Set(skills.flatMap((skill) => skill.tools))
 
-for (const tool of ["operation_audit", "operation_resume", "operation_plan", "evidence_record", "finding_record", "report_lint"]) {
+for (const tool of [
+  "operation_audit",
+  "operation_resume",
+  "operation_stage_gate",
+  "operation_plan",
+  "evidence_record",
+  "finding_record",
+  "report_lint",
+]) {
   if (!toolCoverage.has(tool)) throw new Error(`skill pack never references ${tool}`)
 }
 

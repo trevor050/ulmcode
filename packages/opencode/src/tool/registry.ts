@@ -18,6 +18,7 @@ import { OperationAuditTool } from "./operation_audit"
 import { OperationCheckpointTool } from "./operation_checkpoint"
 import { OperationPlanTool } from "./operation_plan"
 import { OperationResumeTool } from "./operation_resume"
+import { OperationStageGateTool } from "./operation_stage_gate"
 import { OperationStatusTool } from "./operation_status"
 import { EvidenceRecordTool } from "./evidence_record"
 import { FindingRecordTool } from "./finding_record"
@@ -136,6 +137,7 @@ export const layer: Layer.Layer<
     const operationCheckpoint = yield* OperationCheckpointTool
     const operationPlan = yield* OperationPlanTool
     const operationResume = yield* OperationResumeTool
+    const operationStageGate = yield* OperationStageGateTool
     const operationStatus = yield* OperationStatusTool
     const evidenceRecord = yield* EvidenceRecordTool
     const findingRecord = yield* FindingRecordTool
@@ -242,6 +244,7 @@ export const layer: Layer.Layer<
           operationCheckpoint: Tool.init(operationCheckpoint),
           operationPlan: Tool.init(operationPlan),
           operationResume: Tool.init(operationResume),
+          operationStageGate: Tool.init(operationStageGate),
           operationStatus: Tool.init(operationStatus),
           evidenceRecord: Tool.init(evidenceRecord),
           findingRecord: Tool.init(findingRecord),
@@ -277,6 +280,7 @@ export const layer: Layer.Layer<
             tool.operationCheckpoint,
             tool.operationPlan,
             tool.operationResume,
+            tool.operationStageGate,
             tool.operationStatus,
             tool.evidenceRecord,
             tool.findingRecord,
