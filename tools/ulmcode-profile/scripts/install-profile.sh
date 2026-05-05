@@ -6,8 +6,12 @@ PROFILE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 TARGET_DIR="${ULMCODE_CONFIG_DIR:-"$HOME/.config/ulmcode"}"
 
 mkdir -p "$TARGET_DIR"
+mkdir -p "$TARGET_DIR/.opencode"
 rm -rf "$TARGET_DIR/skills"
 cp -R "$PROFILE_DIR/skills" "$TARGET_DIR/skills"
+cp "$PROFILE_DIR/package.json" "$TARGET_DIR/package.json"
+cp "$PROFILE_DIR/oh-my-openagent.jsonc" "$TARGET_DIR/oh-my-openagent.jsonc"
+cp "$PROFILE_DIR/oh-my-openagent.jsonc" "$TARGET_DIR/.opencode/oh-my-openagent.jsonc"
 sed "s#__ULMCODE_PROFILE_DIR__#$TARGET_DIR#g" "$PROFILE_DIR/opencode.json" > "$TARGET_DIR/opencode.json"
 
 cat > "$TARGET_DIR/ulmcode-launch.sh" <<'SH'

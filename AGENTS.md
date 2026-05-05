@@ -116,5 +116,5 @@ const table = sqliteTable("session", {
 - `runtime_summary` writes `.ulmcode/operations/<id>/deliverables/runtime-summary.json` and `.md` for long-run handoff, including model-call split, compaction pressure, repeated fetches, background task state, notes, and canonical artifact paths.
 - `task` supports `background: true`; list recoverable background jobs with `task_list` and poll a returned `task_id` with `task_status` for long-running subagent lanes.
 - Background task metadata is persisted under storage key `background_job/<task_id>` so `task_status` can recover terminal output after a service reload; cancellation must interrupt the captured fiber before/while marking the job cancelled.
-- The bundled isolated profile lives in `tools/ulmcode-profile`; validate it with `tools/ulmcode-profile/test-profile.sh`.
+- The bundled isolated profile lives in `tools/ulmcode-profile`; validate it with `tools/ulmcode-profile/test-profile.sh`. Its installer copies compact skills, plugin `package.json`, and both root/`.opencode` Oh My OpenAgent routing files.
 - Invoking the package as `ulmcode` sets `OPENCODE_APP_NAME=ulmcode`; core global paths then use the `ulmcode` app name.

@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "@khalilgharbaoui/opencode-claude-code-plugin": "^0.2.2",
+    "@opencode-ai/plugin": "1.14.33",
+    "oh-my-openagent": "^3.17.12",
+    "oh-my-opencode": "github:code-yeongyu/oh-my-openagent"
+  }
+}

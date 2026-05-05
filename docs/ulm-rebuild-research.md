@@ -30,17 +30,31 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `.ulmcode/operations/<operation-id>/` is the canonical operation artifact root.
 - `operation_checkpoint` records stage gates and resumable heartbeats.
 - `operation_status` restores context after interruptions and compaction.
+- `operation_plan` records execution-ready phase order, success criteria, subagent/no-subagent policy, assumptions, and report closeout.
+- `evidence_record` writes durable evidence JSON plus optional raw text, so findings can cite recorded artifacts instead of chat-only claims.
 - `finding_record` enforces evidence before validated/report-ready findings.
 - `report_outline` gives report writers a page/section budget so final reports do not become sparse.
-- `report_lint` checks report readiness and can enforce report presence and minimum density.
-- `task` supports `background: true`; `task_status` polls running subagents.
-- `tools/ulmcode-profile` provides an isolated K-12 pentest profile and compact skill pack.
+- `report_lint` checks report readiness, report density, evidence refs, final handoff artifacts, and `finalHandoff=true`.
+- `report_render` publishes final HTML, lightweight PDF, README, manifest, evidence index, state counts, and non-reportable finding IDs.
+- `runtime_summary` records model-call split, compaction pressure, repeated fetches, background task state, notes, and canonical artifact paths.
+- `task` supports `background: true`; `task_status` polls running subagents; `task_list` recovers persisted background job metadata.
+- `tools/ulmcode-profile` provides an isolated K-12 pentest profile, compact skill pack, plugin dependency manifest, and Oh My OpenAgent routing file.
+
+## Current Local OpenCode Inventory
+
+Source checked on 2026-05-05 from `~/.config/opencode` without copying secrets.
+
+- Installed plugin deps: `oh-my-openagent`, legacy `oh-my-opencode`, `@khalilgharbaoui/opencode-claude-code-plugin`, and `@opencode-ai/plugin`.
+- Configured MCPs: Playwright local MCP, disabled Vercel remote MCP, disabled Context7 remote MCP.
+- Configured LAN provider: LM Studio at `http://192.168.1.151:1234/v1` with Qwen/Qwopus local models.
+- Custom global commands: `btw`, `commit-msg`, `explain-diff`, `frontend-polish`, `handoff`, `review`, `ship`, `test-plan`.
+- OMO/custom-agent doctrine: GPT-5.5 for orchestration/backend/debug/review, GPT-5.4 Mini Fast for repo/docs/quick lanes, Kimi for frontend build/taste, Gemini for product/taste/writing, Claude Sonnet for sparse human-touch review, GLM as fallback orchestrator.
+- Important current local rule: OpenCode markdown agents are for manual `@agent` use; automated Feature Forge style work should route through OMO category aliases.
 
 ## Not Adopted Yet
 
-- Persistent background jobs across process restart. Current jobs are in-process; durable restart recovery should persist job metadata and child session IDs into operation artifacts.
+- True background job execution resume across process restart. Metadata is persisted and listable, but in-flight fibers are not restarted after process death.
 - Cost/token rollups by operation and subagent.
 - TUI operation dashboard.
-- HTML/PDF final renderer.
 - Lab replay harness for intentionally vulnerable targets.
-- MCP/plugin vendoring beyond profile-level adoption.
+- Full vendored plugin source. The isolated profile records plugin dependencies and routing, but does not vendor third-party plugin code into this repo.
