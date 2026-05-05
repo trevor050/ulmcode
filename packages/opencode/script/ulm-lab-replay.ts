@@ -34,6 +34,7 @@ type LabManifest = {
   report?: {
     targetPages?: number
     minOutlineWordsPerPage?: number
+    minOutlineSectionWords?: number
   }
   expected?: {
     reportableFindings?: number
@@ -124,14 +125,18 @@ const runtime = await writeRuntimeSummary(worktree, {
 const finalLint = await lintReport(worktree, lab.operationID, {
   finalHandoff: true,
   requireOutlineBudget: true,
+  requireOutlineSections: true,
   minOutlineWordsPerPage: lab.report?.minOutlineWordsPerPage ?? 80,
+  minOutlineSectionWords: lab.report?.minOutlineSectionWords ?? 15,
 })
 assert(finalLint.ok, `final handoff lint failed: ${finalLint.gaps.join("; ")}`)
 
 const audit = await buildOperationAudit(worktree, lab.operationID, {
   finalHandoff: true,
   requireOutlineBudget: true,
+  requireOutlineSections: true,
   minOutlineWordsPerPage: lab.report?.minOutlineWordsPerPage ?? 80,
+  minOutlineSectionWords: lab.report?.minOutlineSectionWords ?? 15,
 })
 assert(audit.ok, `operation audit failed: ${audit.blockers.join("; ")}`)
 

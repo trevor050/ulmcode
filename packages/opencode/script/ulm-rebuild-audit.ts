@@ -169,6 +169,12 @@ async function auditProfileRuntime() {
 }
 
 async function auditLabCatalog() {
+  const labReplay = await read("packages/opencode/script/ulm-lab-replay.ts")
+  requireText("packages/opencode/script/ulm-lab-replay.ts", labReplay, [
+    "requireOutlineBudget: true",
+    "requireOutlineSections: true",
+    "minOutlineSectionWords",
+  ])
   const labs = await labManifestIDs()
   for (const id of [
     "k12-login-mfa-gap",

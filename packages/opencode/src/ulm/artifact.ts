@@ -2103,10 +2103,168 @@ export async function lintReport(
   }
 }
 
+function reportOutlineTitles(outline: string | undefined) {
+  const titles = outlineSectionBudgets(outline).map((section) => section.title)
+  return titles.length
+    ? titles
+    : [
+        "Executive Summary",
+        "Scope, Authorization, and Methodology",
+        "Findings Detail",
+        "Risk Register and Prioritized Roadmap",
+        "Validation Limits and Known Unknowns",
+        "Evidence Map",
+      ]
+}
+
+function renderEvidenceRows(evidence: EvidenceRecord[]) {
+  return evidence.length
+    ? evidence
+        .map(
+          (item) =>
+            `<tr><td>${escapeHtml(item.evidenceID)}</td><td>${escapeHtml(item.kind)}</td><td>${escapeHtml(
+              item.title,
+            )}</td><td>${escapeHtml(item.path ?? "")}</td><td>${escapeHtml(item.summary)}</td></tr>`,
+        )
+        .join("\n")
+    : '<tr><td colspan="5">No evidence records were recorded.</td></tr>'
+}
+
+function renderFindingRows(reportable: FindingRecord[]) {
+  return reportable.length
+    ? reportable
+        .map(
+          (finding) =>
+            `<tr><td>${escapeHtml(finding.findingID)}</td><td>${escapeHtml(finding.severity)}</td><td>${escapeHtml(
+              finding.title,
+            )}</td><td>${escapeHtml(finding.state)}</td><td>${escapeHtml(
+              finding.evidence.map((item) => item.path ?? item.id).join(", "),
+            )}</td></tr>`,
+        )
+        .join("\n")
+    : '<tr><td colspan="5">No validated or report-ready findings were recorded.</td></tr>'
+}
+
+function renderFindingSections(reportable: FindingRecord[]) {
+  return reportable.length
+    ? reportable
+        .map(
+          (finding) => `<section class="finding">
+    <h3>${escapeHtml(finding.title)}</h3>
+    <p><strong>Severity:</strong> ${escapeHtml(finding.severity)} | <strong>Confidence:</strong> ${finding.confidence}</p>
+    <p><strong>Affected Assets:</strong> ${escapeHtml(finding.affectedAssets.join(", "))}</p>
+    <p><strong>Description:</strong> ${escapeHtml(finding.description)}</p>
+    <p><strong>Impact:</strong> ${escapeHtml(finding.impact ?? "Not recorded.")}</p>
+    <p><strong>Remediation:</strong> ${escapeHtml(finding.remediation ?? "Not recorded.")}</p>
+    <p><strong>Evidence:</strong> ${escapeHtml(finding.evidence.map((item) => item.path ?? item.id).join(", "))}</p>
+  </section>`,
+        )
+        .join("\n")
+    : "<p>No validated or report-ready findings were recorded.</p>"
+}
+
+function renderReportSections(input: {
+  outline: string | undefined
+  operation: OperationRecord | undefined
+  plan: OperationPlanRecord | undefined
+  reportable: FindingRecord[]
+  nonReportable: FindingRecord[]
+  evidence: EvidenceRecord[]
+  counts: Record<FindingState, number>
+}) {
+  const assets = [...new Set(input.reportable.flatMap((finding) => finding.affectedAssets))].sort()
+  const evidenceKinds = [...new Set(input.evidence.map((item) => item.kind))].sort()
+  return reportOutlineTitles(input.outline)
+    .map((title) => {
+      const normalized = normalizeSectionTitle(title)
+      if (normalized.includes("executive summary")) {
+        return `<h2>${escapeHtml(title)}</h2>
+  <p>${escapeHtml(input.operation?.summary ?? "No operation summary has been recorded.")}</p>
+  <p>This handoff contains ${input.reportable.length} report-ready findings, ${input.evidence.length} evidence records, and ${input.nonReportable.length} retained non-reportable findings so reviewers can separate confirmed risk from unresolved or rejected observations.</p>`
+      }
+      if (normalized.includes("scope") && normalized.includes("methodology")) {
+        return `<h2>${escapeHtml(title)}</h2>
+  <p>${escapeHtml(input.operation?.objective ?? "No objective has been recorded.")}</p>
+  <p>Testing followed the recorded operation plan, preserved raw support through evidence records, promoted only evidence-backed findings, and used stage, lint, render, runtime, and audit gates before handoff.</p>
+  <p>Assumptions: ${escapeHtml(input.plan?.assumptions?.join("; ") || "No explicit assumptions were recorded.")}</p>`
+      }
+      if (normalized.includes("environment overview")) {
+        return `<h2>${escapeHtml(title)}</h2>
+  <p>Recorded affected assets include ${escapeHtml(assets.join(", ") || "none recorded")}. Evidence kinds represented in the ledger include ${escapeHtml(evidenceKinds.join(", ") || "none recorded")}.</p>
+  <p>The environment overview is intentionally limited to operation artifacts and synthetic evidence available at render time, so unverified systems are not invented in the client deliverable.</p>`
+      }
+      if (normalized.includes("attack path")) {
+        return `<h2>${escapeHtml(title)}</h2>
+  <p>The confirmed attack narrative is derived from report-ready findings only: ${escapeHtml(
+    input.reportable.map((finding) => `${finding.findingID}: ${finding.description}`).join(" ") ||
+      "no report-ready attack path was recorded",
+  )}</p>
+  <p>Rejected and candidate observations are retained separately so the report does not overstate exploitability or imply validation that did not happen.</p>`
+      }
+      if (normalized.includes("findings detail")) {
+        return `<h2>${escapeHtml(title)}</h2>
+  <p>Each detailed finding below includes severity, confidence, affected assets, description, impact, remediation, and evidence references from the durable operation ledger.</p>
+  ${renderFindingSections(input.reportable)}`
+      }
+      if (normalized.includes("risk register") || normalized.includes("roadmap")) {
+        return `<h2>${escapeHtml(title)}</h2>
+  <p>The prioritized remediation roadmap should start with critical and high severity report-ready findings, then address medium and low items based on affected assets, exploitability, and operational owner availability.</p>
+  <table>
+    <thead><tr><th>ID</th><th>Severity</th><th>Title</th><th>State</th><th>Evidence</th></tr></thead>
+    <tbody>${renderFindingRows(input.reportable)}</tbody>
+  </table>`
+      }
+      if (normalized.includes("validation limits") || normalized.includes("known unknowns")) {
+        return `<h2>${escapeHtml(title)}</h2>
+  <p>Validation limits are represented by unresolved or rejected findings, recorded blockers, and missing evidence. Current blockers: ${escapeHtml(
+    input.operation?.blockers?.join("; ") || "No blockers recorded.",
+  )}</p>
+  <table>
+    <thead><tr><th>ID</th><th>State</th><th>Severity</th><th>Title</th><th>Reason Retained</th></tr></thead>
+    <tbody>${
+      input.nonReportable.length
+        ? input.nonReportable
+            .map(
+              (finding) =>
+                `<tr><td>${escapeHtml(finding.findingID)}</td><td>${escapeHtml(finding.state)}</td><td>${escapeHtml(
+                  finding.severity,
+                )}</td><td>${escapeHtml(
+                  finding.title,
+                )}</td><td>Not promoted to validated/report-ready state at handoff.</td></tr>`,
+            )
+            .join("\n")
+        : '<tr><td colspan="5">No rejected, candidate, or needs-validation findings were recorded.</td></tr>'
+    }</tbody>
+  </table>`
+      }
+      if (normalized.includes("evidence map")) {
+        return `<h2>${escapeHtml(title)}</h2>
+  <p>The Evidence Index maps report claims back to stored evidence identifiers and paths, keeping the handoff reviewable after context compaction or process restart.</p>
+  <table>
+    <thead><tr><th>ID</th><th>Kind</th><th>Title</th><th>Path</th><th>Summary</th></tr></thead>
+    <tbody>${renderEvidenceRows(input.evidence)}</tbody>
+  </table>`
+      }
+      if (normalized.includes("appendix") || normalized.includes("raw evidence")) {
+        return `<h2>${escapeHtml(title)}</h2>
+  <p>The raw evidence appendix preserves command outputs, HTTP responses, files, screenshots, notes, and logs that support the report. Reviewers should use these paths to verify each claim before remediation planning.</p>
+  <table>
+    <thead><tr><th>ID</th><th>Kind</th><th>Title</th><th>Path</th><th>Summary</th></tr></thead>
+    <tbody>${renderEvidenceRows(input.evidence)}</tbody>
+  </table>`
+      }
+      return `<h2>${escapeHtml(title)}</h2>
+  <p>This section is reserved by the report outline. The current render uses available operation summary, findings, evidence, blockers, and runtime artifacts to avoid inventing details beyond the durable ledger.</p>`
+    })
+    .join("\n")
+}
+
 export async function renderReport(worktree: string, input: ReportRenderInput): Promise<ReportRenderResult> {
   const operationID = slug(input.operationID, "operation")
   const root = operationPath(worktree, operationID)
   const operation = await readJson<OperationRecord>(path.join(root, "operation.json"))
+  const plan = await readJson<OperationPlanRecord>(path.join(root, "plans", "operation-plan.json"))
+  const outline = await readText(path.join(root, "reports", "report-outline.md"))
   const findings = await readFindings(root)
   const evidence = await readEvidenceRecords(root)
   const reportable = findings.filter((finding) => finding.state === "report_ready" || finding.state === "validated")
@@ -2135,95 +2293,12 @@ export async function renderReport(worktree: string, input: ReportRenderInput): 
 <body>
   <h1>${escapeHtml(title)}</h1>
   <p class="meta">Operation: ${escapeHtml(operationID)} | Stage: ${escapeHtml(operation?.stage ?? "unknown")} | Status: ${escapeHtml(operation?.status ?? "unknown")}</p>
-  <h2>Executive Summary</h2>
-  <p>${escapeHtml(operation?.summary ?? "No operation summary has been recorded.")}</p>
-  <h2>Scope And Methodology</h2>
-  <p>${escapeHtml(operation?.objective ?? "No objective has been recorded.")}</p>
-  <h2>Findings Summary</h2>
-  <table>
-    <thead><tr><th>ID</th><th>Severity</th><th>Title</th><th>State</th><th>Evidence</th></tr></thead>
-    <tbody>
-      ${
-        reportable.length
-          ? reportable
-              .map(
-                (finding) =>
-                  `<tr><td>${escapeHtml(finding.findingID)}</td><td>${escapeHtml(finding.severity)}</td><td>${escapeHtml(
-                    finding.title,
-                  )}</td><td>${escapeHtml(finding.state)}</td><td>${escapeHtml(
-                    finding.evidence.map((item) => item.path ?? item.id).join(", "),
-                  )}</td></tr>`,
-              )
-              .join("\n")
-          : '<tr><td colspan="5">No validated or report-ready findings were recorded.</td></tr>'
-      }
-    </tbody>
-  </table>
   <h2>Finding State Counts</h2>
   <table>
     <thead><tr><th>Candidate</th><th>Needs Validation</th><th>Validated</th><th>Report Ready</th><th>Rejected</th></tr></thead>
     <tbody><tr><td>${counts.candidate}</td><td>${counts.needs_validation}</td><td>${counts.validated}</td><td>${counts.report_ready}</td><td>${counts.rejected}</td></tr></tbody>
   </table>
-  <h2>Detailed Findings</h2>
-  ${
-    reportable.length
-      ? reportable
-          .map(
-            (finding) => `<section class="finding">
-    <h3>${escapeHtml(finding.title)}</h3>
-    <p><strong>Severity:</strong> ${escapeHtml(finding.severity)} | <strong>Confidence:</strong> ${finding.confidence}</p>
-    <p><strong>Affected Assets:</strong> ${escapeHtml(finding.affectedAssets.join(", "))}</p>
-    <p><strong>Description:</strong> ${escapeHtml(finding.description)}</p>
-    <p><strong>Impact:</strong> ${escapeHtml(finding.impact ?? "Not recorded.")}</p>
-    <p><strong>Remediation:</strong> ${escapeHtml(finding.remediation ?? "Not recorded.")}</p>
-    <p><strong>Evidence:</strong> ${escapeHtml(finding.evidence.map((item) => item.path ?? item.id).join(", "))}</p>
-  </section>`,
-          )
-          .join("\n")
-      : "<p>No validated or report-ready findings were recorded.</p>"
-  }
-  <h2>Evidence Index</h2>
-  <table>
-    <thead><tr><th>ID</th><th>Kind</th><th>Title</th><th>Path</th><th>Summary</th></tr></thead>
-    <tbody>
-      ${
-        evidence.length
-          ? evidence
-              .map(
-                (item) =>
-                  `<tr><td>${escapeHtml(item.evidenceID)}</td><td>${escapeHtml(item.kind)}</td><td>${escapeHtml(
-                    item.title,
-                  )}</td><td>${escapeHtml(item.path ?? "")}</td><td>${escapeHtml(item.summary)}</td></tr>`,
-              )
-              .join("\n")
-          : '<tr><td colspan="5">No evidence records were recorded.</td></tr>'
-      }
-    </tbody>
-  </table>
-  <h2>Non-Reportable Findings</h2>
-  <table>
-    <thead><tr><th>ID</th><th>State</th><th>Severity</th><th>Title</th><th>Reason Retained</th></tr></thead>
-    <tbody>
-      ${
-        nonReportable.length
-          ? nonReportable
-              .map(
-                (finding) =>
-                  `<tr><td>${escapeHtml(finding.findingID)}</td><td>${escapeHtml(finding.state)}</td><td>${escapeHtml(
-                    finding.severity,
-                  )}</td><td>${escapeHtml(
-                    finding.title,
-                  )}</td><td>Not promoted to validated/report-ready state at handoff.</td></tr>`,
-              )
-              .join("\n")
-          : '<tr><td colspan="5">No rejected, candidate, or needs-validation findings were recorded.</td></tr>'
-      }
-    </tbody>
-  </table>
-  <h2>Known Unknowns And Blockers</h2>
-  <ul>${(operation?.blockers?.length ? operation.blockers : ["No blockers recorded."])
-    .map((item) => `<li>${escapeHtml(item)}</li>`)
-    .join("")}</ul>
+  ${renderReportSections({ outline, operation, plan, reportable, nonReportable, evidence, counts })}
 </body>
 </html>
 `

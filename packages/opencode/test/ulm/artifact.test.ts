@@ -597,6 +597,63 @@ describe("ULM artifact ledger", () => {
     expect(handoffLint.ok).toBe(true)
   })
 
+  test("rendered reports satisfy outline section lint", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "handoff",
+      status: "complete",
+      summary: "Testing identified one report-ready finding.",
+    })
+    await writeOperationPlan(worktree, {
+      operationID: "school",
+      assumptions: ["Testing is authorized."],
+      phases: [
+        {
+          stage: "reporting",
+          objective: "Finalize report.",
+          actions: ["Render deliverables"],
+          successCriteria: ["Manifest includes handoff artifacts"],
+          subagents: ["report-writer"],
+          noSubagents: ["risk acceptance"],
+        },
+      ],
+      reportingCloseout: ["Run report_lint", "Run report_render", "Run runtime_summary"],
+    })
+    await writeEvidence(worktree, {
+      operationID: "school",
+      evidenceID: "ev-1",
+      title: "IdP policy export",
+      kind: "file",
+      summary: "MFA policy export shows privileged enforcement is optional.",
+      path: "evidence/raw/idp-policy.json",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "report_ready",
+      severity: "high",
+      confidence: 0.9,
+      affectedAssets: ["IdP"],
+      evidence: [{ id: "ev-1", path: "evidence/raw/idp-policy.json" }],
+      description: "MFA is not enforced for administrators.",
+      impact: "Administrator takeover is more likely after password compromise.",
+      remediation: "Require phishing-resistant MFA for privileged accounts.",
+    })
+    await writeReportOutline(worktree, { operationID: "school", targetPages: 4 })
+    await renderReport(worktree, { operationID: "school", title: "Assessment Report" })
+    await writeRuntimeSummary(worktree, { operationID: "school" })
+
+    const lint = await lintReport(worktree, "school", {
+      finalHandoff: true,
+      requireOutlineSections: true,
+      minOutlineSectionWords: 15,
+    })
+
+    expect(lint.ok).toBe(true)
+  })
+
   test("writes runtime summaries for long operation handoff", async () => {
     const worktree = await tmpdir()
     await writeOperationCheckpoint(worktree, {
