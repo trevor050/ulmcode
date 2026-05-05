@@ -12,7 +12,7 @@ The installer writes `~/.config/ulmcode/opencode.json`, copies compact skills, U
 
 `test-profile.sh` also runs the package-level ULM lifecycle smoke command, which creates a synthetic operation, records evidence/finding artifacts, enforces the validation stage gate, renders final HTML/PDF/manifest outputs, writes a runtime summary and operation audit, and requires final handoff lint to pass.
 
-The verifier also runs `bun run --cwd packages/opencode test:ulm-skills` so compact skills and commands stay discoverable, placeholder-free, and wired to durable ULM tools.
+The verifier also runs `bun run --cwd packages/opencode test:ulm-skills` so compact skills and commands stay discoverable, placeholder-free, wired to durable ULM tools, and guarded against model-routing drift.
 
 It also runs the bundled lab replay catalog, proving the manifest-driven replay harness can turn each lab scenario into final ULM artifacts with validation stage gates, final handoff, report-budget lint, outline-section lint, and operation audit gates. The same verifier starts and probes the bundled lab target services, then runs `test:ulm-rebuild-audit` to check that the rebuild evidence checklist is still wired.
 

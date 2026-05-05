@@ -103,7 +103,90 @@ const commandFiles = await walk(commandsRoot, (file) => file.endsWith(".md"))
 const skills = await Promise.all(skillFiles.map(validateSkill))
 const commands = await Promise.all(commandFiles.map(validateCommand))
 const toolCoverage = new Set(skills.flatMap((skill) => skill.tools))
-const opencodeConfig = JSON.parse(await fs.readFile(profileConfig, "utf8")) as { instructions?: string[] }
+type AgentConfig = {
+  model?: string
+  options?: {
+    reasoningEffort?: string
+  }
+}
+
+type ProfileConfig = {
+  model?: string
+  small_model?: string
+  default_agent?: string
+  instructions?: string[]
+  agent?: Record<string, AgentConfig>
+}
+
+type OmoRoute = {
+  model?: string
+  variant?: string
+  reasoningEffort?: string
+}
+
+type OmoConfig = {
+  agents?: Record<string, OmoRoute>
+  categories?: Record<string, OmoRoute>
+}
+
+const opencodeConfig = JSON.parse(await fs.readFile(profileConfig, "utf8")) as ProfileConfig
+const omoConfig = JSON.parse(await fs.readFile(path.join(profileRoot, "oh-my-openagent.jsonc"), "utf8")) as OmoConfig
+
+function assertRoute(file: string, id: string, route: OmoRoute | undefined, expected: OmoRoute) {
+  if (!route) throw new Error(`${file}: missing route ${id}`)
+  for (const [key, value] of Object.entries(expected)) {
+    if (route[key as keyof OmoRoute] !== value) {
+      throw new Error(`${file}: route ${id} expected ${key}=${value}, got ${route[key as keyof OmoRoute] ?? "undefined"}`)
+    }
+  }
+}
+
+function validateRouting() {
+  if (opencodeConfig.model !== "openai/gpt-5.5-fast") throw new Error("profile model must default to GPT-5.5 Fast")
+  if (opencodeConfig.small_model !== "openai/gpt-5.4-mini-fast") throw new Error("profile small_model must use GPT-5.4 Mini Fast")
+  if (opencodeConfig.default_agent !== "pentest") throw new Error("profile default agent must be pentest")
+
+  assertRoute("opencode.json", "pentest", opencodeConfig.agent?.pentest, {
+    model: "openai/gpt-5.5-fast",
+  })
+  assertRoute("opencode.json", "recon", opencodeConfig.agent?.recon, {
+    model: "openai/gpt-5.4-mini-fast",
+  })
+  assertRoute("opencode.json", "evidence", opencodeConfig.agent?.evidence, {
+    model: "openai/gpt-5.4-mini-fast",
+  })
+  assertRoute("opencode.json", "validator", opencodeConfig.agent?.validator, {
+    model: "openai/gpt-5.5-fast",
+  })
+  if (opencodeConfig.agent?.validator?.options?.reasoningEffort !== "xhigh") {
+    throw new Error("opencode.json: validator must use xhigh reasoning")
+  }
+  if (opencodeConfig.agent?.["report-reviewer"]?.options?.reasoningEffort !== "xhigh") {
+    throw new Error("opencode.json: report-reviewer must use xhigh reasoning")
+  }
+
+  assertRoute("oh-my-openagent.jsonc", "quick", omoConfig.categories?.quick, {
+    model: "openai/gpt-5.4-mini-fast",
+  })
+  assertRoute("oh-my-openagent.jsonc", "repo-scout", omoConfig.categories?.["repo-scout"], {
+    model: "openai/gpt-5.4-mini-fast",
+  })
+  assertRoute("oh-my-openagent.jsonc", "validator", omoConfig.categories?.validator, {
+    model: "openai/gpt-5.5-fast",
+    variant: "xhigh",
+    reasoningEffort: "xhigh",
+  })
+  assertRoute("oh-my-openagent.jsonc", "report-reviewer", omoConfig.categories?.["report-reviewer"], {
+    model: "openai/gpt-5.5-fast",
+    variant: "xhigh",
+    reasoningEffort: "xhigh",
+  })
+  assertRoute("oh-my-openagent.jsonc", "xhigh-court", omoConfig.categories?.["xhigh-court"], {
+    model: "openai/gpt-5.5-fast",
+    variant: "xhigh",
+    reasoningEffort: "xhigh",
+  })
+}
 
 if (!opencodeConfig.instructions?.includes("__ULMCODE_PROFILE_DIR__/plugins/shell-strategy/shell_strategy.md")) {
   throw new Error("profile config must load the bundled shell non-interactive strategy")
@@ -145,6 +228,9 @@ for (const tool of [
   if (!toolCoverage.has(tool)) throw new Error(`skill pack never references ${tool}`)
 }
 
+validateRouting()
+
 console.log("ulm_profile_skills: ok")
+console.log("routing: ok")
 console.log(`skills: ${skills.length}`)
 console.log(`commands: ${commands.length}`)
