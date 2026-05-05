@@ -4,15 +4,19 @@ import { Agent } from "../../src/agent/agent"
 import { Config } from "@/config/config"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Session } from "@/session/session"
+import { SessionStatus } from "@/session/status"
 import { MessageV2 } from "../../src/session/message-v2"
 import type { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
+import { TaskStatusTool } from "@/tool/task_status"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
 import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { Bus } from "@/bus"
+import { BackgroundJob } from "@/background/job"
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -29,6 +33,9 @@ const it = testEffect(
     Config.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
     Session.defaultLayer,
+    SessionStatus.defaultLayer,
+    Bus.layer,
+    BackgroundJob.defaultLayer,
     Truncate.defaultLayer,
     ToolRegistry.defaultLayer,
   ),
@@ -80,6 +87,7 @@ function stubOps(opts?: { onPrompt?: (input: SessionPrompt.PromptInput) => void;
         opts?.onPrompt?.(input)
         return reply(input, opts?.text ?? "done")
       }),
+    loop: (input) => Effect.succeed(reply({ sessionID: input.sessionID, parts: [] }, "looped")),
   }
 }
 
@@ -294,6 +302,7 @@ describe("tool.task", () => {
             ready.resolve(input)
             return cancelled.promise
           }).pipe(Effect.as(reply(input, "cancelled"))),
+        loop: (input) => Effect.succeed(reply({ sessionID: input.sessionID, parts: [] }, "looped")),
       }
 
       const fiber = yield* def
@@ -431,5 +440,46 @@ describe("tool.task", () => {
         },
       },
     },
+  )
+
+  it.instance("can launch a task in the background and poll it with task_status", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const task = yield* TaskTool
+      const taskDef = yield* task.init()
+      const status = yield* TaskStatusTool
+      const statusDef = yield* status.init()
+      const jobs = yield* BackgroundJob.Service
+      const promptOps = stubOps({ text: "background complete" })
+      const ctx = {
+        sessionID: chat.id,
+        messageID: assistant.id,
+        agent: "build",
+        abort: new AbortController().signal,
+        extra: { promptOps },
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      }
+
+      const result = yield* taskDef.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          background: true,
+        },
+        ctx,
+      )
+      expect(result.metadata.background).toBe(true)
+      expect(result.output).toContain("state: running")
+
+      const waited = yield* jobs.wait({ id: result.metadata.sessionId })
+      expect(waited.info?.status).toBe("completed")
+
+      const polled = yield* statusDef.execute({ task_id: result.metadata.sessionId }, ctx)
+      expect(polled.output).toContain("state: completed")
+      expect(polled.output).toContain("background complete")
+    }),
   )
 })

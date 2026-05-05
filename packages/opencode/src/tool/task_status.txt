@@ -1,0 +1,3 @@
+Check the status of a task subagent.
+
+Use this after launching `task` with `background: true`, after interruptions, or when resuming a long operation. Set `wait` to true when you need the result before continuing.
