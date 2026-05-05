@@ -10,6 +10,7 @@ import type { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { OperationRecoverTool } from "@/tool/operation_recover"
+import { OperationResumeTool } from "@/tool/operation_resume"
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
 import { TaskListTool } from "@/tool/task_list"
 import { TaskRestartTool } from "@/tool/task_restart"
@@ -914,6 +915,79 @@ describe("tool.task", () => {
       expect(recovered.other?.status).toBe("stale")
       expect(recovered.status.operation?.summary).toContain("Recovered 1 background lane")
       expect(recovered.status.operation?.nextActions).toContain("Poll recovered background lanes with task_status")
+    }),
+  )
+
+  it.instance("operation_resume can auto-recover stale background tasks for one operation", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const sessions = yield* Session.Service
+      const storage = yield* Storage.Service
+      const jobs = yield* BackgroundJob.Service
+      const schoolTask = yield* sessions.create({ parentID: chat.id, title: "school resume lane" })
+      const worktree = (yield* TestInstance).directory
+      yield* Effect.promise(() =>
+        writeOperationCheckpoint(worktree, {
+          operationID: "school",
+          objective: "Resume stale school validation lanes",
+          stage: "validation",
+          status: "running",
+          summary: "Validation lane was running before reload.",
+          nextActions: ["Recover stale validation lane"],
+          activeTasks: [schoolTask.id],
+        }),
+      )
+      yield* Effect.addFinalizer(() => storage.remove(["background_job", schoolTask.id]).pipe(Effect.ignore))
+      yield* jobs.start({
+        id: schoolTask.id,
+        type: "task",
+        title: "school resume lane",
+        metadata: {
+          parentSessionID: chat.id,
+          sessionID: schoolTask.id,
+          subagent: "validator",
+          subagent_type: "validator",
+          description: "school resume lane",
+          prompt: "resume school validation",
+          operationID: "school",
+          worktree,
+        },
+        run: Effect.never,
+      })
+
+      const resumed = yield* Effect.gen(function* () {
+        const resume = yield* OperationResumeTool
+        const resumeDef = yield* resume.init()
+        const jobsAfterReload = yield* BackgroundJob.Service
+        const promptOps = stubOps({ text: "auto-recovered school output" })
+        const result = yield* resumeDef.execute(
+          { operationID: "school", recoverStaleTasks: true },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+        const school = yield* jobsAfterReload.wait({ id: schoolTask.id })
+        const status = yield* Effect.promise(() => readOperationStatus(worktree, "school"))
+        return { result, school, status }
+      }).pipe(Effect.provide(Layer.fresh(BackgroundJob.layer)))
+
+      expect(resumed.result.metadata.operationID).toBe("school")
+      expect(resumed.result.metadata.recovery?.restarted).toBe(1)
+      expect(resumed.result.metadata.recovery?.checkpointUpdated).toBe(true)
+      expect(resumed.result.output).toContain("recovery:")
+      expect(resumed.result.output).toContain(`task_id: ${schoolTask.id}`)
+      expect(resumed.result.output).toContain("# Resume school")
+      expect(resumed.school.info?.status).toBe("completed")
+      expect(resumed.school.info?.output).toBe("auto-recovered school output")
+      expect(resumed.status.operation?.summary).toContain("Recovered 1 background lane during operation resume")
+      expect(resumed.status.operation?.nextActions).toContain("Poll recovered background lanes with task_status")
     }),
   )
 
