@@ -611,11 +611,24 @@ function minutesSince(value: string | undefined, now: Date) {
 function resumeGaps(status: OperationStatusSummary, options: OperationResumeOptions = {}) {
   const gaps: string[] = []
   const operation = status.operation
+  const usage = status.runtime?.usage
+  const costUSD = usage?.costUSD
+  const budgetUSD = usage?.budgetUSD
+  const remainingUSD = usage?.remainingUSD
   const staleAfter = options.staleAfterMinutes
   const now = new Date(options.now ?? Date.now())
   if (!operation) gaps.push("operation checkpoint is missing")
   if (!status.plans.operation) gaps.push("operation plan is missing")
   if (!status.runtimeSummary) gaps.push("runtime summary is missing")
+  if (
+    budgetUSD !== undefined &&
+    costUSD !== undefined &&
+    Number.isFinite(budgetUSD) &&
+    Number.isFinite(costUSD) &&
+    (remainingUSD !== undefined && Number.isFinite(remainingUSD) ? remainingUSD <= 0 : costUSD >= budgetUSD)
+  ) {
+    gaps.push(`runtime budget exhausted: spent $${costUSD} of $${budgetUSD}`)
+  }
   if (operation?.status === "running" && staleAfter !== undefined) {
     const age = minutesSince(operation.time.updated, now)
     if (age !== undefined && age >= staleAfter) {
@@ -646,7 +659,12 @@ function resumeToolRecommendations(status: OperationStatusSummary, gaps: string[
   const background = status.runtime?.backgroundTasks ?? []
   const tools = ["operation_status"]
   if (gaps.includes("operation plan is missing")) tools.push("operation_plan")
-  if (gaps.includes("runtime summary is missing")) tools.push("runtime_summary")
+  if (
+    gaps.includes("runtime summary is missing") ||
+    gaps.some((gap) => gap.startsWith("runtime budget exhausted"))
+  ) {
+    tools.push("runtime_summary")
+  }
   if (gaps.some((gap) => gap.startsWith("operation checkpoint is stale"))) tools.push("operation_checkpoint")
   if (operation?.activeTasks.length || background.length) tools.push("task_list", "task_status")
   if (operation?.stage === "validation") tools.push("evidence_record", "finding_record")

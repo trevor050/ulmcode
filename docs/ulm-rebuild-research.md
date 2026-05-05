@@ -29,7 +29,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 
 - `.ulmcode/operations/<operation-id>/` is the canonical operation artifact root.
 - `operation_checkpoint` records stage gates and resumable heartbeats.
-- `operation_resume` emits a compact post-compaction/restart brief with health gaps, recommended tools, operation-scoped tool hints, active/background tasks, and a continuation prompt before raw JSON. With `staleAfterMinutes`, it also flags stale running checkpoints and stale background jobs before new work starts.
+- `operation_resume` emits a compact post-compaction/restart brief with health gaps, recommended tools, operation-scoped tool hints, active/background tasks, and a continuation prompt before raw JSON. With `staleAfterMinutes`, it flags stale running checkpoints and stale background jobs before new work starts, and it marks exhausted runtime budgets from `runtime_summary` as blocking health gaps.
 - `operation_status` restores context after interruptions and compaction, including runtime budget/model/task rollups when a runtime summary exists. It now emits a compact operator dashboard before the raw JSON payload.
 - `opencode ulm list`, `opencode ulm status <operationID>`, and `opencode ulm resume <operationID>` expose operation discovery, dashboards, and restart briefs directly from the CLI, with JSON output for automation.
 - `operation_plan` records execution-ready phase order, success criteria, subagent/no-subagent policy, assumptions, and report closeout.
@@ -60,7 +60,7 @@ Source checked on 2026-05-05 from `~/.config/opencode` without copying secrets.
 ## Not Adopted Yet
 
 - True automatic background job execution resume across process restart. Metadata is persisted, listable, stale-aware, and restartable with recorded args, but in-flight fibers are not automatically restarted after process death.
-- Full operation-wide cost/token extraction into budgets. `runtime_summary` now derives current-session, child-session, and persisted background-job-session assistant usage, compaction counts, and background job status, but it cannot recover cost/transcript data once the underlying session ledger is missing.
+- Full operation-wide cost/token extraction into budgets. `runtime_summary` now derives current-session, child-session, and persisted background-job-session assistant usage, compaction counts, and background job status, and `operation_resume` flags exhausted recorded budgets; it still cannot recover cost/transcript data once the underlying session ledger is missing.
 - Full interactive TUI operation dashboard. Tool output and `opencode ulm ...` now provide compact dashboards, but there is not yet a dedicated interactive TUI route.
 - Broader vulnerable-target lab catalog. The catalog now has weak-MFA, roster-IDOR, gradebook mass-assignment, storage/config leak, and student-search injection scenarios with Docker Compose support, but still needs reporting-quality cases.
 - Full vendored plugin source. The isolated profile records plugin dependencies and routing, but does not vendor third-party plugin code into this repo.

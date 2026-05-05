@@ -588,6 +588,34 @@ describe("ULM artifact ledger", () => {
     expect(formatOperationResumeBrief(brief)).toContain('"prompt":"resume recon lane"')
   })
 
+  test("marks exhausted operation budgets in resume briefs", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "validation",
+      status: "running",
+      summary: "Validation is still running.",
+      nextActions: ["Continue validation"],
+    })
+    await writeRuntimeSummary(worktree, {
+      operationID: "school",
+      usage: {
+        totalTokens: 12_500,
+        costUSD: 12.4,
+        budgetUSD: 10,
+        remainingUSD: -2.4,
+      },
+    })
+
+    const brief = await buildOperationResumeBrief(worktree, "school")
+
+    expect(brief.health.ready).toBe(false)
+    expect(brief.health.gaps).toContain("runtime budget exhausted: spent $12.4 of $10")
+    expect(brief.recommendedTools).toContain("runtime_summary")
+    expect(formatOperationResumeBrief(brief)).toContain("runtime budget exhausted")
+  })
+
   test("derives runtime usage from assistant messages when usage is not provided", async () => {
     const worktree = await tmpdir()
     await writeOperationCheckpoint(worktree, {
