@@ -16,6 +16,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `#25787` patch boundary preservation matters for evidence-grade diffs.
 - `#25712` subagent cost rollup is a future target for operation budgets.
 - `#25180` subagent auto-compaction is a future target for 20-hour operation stability.
+- `#25805` session retry caps matter for unattended operations; adopted locally as `max_retries`.
 
 ## External Cyber Harness Ideas
 
@@ -42,6 +43,7 @@ Do not port the old swarm, report monolith, stale Zod tool definitions, or sessi
 - `report_render` publishes final HTML, lightweight PDF, README, manifest, evidence index, state counts, and non-reportable finding IDs.
 - `runtime_summary` records model-call split, token/cost budget rollups, per-agent usage, compaction pressure, repeated fetches, background task state, stale-job restart args, notes, and canonical artifact paths. If model/token/cost, compaction, or background task fields are omitted, the tool derives them from the current session ledger, persisted child subagent sessions, persisted background job sessions, and persisted background job ledger; explicit fields remain manual overrides.
 - `task` supports `background: true` plus optional `operationID`; background launches persist prompt/subagent/operation metadata; `task_status` polls running subagents and prints restart args for stale persisted jobs; `task_list` recovers persisted background job metadata, filters by operation, marks restartable orphaned jobs as `stale`, `task_restart` relaunches a specific stale lane from saved metadata, and `operation_recover` restarts all restartable stale lanes for one operation.
+- `max_retries` caps session-level transient model/provider retries. The isolated ULM profile sets it to 8 so 20-hour runs tolerate short provider instability without looping indefinitely.
 - `tools/ulmcode-profile` provides an isolated K-12 pentest profile, compact skill pack, plugin dependency manifest, and Oh My OpenAgent routing file. The isolated profile now carries over the useful local OMO routing lanes: backend architect/builder, frontend taste/builder, product taste pass, sparse human-taste review, test coverage, background concurrency, runtime fallback, auto-resume, aggressive truncation, and tmux layout settings.
 - `bun run --cwd packages/opencode test:ulm-skills` validates the bundled profile skills/commands for frontmatter, placeholder-free content, and durable ULM tool references.
 - `bun run --cwd packages/opencode test:ulm-smoke` exercises a synthetic ULM lifecycle outside the unit-test helpers: operation plan, evidence, finding, report outline, validation stage gate, final render, runtime summary, operation audit, final handoff lint, and status dashboard.

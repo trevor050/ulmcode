@@ -21,6 +21,7 @@ It also runs the bundled lab replay catalog, proving the manifest-driven replay 
 - `pentest` is the default primary agent.
 - `gpt-5.4-mini-fast` handles quick recon and evidence normalization.
 - `gpt-5.5-fast` handles operation control, validation, reporting, and hard reasoning lanes.
+- Session retries are capped with `max_retries: 8` so a long unattended operation can ride out transient provider failures without spinning forever.
 - Skills are allowlisted to the bundled K-12 pentest profile.
 - Playwright and pentest MCP are configured, with Vercel and Context7 present but disabled by default.
 - The plugin stack mirrors the current local OpenCode setup: Oh My OpenAgent routing, the Claude Code bridge plugin, Playwright MCP, optional Vercel/Context7 MCP, and LAN LM Studio fallback models.

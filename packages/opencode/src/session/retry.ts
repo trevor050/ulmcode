@@ -104,6 +104,7 @@ export function retryable(error: Err) {
 }
 
 export function policy(opts: {
+  maxRetries?: number
   parse: (error: unknown) => Err
   set: (input: { attempt: number; message: string; next: number }) => Effect.Effect<void>
 }) {
@@ -112,6 +113,7 @@ export function policy(opts: {
       const error = opts.parse(meta.input)
       const message = retryable(error)
       if (!message) return Cause.done(meta.attempt)
+      if (opts.maxRetries !== undefined && meta.attempt > opts.maxRetries) return Cause.done(meta.attempt)
       return Effect.gen(function* () {
         const wait = delay(meta.attempt, MessageV2.APIError.isInstance(error) ? error : undefined)
         const now = yield* Clock.currentTimeMillis

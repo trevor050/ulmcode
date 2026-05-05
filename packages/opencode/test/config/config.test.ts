@@ -147,6 +147,7 @@ test("loads JSON config file", async () => {
       await writeConfig(dir, {
         $schema: "https://opencode.ai/config.json",
         model: "test/model",
+        max_retries: 3,
         username: "testuser",
       })
     },
@@ -156,6 +157,7 @@ test("loads JSON config file", async () => {
     fn: async () => {
       const config = await load()
       expect(config.model).toBe("test/model")
+      expect(config.max_retries).toBe(3)
       expect(config.username).toBe("testuser")
     },
   })

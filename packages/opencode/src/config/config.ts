@@ -146,6 +146,10 @@ export const Info = Schema.Struct({
   small_model: Schema.optional(ConfigModelID).annotate({
     description: "Small model to use for tasks like title generation in the format of provider/model",
   }),
+  max_retries: Schema.optional(NonNegativeInt).annotate({
+    description:
+      "Maximum retry attempts for transient model/provider failures during a session. Leave unset for the default retry policy.",
+  }),
   default_agent: Schema.optional(Schema.String).annotate({
     description:
       "Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.",

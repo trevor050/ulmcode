@@ -113,6 +113,37 @@ describe("session.retry.delay", () => {
       }),
     ),
   )
+
+  it.live("policy stops after configured max retries", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const error = apiError({ "retry-after-ms": "0" })
+        let runs = 0
+        let statusUpdates = 0
+
+        const result = yield* Effect.gen(function* () {
+          runs++
+          return yield* Effect.fail(error)
+        }).pipe(
+          Effect.retry(
+            SessionRetry.policy({
+              maxRetries: 2,
+              parse: (err) => MessageV2.APIError.Schema.parse(err),
+              set: () =>
+                Effect.sync(() => {
+                  statusUpdates++
+                }),
+            }),
+          ),
+          Effect.exit,
+        )
+
+        expect(result._tag).toBe("Failure")
+        expect(runs).toBe(3)
+        expect(statusUpdates).toBe(2)
+      }),
+    ),
+  )
 })
 
 describe("session.retry.retryable", () => {
