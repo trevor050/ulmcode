@@ -1,6 +1,6 @@
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
-import { createMemo } from "solid-js"
+import { createEffect, createMemo } from "solid-js"
 
 const id = "internal:sidebar-context"
 
@@ -12,7 +12,17 @@ const money = new Intl.NumberFormat("en-US", {
 function View(props: { api: TuiPluginApi; session_id: string }) {
   const theme = () => props.api.theme.current
   const msg = createMemo(() => props.api.state.session.messages(props.session_id))
-  const cost = createMemo(() => msg().reduce((sum, item) => sum + (item.role === "assistant" ? item.cost : 0), 0))
+
+  createEffect(() => {
+    props.api.state.session.refreshCost(props.session_id)
+  })
+
+  const cost = createMemo(() => {
+    const rollup = props.api.state.session.cost(props.session_id)
+    if (rollup) return rollup
+    const self = msg().reduce((sum, item) => sum + (item.role === "assistant" ? item.cost : 0), 0)
+    return { self, subagents: 0, subagent_count: 0 }
+  })
 
   const state = createMemo(() => {
     const last = msg().findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
@@ -32,6 +42,12 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     }
   })
 
+  const costLine = createMemo(() => {
+    const item = cost()
+    if (item.subagent_count > 0) return `${money.format(item.self)} (${money.format(item.subagents)} subagents) spent`
+    return `${money.format(item.self)} spent`
+  })
+
   return (
     <box>
       <text fg={theme().text}>
@@ -39,7 +55,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       </text>
       <text fg={theme().textMuted}>{state().tokens.toLocaleString()} tokens</text>
       <text fg={theme().textMuted}>{state().percent ?? 0}% used</text>
-      <text fg={theme().textMuted}>{money.format(cost())} spent</text>
+      <text fg={theme().textMuted}>{costLine()}</text>
     </box>
   )
 }

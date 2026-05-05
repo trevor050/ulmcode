@@ -285,6 +285,8 @@ export type TuiState = {
     status: (sessionID: string) => SessionStatus | undefined
     permission: (sessionID: string) => ReadonlyArray<PermissionRequest>
     question: (sessionID: string) => ReadonlyArray<QuestionRequest>
+    cost: (sessionID: string) => TuiSessionCost | undefined
+    refreshCost: (sessionID: string) => void
   }
   part: (messageID: string) => ReadonlyArray<Part>
   lsp: () => ReadonlyArray<TuiSidebarLspItem>
@@ -312,6 +314,12 @@ export type TuiSidebarMcpItem = {
   name: string
   status: McpStatus["status"]
   error?: string
+}
+
+export type TuiSessionCost = {
+  readonly self: number
+  readonly subagents: number
+  readonly subagent_count: number
 }
 
 export type TuiSidebarLspItem = Pick<LspStatus, "id" | "root" | "status">
