@@ -442,6 +442,25 @@ function operationPlanMarkdown(record: OperationPlanRecord) {
   ].join("\n")
 }
 
+export function validateOperationPlan(input: OperationPlanInput) {
+  const gaps: string[] = []
+  if (input.phases.length === 0) gaps.push("operation plan requires at least one phase")
+  input.phases.forEach((phase, index) => {
+    const label = `phase ${index + 1}`
+    if (phase.actions.length === 0) gaps.push(`${label} requires at least one action`)
+    if (phase.successCriteria.length === 0) gaps.push(`${label} requires at least one success criterion`)
+    if (phase.subagents.length === 0 && phase.noSubagents.length === 0) {
+      gaps.push(`${label} must state subagent use or no-subagent policy`)
+    }
+  })
+  const closeout = input.reportingCloseout.join("\n")
+  if (!closeout) gaps.push("operation plan requires reporting closeout steps")
+  for (const required of ["report_lint", "report_render", "runtime_summary"]) {
+    if (!closeout.includes(required)) gaps.push(`reporting closeout must include ${required}`)
+  }
+  return gaps
+}
+
 function escapeHtml(input: string) {
   return input
     .replaceAll("&", "&amp;")
@@ -828,8 +847,8 @@ export async function writeOperationPlan(
   worktree: string,
   input: OperationPlanInput,
 ): Promise<OperationPlanResult> {
-  if (input.phases.length === 0) throw new Error("operation plan requires at least one phase")
-  if (input.reportingCloseout.length === 0) throw new Error("operation plan requires reporting closeout steps")
+  const gaps = validateOperationPlan(input)
+  if (gaps.length) throw new Error(gaps.join("; "))
 
   const operationID = slug(input.operationID, "operation")
   const root = operationPath(worktree, operationID)

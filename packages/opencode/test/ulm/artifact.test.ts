@@ -208,7 +208,7 @@ describe("ULM artifact ledger", () => {
           noSubagents: ["risk acceptance"],
         },
       ],
-      reportingCloseout: ["Run report_render"],
+      reportingCloseout: ["Run report_lint", "Run report_render", "Run runtime_summary"],
     })
     await writeEvidence(worktree, {
       operationID: "school",
@@ -310,6 +310,26 @@ describe("ULM artifact ledger", () => {
     expect(await fs.readFile(result.markdown, "utf8")).toContain("authorization decisions stay with primary operator")
     expect(JSON.parse(await fs.readFile(result.json, "utf8")).phases).toHaveLength(2)
     expect((await readOperationStatus(worktree, "school")).plans.operation).toBe(true)
+  })
+
+  test("rejects vague operation plans", async () => {
+    const worktree = await tmpdir()
+    await expect(
+      writeOperationPlan(worktree, {
+        operationID: "school",
+        phases: [
+          {
+            stage: "recon",
+            objective: "Look around.",
+            actions: [],
+            successCriteria: [],
+            subagents: [],
+            noSubagents: [],
+          },
+        ],
+        reportingCloseout: ["Write report."],
+      }),
+    ).rejects.toThrow("phase 1 requires at least one action")
   })
 
   test("lints missing final handoff artifacts when required", async () => {
