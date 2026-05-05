@@ -1,0 +1,167 @@
+{
+  "id": "k12-assignment-submission-impersonation",
+  "operationID": "k12-assignment-submission-impersonation",
+  "objective": "Replay a synthetic authorized K-12 assignment workflow assessment where a student can submit work as another student by changing the object owner.",
+  "assumptions": [
+    "The lab uses synthetic evidence only.",
+    "No real external target is contacted.",
+    "Students, assignments, and submissions are intentionally fake."
+  ],
+  "plan": {
+    "phases": [
+      {
+        "stage": "recon",
+        "objective": "Map assignment submission ownership controls.",
+        "actions": [
+          "Load the synthetic baseline submission for the acting student",
+          "Identify whether the server derives student ownership from the authenticated session or trusts request body fields"
+        ],
+        "successCriteria": [
+          "Baseline ownership behavior is recorded as durable evidence"
+        ],
+        "subagents": [
+          "recon"
+        ],
+        "noSubagents": [
+          "student-impact and disclosure boundaries stay with the primary operator"
+        ]
+      },
+      {
+        "stage": "validation",
+        "objective": "Validate cross-student assignment submission impersonation.",
+        "actions": [
+          "Submit a synthetic assignment as student-4401 while setting studentId to student-4402",
+          "Fetch the target student's submission to confirm state mutation",
+          "Record the missing object-owner authorization control"
+        ],
+        "successCriteria": [
+          "A report-ready finding cites both the forged submit request and resulting target-student submission state"
+        ],
+        "subagents": [
+          "validator",
+          "evidence"
+        ],
+        "noSubagents": [
+          "final exploitability and remediation wording stay with the primary operator"
+        ]
+      },
+      {
+        "stage": "reporting",
+        "objective": "Render final handoff artifacts.",
+        "actions": [
+          "Run report_lint",
+          "Run report_render",
+          "Run runtime_summary"
+        ],
+        "successCriteria": [
+          "Final handoff lint passes"
+        ],
+        "subagents": [
+          "report-writer"
+        ],
+        "noSubagents": [
+          "client-facing delivery approval is manual"
+        ]
+      }
+    ],
+    "reportingCloseout": [
+      "Run report_lint",
+      "Run report_render",
+      "Run runtime_summary"
+    ]
+  },
+  "report": {
+    "targetPages": 3,
+    "minOutlineWordsPerPage": 80
+  },
+  "evidence": [
+    {
+      "evidenceID": "ev-assignment-forged-submit",
+      "title": "Synthetic forged assignment submission accepted",
+      "kind": "http_response",
+      "summary": "A student-authenticated request submitted assignment text for another synthetic student by changing the studentId field.",
+      "url": "http://127.0.0.1/api/assignments/submit",
+      "content": "{\"accepted\":true,\"submission\":{\"studentId\":\"student-4402\",\"assignmentId\":\"essay-7\",\"submittedBy\":\"student-4401\",\"ownershipChecked\":false},\"labFinding\":\"assignment_submission_impersonation\"}"
+    },
+    {
+      "evidenceID": "ev-assignment-target-state",
+      "title": "Synthetic target-student submission changed",
+      "kind": "http_response",
+      "summary": "The target student's assignment record reflected the attacker-controlled submission text after the forged request.",
+      "url": "http://127.0.0.1/api/assignments/submission?studentId=student-4402&assignmentId=essay-7",
+      "content": "{\"studentId\":\"student-4402\",\"assignmentId\":\"essay-7\",\"text\":\"forged peer submission\",\"submittedBy\":\"student-4401\",\"ownershipChecked\":false}"
+    }
+  ],
+  "findings": [
+    {
+      "findingID": "assignment-submission-impersonation",
+      "title": "Assignment submission endpoint trusts client-supplied student ownership",
+      "state": "report_ready",
+      "severity": "high",
+      "confidence": 0.9,
+      "affectedAssets": [
+        "Assignment submission API",
+        "Student work records",
+        "Classroom integrity workflow"
+      ],
+      "evidence": [
+        {
+          "id": "ev-assignment-forged-submit",
+          "path": "evidence/raw/ev-assignment-forged-submit.txt"
+        },
+        {
+          "id": "ev-assignment-target-state",
+          "path": "evidence/raw/ev-assignment-target-state.txt"
+        }
+      ],
+      "description": "The synthetic assignment submission endpoint accepts studentId from the request body and writes to that student's assignment record without confirming it matches the authenticated student.",
+      "impact": "A student account could overwrite or submit work for another student, creating academic integrity, disciplinary, and student-support workflow risk.",
+      "remediation": "Derive student ownership from the authenticated session, reject body-supplied owner fields for student submissions, enforce assignment access checks server-side, and audit attempts to submit for another student."
+    }
+  ],
+  "runtime": {
+    "sessionMessages": [
+      {
+        "role": "assistant",
+        "agent": "pentest",
+        "modelID": "gpt-5.5",
+        "providerID": "openai",
+        "cost": 0.43,
+        "tokens": {
+          "input": 1280,
+          "output": 520,
+          "reasoning": 350,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "role": "assistant",
+        "agent": "validator",
+        "modelID": "gpt-5.4-mini",
+        "providerID": "openai",
+        "cost": 0.13,
+        "tokens": {
+          "input": 660,
+          "output": 300,
+          "reasoning": 120,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      }
+    ]
+  },
+  "expected": {
+    "reportableFindings": 1,
+    "evidence": 2,
+    "dashboardIncludes": [
+      "# k12-assignment-submission-impersonation - handoff/complete",
+      "risk: high",
+      "findings: 1 total"
+    ]
+  }
+}

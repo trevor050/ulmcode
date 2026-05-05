@@ -21,6 +21,9 @@ Bundled labs:
 - `k12-guardian-invite-takeover`: exposed guardian invite code and unauthorized family-portal account linking.
 - `k12-lti-shared-secret-leak`: public LTI shared secret disclosure and forged instructor launch.
 - `k12-sis-webhook-signature-bypass`: unsigned SIS webhook event replay that changes guardian contact records.
+- `k12-assignment-submission-impersonation`: client-supplied student owner lets one student submit work as another.
+- `k12-attendance-bulk-update-csrf`: cross-site attendance bulk update accepted with ambient teacher cookies.
+- `k12-transcript-export-overexposure`: teacher transcript export can request sensitive student fields.
 
 The labs include tiny intentionally weak HTTP services under `service/`. Probe them without Docker:
 
@@ -40,4 +43,7 @@ docker compose -f tools/ulmcode-labs/k12-password-reset-token-leak/docker-compos
 docker compose -f tools/ulmcode-labs/k12-guardian-invite-takeover/docker-compose.yml up --build
 docker compose -f tools/ulmcode-labs/k12-lti-shared-secret-leak/docker-compose.yml up --build
 docker compose -f tools/ulmcode-labs/k12-sis-webhook-signature-bypass/docker-compose.yml up --build
+docker compose -f tools/ulmcode-labs/k12-assignment-submission-impersonation/docker-compose.yml up --build
+docker compose -f tools/ulmcode-labs/k12-attendance-bulk-update-csrf/docker-compose.yml up --build
+docker compose -f tools/ulmcode-labs/k12-transcript-export-overexposure/docker-compose.yml up --build
 ```
