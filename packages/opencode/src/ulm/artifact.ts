@@ -1699,6 +1699,61 @@ async function readReportText(root: string) {
   return undefined
 }
 
+async function readAuthoredReport(root: string) {
+  for (const candidate of [
+    { path: path.join("reports", "report.html"), format: "html" as const },
+    { path: path.join("reports", "report.md"), format: "markdown" as const },
+  ]) {
+    try {
+      return {
+        format: candidate.format,
+        content: await fs.readFile(path.join(root, candidate.path), "utf8"),
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+    }
+  }
+  return undefined
+}
+
+function markdownInline(input: string) {
+  return escapeHtml(input)
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+}
+
+function markdownReportToHtml(input: string) {
+  const blocks: string[] = []
+  let paragraph: string[] = []
+  const flushParagraph = () => {
+    if (!paragraph.length) return
+    blocks.push(`<p>${markdownInline(paragraph.join(" "))}</p>`)
+    paragraph = []
+  }
+  for (const rawLine of input.split(/\r?\n/)) {
+    const line = rawLine.trim()
+    if (!line) {
+      flushParagraph()
+      continue
+    }
+    const heading = /^(#{1,6})\s+(.+)$/.exec(line)
+    if (heading) {
+      flushParagraph()
+      const level = Math.min(3, heading[1]!.length)
+      blocks.push(`<h${level}>${markdownInline(heading[2]!)}</h${level}>`)
+      continue
+    }
+    paragraph.push(line)
+  }
+  flushParagraph()
+  return blocks.join("\n")
+}
+
+function authoredReportBody(input: { format: "html" | "markdown"; content: string }) {
+  if (input.format === "markdown") return markdownReportToHtml(input.content)
+  return /<body[^>]*>([\s\S]*?)<\/body>/i.exec(input.content)?.[1] ?? input.content
+}
+
 function markdownHeadingPattern(value: string) {
   return new RegExp(`^#{1,6}\\s+.*${escapeRegExp(value)}.*$`, "im")
 }
@@ -2303,11 +2358,15 @@ export async function renderReport(worktree: string, input: ReportRenderInput): 
   const outline = await readText(path.join(root, "reports", "report-outline.md"))
   const findings = await readFindings(root)
   const evidence = await readEvidenceRecords(root)
+  const authoredReport = await readAuthoredReport(root)
   const reportable = findings.filter((finding) => finding.state === "report_ready" || finding.state === "validated")
   const nonReportable = findings.filter((finding) => finding.state !== "report_ready" && finding.state !== "validated")
   const counts = findingCounts(findings)
   const title = input.title ?? operation?.objective ?? `ULMCode Operation ${operationID}`
   const finalDir = path.join(root, "deliverables", "final")
+  const reportBody = authoredReport
+    ? authoredReportBody(authoredReport)
+    : renderReportSections({ outline, operation, plan, reportable, nonReportable, evidence, counts })
   const html = `<!doctype html>
 <html>
 <head>
@@ -2334,7 +2393,7 @@ export async function renderReport(worktree: string, input: ReportRenderInput): 
     <thead><tr><th>Candidate</th><th>Needs Validation</th><th>Validated</th><th>Report Ready</th><th>Rejected</th></tr></thead>
     <tbody><tr><td>${counts.candidate}</td><td>${counts.needs_validation}</td><td>${counts.validated}</td><td>${counts.report_ready}</td><td>${counts.rejected}</td></tr></tbody>
   </table>
-  ${renderReportSections({ outline, operation, plan, reportable, nonReportable, evidence, counts })}
+  ${reportBody}
 </body>
 </html>
 `

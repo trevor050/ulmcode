@@ -657,6 +657,70 @@ describe("ULM artifact ledger", () => {
     expect(lint.ok).toBe(true)
   })
 
+  test("rendered reports preserve authored report markdown", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "handoff",
+      status: "complete",
+      summary: "Testing identified one report-ready finding.",
+    })
+    await writeOperationPlan(worktree, {
+      operationID: "school",
+      phases: [
+        {
+          stage: "reporting",
+          objective: "Finalize authored report.",
+          actions: ["Run report_lint", "Run report_render", "Run runtime_summary"],
+          successCriteria: ["Authored report content is preserved"],
+          subagents: ["report-writer"],
+          noSubagents: ["handoff approval"],
+        },
+      ],
+      reportingCloseout: ["Run report_lint", "Run report_render", "Run runtime_summary"],
+    })
+    await writeEvidence(worktree, {
+      operationID: "school",
+      evidenceID: "ev-1",
+      title: "IdP policy export",
+      kind: "file",
+      summary: "MFA policy export.",
+      path: "evidence/raw/idp-policy.json",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "report_ready",
+      severity: "high",
+      confidence: 0.9,
+      affectedAssets: ["IdP"],
+      evidence: [{ id: "ev-1", path: "evidence/raw/idp-policy.json" }],
+      description: "MFA is not enforced for administrators.",
+      impact: "Administrator takeover is more likely after password compromise.",
+      remediation: "Require phishing-resistant MFA for privileged accounts.",
+    })
+    const outline = await writeReportOutline(worktree, { operationID: "school", targetPages: 2 })
+    await fs.writeFile(
+      path.join(outline.root, "reports", "report.md"),
+      [
+        "# Authored Assessment Report",
+        "",
+        "## Custom Risk Narrative",
+        "",
+        "This authored report should survive report_render instead of being replaced by the synthetic template.",
+      ].join("\n"),
+    )
+
+    const result = await renderReport(worktree, { operationID: "school", title: "Assessment Report" })
+    const html = await fs.readFile(result.html, "utf8")
+    const pdf = await fs.readFile(result.pdf, "utf8")
+
+    expect(html).toContain("Custom Risk Narrative")
+    expect(html).toContain("This authored report should survive report_render")
+    expect(pdf).toContain("Custom Risk Narrative")
+  })
+
   test("writes runtime summaries for long operation handoff", async () => {
     const worktree = await tmpdir()
     await writeOperationCheckpoint(worktree, {
