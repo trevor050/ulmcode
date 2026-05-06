@@ -1112,9 +1112,10 @@ git commit -m "feat: run supervisor reviews from ULM scheduler"
 - Modify: `tools/ulmcode-profile/oh-my-openagent.jsonc`
 - Modify: `packages/opencode/src/tool/operation_plan.txt`
 - Modify: `tools/ulmcode-profile/README.md`
+- Modify: `packages/opencode/script/ulm-profile-skills.ts`
 - Test: profile routing tests
 
-- [ ] **Step 1: Inspect current Plannotator config**
+- [x] **Step 1: Inspect current Plannotator config**
 
 ```bash
 rg -n 'plannotator|planner|plan' tools/ulmcode-profile tools/ulmcode-profile/plugins/vendor/oh-my-openagent-3.17.12 -g '*.jsonc' -g '*.md' -g '*.js'
@@ -1122,7 +1123,7 @@ rg -n 'plannotator|planner|plan' tools/ulmcode-profile tools/ulmcode-profile/plu
 
 Expected: confirm current opt-in routing and avoid clobbering native Build/Plan.
 
-- [ ] **Step 2: Add plan critique invocation rules**
+- [x] **Step 2: Add plan critique invocation rules**
 
 Rules:
 
@@ -1130,7 +1131,7 @@ Rules:
 - Plannotator should suggest missing questions, lane gaps, report gaps, and safety/ROE concerns.
 - Native `operation_plan` remains the durable plan writer.
 
-- [ ] **Step 3: Update README**
+- [x] **Step 3: Update README**
 
 Document:
 
@@ -1138,7 +1139,7 @@ Document:
 - how it interacts with OMO.
 - why it does not replace ULM stage gates.
 
-- [ ] **Step 4: Run profile tests**
+- [x] **Step 4: Run profile tests**
 
 ```bash
 bun run --cwd packages/opencode test:ulm-skills
@@ -1146,10 +1147,20 @@ bun run --cwd packages/opencode test:ulm-skills
 
 Expected: pass.
 
-- [ ] **Step 5: Commit**
+Actual:
 
 ```bash
-git add tools/ulmcode-profile/oh-my-openagent.jsonc packages/opencode/src/tool/operation_plan.txt tools/ulmcode-profile/README.md
+cd packages/opencode
+bun run test:ulm-skills
+bun run typecheck
+```
+
+Result: pass.
+
+- [x] **Step 5: Commit**
+
+```bash
+git add tools/ulmcode-profile/oh-my-openagent.jsonc packages/opencode/src/tool/operation_plan.txt tools/ulmcode-profile/README.md packages/opencode/script/ulm-profile-skills.ts docs/superpowers/plans/2026-05-06-ulm-overnight-supervisor.md
 git commit -m "feat: add Plannotator plan critique lane"
 ```
 
@@ -1509,7 +1520,7 @@ Below is the checklist to update as work progresses. The goal is not complete un
 - [x] Task 6: Enforce foreground command discipline for commands expected to exceed two minutes.
 - [x] Task 7: Expand supervised command profiles for overnight discovery.
 - [x] Task 8: Wire supervisor reviews into runtime scheduler/daemon.
-- [ ] Task 9: Integrate Plannotator as plan critic.
+- [x] Task 9: Integrate Plannotator as plan critic.
 - [ ] Task 10: Add compact supervisor/goal/tool-inventory prompt context.
 - [ ] Task 11: Expose supervisor state in CLI/TUI/API surfaces.
 - [ ] Task 12: Add overnight supervisor harness scenario.

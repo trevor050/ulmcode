@@ -10,6 +10,15 @@ For pentest operations, plan depth must match the time budget:
 - 20-36 hours: write a full duration-aware overnight plan with supervisor handoff, orchestrator lane, recovery cadence, reporting closeout, and runtime daemon/scheduler strategy.
 - More than 36 hours: require explicit operator confirmation that the run should continue beyond an overnight window.
 
+For long or overnight operations, run a Plannotator-style critique lane after the plan-plan and before approving the full durable operation plan when that lane is available. The critique must look for:
+
+- missing scope, authorization, credential, safety, or reporting questions.
+- lane gaps, weak dependencies, missing recovery cadence, and missing supervisor checkpoints.
+- report closeout gaps, including report writer/reviewer, lint, render, runtime summary, and operation audit.
+- ROE, safety, and non-destructive execution concerns.
+
+Plannotator is a critic only. It may recommend questions or changes, but it does not replace native Build/Plan mode, does not replace this `operation_plan` tool, and does not become the durable plan of record.
+
 Pentest plans should include these fields in the plan text even if the JSON schema is still represented as ordered phases:
 
 - `planningMode`: `compact`, `plan-plan`, or `full-duration`
