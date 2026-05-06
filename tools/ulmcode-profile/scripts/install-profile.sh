@@ -33,6 +33,7 @@ set -euo pipefail
 export OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-"$HOME/.config/ulmcode"}"
 export OPENCODE_CONFIG="${OPENCODE_CONFIG:-"$OPENCODE_CONFIG_DIR/opencode.json"}"
 export OPENCODE_DISABLE_PROJECT_CONFIG="${OPENCODE_DISABLE_PROJECT_CONFIG:-1}"
+export OMO_DISABLE_POSTHOG="${OMO_DISABLE_POSTHOG:-1}"
 
 if command -v ulmcode >/dev/null 2>&1; then
   exec ulmcode "$@"

@@ -1,6 +1,6 @@
 ---
 name: k12-compliance-mapping
-description: Map security findings to FERPA/CIS/NIST-style controls, surface coverage gaps, and produce audit-ready evidence traces.
+description: Use for mapping security findings to FERPA/CIS/NIST-style controls, surfacing coverage gaps, and producing audit-ready evidence traces.
 ---
 
 # K-12 Compliance Mapping
@@ -29,3 +29,8 @@ Translate findings into framework-aligned control status with linked evidence.
 - `references/ferpa-control-map.md`
 - `references/cis-control-map.md`
 - `references/audit-evidence-requirements.md`
+
+## Durable ULM Tools
+- Use `operation_status` to read the operation ledger before analysis.
+- Use `evidence_record` for source artifacts and `finding_record` for validated security claims.
+- Use `runtime_summary` for handoff context when work spans sessions.

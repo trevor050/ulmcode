@@ -1,6 +1,6 @@
 ---
 name: k12-hardening-baseline
-description: Run evidence-first baseline hardening reviews for district infrastructure, identify configuration drift, and package prioritized remediation with clear ownership.
+description: Use for evidence-first baseline hardening reviews of district infrastructure, configuration drift analysis, and prioritized remediation packaging.
 ---
 
 # K-12 Hardening Baseline
@@ -29,3 +29,8 @@ Validate current defensive posture against baseline controls and produce remedia
 - `references/windows-cis-checklist.md`
 - `references/linux-cis-checklist.md`
 - `references/mfa-audit-checklist.md`
+
+## Durable ULM Tools
+- Use `operation_status` to read the operation ledger before analysis.
+- Use `evidence_record` for source artifacts and `finding_record` for validated security claims.
+- Use `runtime_summary` for handoff context when work spans sessions.

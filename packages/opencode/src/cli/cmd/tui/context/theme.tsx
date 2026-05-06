@@ -511,10 +511,18 @@ async function getCustomThemes() {
   return result
 }
 
-export function tint(base: RGBA, overlay: RGBA, alpha: number): RGBA {
-  const r = base.r + (overlay.r - base.r) * alpha
-  const g = base.g + (overlay.g - base.g) * alpha
-  const b = base.b + (overlay.b - base.b) * alpha
+function safeRGBA(value: RGBA | undefined, fallback: RGBA) {
+  if (!value) return fallback
+  if (typeof value.r !== "number" || typeof value.g !== "number" || typeof value.b !== "number") return fallback
+  return value
+}
+
+export function tint(base: RGBA, overlay: RGBA | undefined, alpha: number): RGBA {
+  const safeBase = safeRGBA(base, RGBA.fromInts(0, 0, 0))
+  const safeOverlay = safeRGBA(overlay, safeBase)
+  const r = safeBase.r + (safeOverlay.r - safeBase.r) * alpha
+  const g = safeBase.g + (safeOverlay.g - safeBase.g) * alpha
+  const b = safeBase.b + (safeOverlay.b - safeBase.b) * alpha
   return RGBA.fromInts(Math.round(r * 255), Math.round(g * 255), Math.round(b * 255))
 }
 

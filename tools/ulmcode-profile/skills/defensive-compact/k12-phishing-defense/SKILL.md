@@ -1,6 +1,6 @@
 ---
 name: k12-phishing-defense
-description: Analyze phishing simulation outcomes and email defense controls to reduce user-driven breach risk over time.
+description: Use for analyzing phishing simulation outcomes and email defense controls to reduce user-driven breach risk over time.
 ---
 
 # K-12 Phishing Defense
@@ -29,3 +29,8 @@ Turn campaign and email security data into concrete risk-reduction actions.
 - `references/email-auth-validation.md`
 - `references/phishing-campaign-analysis.md`
 - `references/awareness-metrics.md`
+
+## Durable ULM Tools
+- Use `operation_status` to read the operation ledger before analysis.
+- Use `evidence_record` for source artifacts and `finding_record` for validated security claims.
+- Use `runtime_summary` for handoff context when work spans sessions.

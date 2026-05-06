@@ -1,6 +1,6 @@
 ---
 name: k12-incident-response
-description: Guide rapid incident triage, evidence preservation, and timeline reconstruction for high-pressure response events.
+description: Use for rapid incident triage, evidence preservation, and timeline reconstruction during high-pressure response events.
 ---
 
 # K-12 Incident Response
@@ -29,3 +29,8 @@ Move quickly without losing evidence quality or reporting discipline.
 - `references/ir-playbook.md`
 - `references/forensic-artifact-locations.md`
 - `references/chain-of-custody.md`
+
+## Durable ULM Tools
+- Use `operation_status` to read the operation ledger before analysis.
+- Use `evidence_record` for source artifacts and `finding_record` for validated security claims.
+- Use `runtime_summary` for handoff context when work spans sessions.
