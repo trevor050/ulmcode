@@ -20,6 +20,7 @@
     "test:ulm-tool-manifest": "bun run script/ulm-tool-manifest.ts",
     "test:ulm-skills": "bun run script/ulm-profile-skills.ts",
     "test:ulm-smoke": "bun run script/ulm-lifecycle-smoke.ts",
+    "test:ulm-tui-launch": "bun run script/ulm-tui-launch-smoke.ts",
     "ulm:runtime-daemon": "bun run script/ulm-runtime-daemon.ts",
     "ulm:burnin": "bun run script/ulm-burnin.ts",
     "ulm:tool-preflight": "bun run script/ulm-tool-manifest.ts --preflight --operation-id tool-preflight",

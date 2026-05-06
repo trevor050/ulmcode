@@ -71,6 +71,8 @@ test -f "$install_dir/.opencode/commands/feature-forge.md"
 sh -n "$install_dir/ulmcode-launch.sh"
 test -f "$PROFILE_DIR/../../packages/opencode/script/ulm-lifecycle-smoke.ts"
 (cd "$PROFILE_DIR/../../packages/opencode" && bun run test:ulm-smoke >/dev/null)
+test -f "$PROFILE_DIR/../../packages/opencode/script/ulm-tui-launch-smoke.ts"
+(cd "$PROFILE_DIR/../../packages/opencode" && bun run test:ulm-tui-launch -- --timeout-ms=15000 >/dev/null)
 test -f "$PROFILE_DIR/../../packages/opencode/script/ulm-profile-skills.ts"
 (cd "$PROFILE_DIR/../../packages/opencode" && bun run test:ulm-skills >/dev/null)
 test -f "$PROFILE_DIR/../../packages/opencode/script/ulm-tool-manifest.ts"
