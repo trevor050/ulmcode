@@ -456,7 +456,7 @@ git commit -m "fix: continue tool loop on other finish reason"
 - Create: `packages/opencode/test/tool/operation_goal.test.ts`
 - Modify: `packages/opencode/src/tool/registry.ts`
 
-- [ ] **Step 1: Define goal artifact schema in tests**
+- [x] **Step 1: Define goal artifact schema in tests**
 
 Create tests for a goal artifact written to:
 
@@ -488,7 +488,7 @@ Required fields:
 }
 ```
 
-- [ ] **Step 2: Implement `OperationGoal.create`**
+- [x] **Step 2: Implement `OperationGoal.create`**
 
 Rules:
 
@@ -498,7 +498,7 @@ Rules:
 - If an active goal already exists for the operation, return it and require explicit update semantics.
 - Write JSON and Markdown artifacts.
 
-- [ ] **Step 3: Implement `OperationGoal.read`**
+- [x] **Step 3: Implement `OperationGoal.read`**
 
 Rules:
 
@@ -506,7 +506,7 @@ Rules:
 - Return parsed goal with artifact paths when present.
 - Do not infer completion from chat text.
 
-- [ ] **Step 4: Implement `OperationGoal.complete`**
+- [x] **Step 4: Implement `OperationGoal.complete`**
 
 Rules:
 
@@ -518,7 +518,7 @@ Rules:
   - requested handoff stage gate artifact if policy requires it
 - If requirements are missing, write `goals/completion-blockers.json` and return blockers.
 
-- [ ] **Step 5: Add `operation_goal` tool**
+- [x] **Step 5: Add `operation_goal` tool**
 
 Tool actions:
 
@@ -530,19 +530,21 @@ complete
 
 The model may create/read goals. Completion must return blockers unless final artifacts pass.
 
-- [ ] **Step 6: Register the tool**
+- [x] **Step 6: Register the tool**
 
 Modify `packages/opencode/src/tool/registry.ts` using the existing tool registration pattern.
 
-- [ ] **Step 7: Run tests**
+- [x] **Step 7: Run tests**
 
 ```bash
-bun test packages/opencode/test/ulm/operation-goal.test.ts packages/opencode/test/tool/operation_goal.test.ts
+cd packages/opencode
+bun test test/ulm/operation-goal.test.ts test/tool/operation_goal.test.ts
+bun run typecheck
 ```
 
-Expected: pass.
+Expected: pass. Also ran `bun test test/tool/registry.test.ts test/tool/parameters.test.ts`; registry tests passed, and `parameters.test.ts` exposed unrelated pre-existing `task` snapshot drift for `laneID`/`modelRoute`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add packages/opencode/src/ulm/operation-goal.ts packages/opencode/src/tool/operation_goal.ts packages/opencode/src/tool/operation_goal.txt packages/opencode/src/tool/registry.ts packages/opencode/test/ulm/operation-goal.test.ts packages/opencode/test/tool/operation_goal.test.ts
@@ -1476,7 +1478,7 @@ The feature is ready when:
 Below is the checklist to update as work progresses. The goal is not complete until every item is checked and the completion audit maps the original prompt to concrete artifacts.
 
 - [x] Task 1: Fix AI SDK `other` finish-reason handling for tool-loop continuation and TUI final-state rendering.
-- [ ] Task 2: Add persistent operation goals.
+- [x] Task 2: Add persistent operation goals.
 - [ ] Task 3: Add local cybersecurity tool inventory and acquisition guidance.
 - [ ] Task 4: Add duration-aware pentest kickoff and adaptive planning.
 - [ ] Task 5: Add supervisor review engine.

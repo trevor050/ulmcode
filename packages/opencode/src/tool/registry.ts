@@ -17,6 +17,7 @@ import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
 import { OperationAuditTool } from "./operation_audit"
 import { OperationCheckpointTool } from "./operation_checkpoint"
+import { OperationGoalTool } from "./operation_goal"
 import { OperationGovernorTool } from "./operation_governor"
 import { OperationNextTool } from "./operation_next"
 import { OperationPlanTool } from "./operation_plan"
@@ -149,6 +150,7 @@ export const layer: Layer.Layer<
     const skilltool = yield* SkillTool
     const operationAudit = yield* OperationAuditTool
     const operationCheckpoint = yield* OperationCheckpointTool
+    const operationGoal = yield* OperationGoalTool
     const operationGovernor = yield* OperationGovernorTool
     const operationNext = yield* OperationNextTool
     const operationPlan = yield* OperationPlanTool
@@ -269,6 +271,7 @@ export const layer: Layer.Layer<
           skill: Tool.init(skilltool),
           operationAudit: Tool.init(operationAudit),
           operationCheckpoint: Tool.init(operationCheckpoint),
+          operationGoal: Tool.init(operationGoal),
           operationGovernor: Tool.init(operationGovernor),
           operationNext: Tool.init(operationNext),
           operationPlan: Tool.init(operationPlan),
@@ -318,6 +321,7 @@ export const layer: Layer.Layer<
             tool.skill,
             tool.operationAudit,
             tool.operationCheckpoint,
+            tool.operationGoal,
             tool.operationGovernor,
             tool.operationNext,
             tool.operationPlan,
