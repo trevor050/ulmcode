@@ -5,6 +5,7 @@ Last reviewed: 2026-05-05
 This directory is the decision hub for the long-running ULMCode autonomy work. The executable implementation lives in:
 
 - `docs/ulm-autonomy/completion-audit.md` for the current prompt-to-artifact checklist and explicit remaining gaps. It is the anti-bullshit file: green harnesses are not accepted as completion by themselves.
+- `docs/ulm-autonomy/overnight-supervisor.md` for the 20-36 hour supervisor/orchestrator runtime design, command policy, tool inventory, Plannotator role, completion gates, and operator commands.
 - `packages/opencode/src/ulm/artifact.ts` for durable operation state, evidence, findings, reports, runtime summaries, gates, and audits.
 - `packages/opencode/src/tool/operation_*.ts`, `runtime_summary.ts`, `report_lint.ts`, and `report_render.ts` for model-callable operation controls.
 - `packages/opencode/src/tool/task.ts`, `task_status.ts`, `task_list.ts`, and `task_restart.ts` for background subagent lanes.

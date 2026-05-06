@@ -1393,7 +1393,7 @@ git commit -m "test: add overnight supervisor harness coverage"
 - Modify: `tools/ulmcode-profile/README.md`
 - Modify: `AGENTS.md`
 
-- [ ] **Step 1: Write design doc**
+- [x] **Step 1: Write design doc**
 
 Create `docs/ulm-autonomy/overnight-supervisor.md` with:
 
@@ -1408,11 +1408,11 @@ Create `docs/ulm-autonomy/overnight-supervisor.md` with:
 - completion gates.
 - operator commands.
 
-- [ ] **Step 2: Link from autonomy README**
+- [x] **Step 2: Link from autonomy README**
 
 Add one entry to `docs/ulm-autonomy/README.md`.
 
-- [ ] **Step 3: Update profile README**
+- [x] **Step 3: Update profile README**
 
 Document:
 
@@ -1421,7 +1421,7 @@ Document:
 - how to resume after compaction/restart.
 - how to run literal readiness proof.
 
-- [ ] **Step 4: Update AGENTS.md sparingly**
+- [x] **Step 4: Update AGENTS.md sparingly**
 
 Add one compact note:
 
@@ -1429,7 +1429,7 @@ Add one compact note:
 For overnight-supervisor work, read docs/ulm-autonomy/overnight-supervisor.md and docs/superpowers/plans/2026-05-06-ulm-overnight-supervisor.md before editing; this plan tracks the supervisor/goal/tool-inventory rebuild.
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add docs/ulm-autonomy/README.md docs/ulm-autonomy/overnight-supervisor.md tools/ulmcode-profile/README.md AGENTS.md docs/superpowers/plans/2026-05-06-ulm-overnight-supervisor.md
@@ -1564,5 +1564,5 @@ Below is the checklist to update as work progresses. The goal is not complete un
 - [x] Task 10: Add compact supervisor/goal/tool-inventory prompt context.
 - [x] Task 11: Expose supervisor state in CLI/TUI/API surfaces.
 - [x] Task 12: Add overnight supervisor harness scenario.
-- [ ] Task 13: Update autonomy/profile/agent documentation.
+- [x] Task 13: Update autonomy/profile/agent documentation.
 - [ ] Task 14: Run final verification ladder and completion audit.
