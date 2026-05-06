@@ -293,6 +293,138 @@
       "hardTimeoutSeconds": 10800,
       "restartable": false,
       "artifacts": ["evidence/raw/zap.json", "evidence/raw/zap.html"]
+    },
+    {
+      "id": "icmp-sweep",
+      "tool": "nmap",
+      "safety": "non_destructive",
+      "template": "nmap -sn -oA {outputPrefix} {target}",
+      "heartbeatSeconds": 120,
+      "idleTimeoutSeconds": 900,
+      "hardTimeoutSeconds": 14400,
+      "restartable": true,
+      "artifacts": ["evidence/raw/icmp-sweep.nmap", "evidence/raw/icmp-sweep.xml"]
+    },
+    {
+      "id": "tcp-top-ports-sweep",
+      "tool": "nmap",
+      "safety": "non_destructive",
+      "template": "nmap --top-ports 1000 --version-light -oA {outputPrefix} {target}",
+      "heartbeatSeconds": 120,
+      "idleTimeoutSeconds": 1200,
+      "hardTimeoutSeconds": 21600,
+      "restartable": true,
+      "artifacts": ["evidence/raw/tcp-top-ports.nmap", "evidence/raw/tcp-top-ports.xml"]
+    },
+    {
+      "id": "udp-top-ports-sweep",
+      "tool": "nmap",
+      "safety": "non_destructive",
+      "template": "nmap -sU --top-ports 50 --version-light -oA {outputPrefix} {target}",
+      "heartbeatSeconds": 180,
+      "idleTimeoutSeconds": 1800,
+      "hardTimeoutSeconds": 28800,
+      "restartable": true,
+      "artifacts": ["evidence/raw/udp-top-ports.nmap", "evidence/raw/udp-top-ports.xml"]
+    },
+    {
+      "id": "web-title-screenshot",
+      "tool": "httpx",
+      "safety": "non_destructive",
+      "template": "httpx -l {inputFile} -title -tech-detect -status-code -follow-host-redirects -json -o {outputPrefix}.jsonl",
+      "heartbeatSeconds": 60,
+      "idleTimeoutSeconds": 900,
+      "hardTimeoutSeconds": 7200,
+      "restartable": true,
+      "artifacts": ["evidence/raw/web-title-screenshot.jsonl"]
+    },
+    {
+      "id": "tls-inventory",
+      "tool": "sslscan",
+      "safety": "non_destructive",
+      "template": "sslscan --xml={outputPrefix}.xml {target}",
+      "heartbeatSeconds": 120,
+      "idleTimeoutSeconds": 900,
+      "hardTimeoutSeconds": 7200,
+      "restartable": true,
+      "artifacts": ["evidence/raw/tls-inventory.xml"]
+    },
+    {
+      "id": "dns-zone-discovery",
+      "tool": "dnsx",
+      "safety": "non_destructive",
+      "template": "dnsx -l {inputFile} -a -aaaa -cname -mx -txt -resp -json -o {outputPrefix}.jsonl",
+      "heartbeatSeconds": 60,
+      "idleTimeoutSeconds": 900,
+      "hardTimeoutSeconds": 7200,
+      "restartable": true,
+      "artifacts": ["evidence/raw/dns-zone-discovery.jsonl"]
+    },
+    {
+      "id": "subdomain-discovery",
+      "tool": "subfinder",
+      "safety": "non_destructive",
+      "template": "subfinder -d {domain} -silent -o {outputPrefix}.txt",
+      "heartbeatSeconds": 120,
+      "idleTimeoutSeconds": 1200,
+      "hardTimeoutSeconds": 14400,
+      "restartable": true,
+      "artifacts": ["evidence/raw/subdomain-discovery.txt"]
+    },
+    {
+      "id": "nuclei-low-noise-baseline",
+      "tool": "nuclei",
+      "safety": "non_destructive",
+      "template": "nuclei -l {inputFile} -severity info,low,medium -rate-limit 15 -jsonl -o {outputPrefix}.jsonl",
+      "heartbeatSeconds": 120,
+      "idleTimeoutSeconds": 1200,
+      "hardTimeoutSeconds": 21600,
+      "restartable": true,
+      "artifacts": ["evidence/raw/nuclei-low-noise-baseline.jsonl"]
+    },
+    {
+      "id": "smb-inventory",
+      "tool": "nmap",
+      "safety": "non_destructive",
+      "template": "nmap -p 139,445 --script smb-protocols,smb-os-discovery -oA {outputPrefix} {target}",
+      "heartbeatSeconds": 120,
+      "idleTimeoutSeconds": 1200,
+      "hardTimeoutSeconds": 14400,
+      "restartable": true,
+      "artifacts": ["evidence/raw/smb-inventory.nmap", "evidence/raw/smb-inventory.xml"]
+    },
+    {
+      "id": "ad-lightweight-enum",
+      "tool": "nmap",
+      "safety": "non_destructive",
+      "template": "nmap -p 88,389,445,464,636,3268,3269 --version-light -oA {outputPrefix} {target}",
+      "heartbeatSeconds": 120,
+      "idleTimeoutSeconds": 1200,
+      "hardTimeoutSeconds": 14400,
+      "restartable": true,
+      "artifacts": ["evidence/raw/ad-lightweight-enum.nmap", "evidence/raw/ad-lightweight-enum.xml"]
+    },
+    {
+      "id": "secrets-repo-scan",
+      "tool": "gitleaks",
+      "safety": "non_destructive",
+      "template": "gitleaks detect --source {targetDir} --report-format json --report-path {outputPrefix}.json",
+      "heartbeatSeconds": 120,
+      "idleTimeoutSeconds": 1200,
+      "hardTimeoutSeconds": 14400,
+      "restartable": true,
+      "artifacts": ["evidence/raw/secrets-repo-scan.json"]
+    },
+    {
+      "id": "cloud-storage-baseline",
+      "tool": "trivy",
+      "safety": "non_destructive",
+      "template": "trivy config --format json --output {outputPrefix}.json {targetDir}",
+      "heartbeatSeconds": 120,
+      "idleTimeoutSeconds": 1200,
+      "hardTimeoutSeconds": 14400,
+      "restartable": true,
+      "artifacts": ["evidence/raw/cloud-storage-baseline.json"]
     }
   ]
 }

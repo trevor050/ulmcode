@@ -972,7 +972,7 @@ git commit -m "docs: enforce supervised long command policy"
 - Modify: `tools/ulmcode-profile/tool-manifest.json`
 - Test: `packages/opencode/test/ulm/tool-manifest.test.ts`
 
-- [ ] **Step 1: Add non-destructive command profiles**
+- [x] **Step 1: Add non-destructive command profiles**
 
 Profiles to add:
 
@@ -1003,7 +1003,7 @@ validationCommands
 fallbacks
 ```
 
-- [ ] **Step 2: Keep destructive work out of unattended defaults**
+- [x] **Step 2: Keep destructive work out of unattended defaults**
 
 Rules:
 
@@ -1011,15 +1011,16 @@ Rules:
 - never let scheduler auto-launch destructive profiles.
 - require explicit ROE evidence before authenticated attack lanes.
 
-- [ ] **Step 3: Run manifest validation**
+- [x] **Step 3: Run manifest validation**
 
 ```bash
-bun run --cwd packages/opencode test:ulm-tool-manifest
+cd packages/opencode
+bun run test:ulm-tool-manifest
 ```
 
-Expected: pass with increased profile count.
+Expected: pass with increased profile count. Current validator output is `ulm_tool_manifest: ok (16 tools, 16 profiles)`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tools/ulmcode-profile/tool-manifest.json
@@ -1493,7 +1494,7 @@ Below is the checklist to update as work progresses. The goal is not complete un
 - [x] Task 4: Add duration-aware pentest kickoff and adaptive planning.
 - [x] Task 5: Add supervisor review engine.
 - [x] Task 6: Enforce foreground command discipline for commands expected to exceed two minutes.
-- [ ] Task 7: Expand supervised command profiles for overnight discovery.
+- [x] Task 7: Expand supervised command profiles for overnight discovery.
 - [ ] Task 8: Wire supervisor reviews into runtime scheduler/daemon.
 - [ ] Task 9: Integrate Plannotator as plan critic.
 - [ ] Task 10: Add compact supervisor/goal/tool-inventory prompt context.
