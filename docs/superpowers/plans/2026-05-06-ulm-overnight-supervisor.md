@@ -1,3 +1,17 @@
+This is the users orginal prompt, honor this first:
+--
+
+This one's going to be a massive pass. Okay, the idea is that Elm code, the biggest problem with it is I set it on a raffle loop last night for 20 hours to be able to develop Elm code. I am thoroughly unimpressed after a lot of API usage. Whatever, it's fine. My biggest issue, however, is simple. The model isn't really able to work for 20 hours. It does not have what it needs. First off, let's talk about plugins, PRs, and extensions. The first thing I want you to do is do a huge amount of research online. Look into stuff like Oh My OpenCode. Look at PRs for OpenCode that the community likes but were never merged. Basically, from what I understand, the OpenCode devs are working on making the harness stable and work well, but they're not focused on building out features. Oh My OpenCode will be the base. You're going to take that plugin and install it as one of the main things. There's a million other things, harnesses and stuff like that. You're going to have orchestrator models. You're going to have a supervisor model as well. The supervisor model will manage the task over that 20 or so hours. There's a ton of different things. The end goal is to be able to just leave it overnight for an entire day, sitting on a laptop in a school district. The original version of UlmCode before all these commits, the old version, had a lot of features. One of them, for example, that was extraordinarily useful was The model being able to see what packages existed on the user's device, specifically for cybersecurity-related tasks. The model should also be able to download stuff broadly. This is not going to be open source. I don't know, some people might want this, some people won't. We will want this. It's built for a very small amount of people.
+
+Additionally, now I am focused very hard on giving it what I need. I think a core thing is a plan, a plan that will — my vision, the way I envision this, is Oh My OpenCode is the base. Its ability to delegate sub-agents successfully, the emphasis on parallelizing everything, which is incredibly important. You know, one of the big issues is some commands take over 20 hours on their own. So even if you have two 10-hour commands, some ping sweeps cannot be sped up that much. You need ways to be able to handle that without the model just sitting there and waiting for that command forever. And, you know, if it actually — you should make it clear: you should never run a command that it's waiting for that should take more than two minutes at most. And it should be able to get pinged if it, you know, if it goes past two minutes. The command shouldn't necessarily end, but maybe you should bump it and allow it to continue working while that terminal runs in the background.
+
+I think one of the core things that was lost on this was the penetration test mode kicking off into a plan mode at first. The idea is the model should use dozens of subagents to get an idea of the network, a very basic passive scan. That should be very quick. It should then ask a series of questions. From there, it will create, as stupid as it sounds, the plan plan, which is a plan to make a plan. It will then kick off research due to discovery and get a strong idea of the network. It will collect all its findings, and then it will go ahead and use a version of the report finder, specifically the plan mode, that will go ahead and create the full plan. And the user will specify the amount of time, the amount of time that it should be working. If the user says 36 hours, "I'm leaving you for that long," the plan should be able to cover 36 hours. If the user says less than two hours, then it should skip that and just go straight to a normal plan. The thing is, you know, that massive long plan should be there.
+
+From there, it gets handed off to a supervisor model. I want you to look at what Codex is doing recently on their public open source CLI. They have added slash goal mode. Slash goal mode works incredibly well, but it can be improved. We're going to be taking the ideas of that. The idea is simple: you're going to use a supervisor model. That model will go ahead and it will be watching over the main orchestrator agent that kicks off all of the very many, you know, sub-agents. That orchestrator agent, you know, its job is the same as the current penetration test one, but it should be multiplied excessively. Parallelize as much as humanly possible, doing aggressive parallelization. Plan mode itself should be completely redesigned. This is another great example of where you can do research, where you can take community plugins, or where you could take even private code, you know. For now, any private code, as long as you put the attribution and the license to it, we will sort out all the legal stuff down the line. It's just important to get as much progress as possible.
+
+This is incredibly important to make sure that you do ample amounts of research. There is a plugin called planoutator. It goes ahead and it, you know, makes, allows the model to make more rich, modern plans. You know, depending on the length of the first couple things it should ask, once the model has a good idea of the overall task length, then we'll go ahead and ask more and more questions. As it discovers stuff, it will continuously ask more until it creates its plan.
+
+
 # ULM Overnight Supervisor Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -256,6 +270,8 @@ These already exist and should be used rather than reimplemented:
 6. Orchestrator runs bounded subagents and supervised commands.
 7. Supervisor checks status and final report gates.
 
+Note: The creation of Action Mode (rename build mode) will be added. Similar to action mode in the prerewrite as seen in this repo, action mode is targeted on short term operations. Pentest mode is always long autonomus runs that have a plan. The difference is that compact operation mode doesn't have layers of plans that will take up like 30% of the time budget just to make.
+
 ### Overnight Run, 20-36 Hours
 
 1. Operator starts a pentest run and says they are leaving it for 20-36 hours.
@@ -377,9 +393,11 @@ Likely files to modify:
 
 **Files:**
 - Modify: `packages/opencode/src/session/prompt.ts`
+- Modify: `packages/opencode/src/cli/cmd/tui/routes/session/index.tsx`
+- Modify: `packages/opencode/test/lib/llm-server.ts`
 - Test: `packages/opencode/test/session/prompt.test.ts` or a narrower new test if current tests are too broad
 
-- [ ] **Step 1: Inspect finish reason logic**
+- [x] **Step 1: Inspect finish reason logic**
 
 ```bash
 rg -n 'finishReason|tool-calls|unknown|other' packages/opencode/src/session/prompt.ts packages/opencode/test/session
@@ -387,7 +405,7 @@ rg -n 'finishReason|tool-calls|unknown|other' packages/opencode/src/session/prom
 
 Expected: locate the condition that continues or stops based on finish reason.
 
-- [ ] **Step 2: Write failing regression test**
+- [x] **Step 2: Write failing regression test**
 
 Add a test proving `finishReason: "other"` with tool activity continues the loop instead of finalizing blank text.
 
@@ -397,27 +415,29 @@ Expected test name:
 continues generation when AI SDK reports other after tool activity
 ```
 
-- [ ] **Step 3: Run the focused test**
+- [x] **Step 3: Run the focused test**
 
 ```bash
-bun test packages/opencode/test/session/prompt.test.ts --filter "continues generation when AI SDK reports other after tool activity"
+cd packages/opencode
+bun test test/session/prompt.test.ts -t "loop continues when finish is other after tool activity|loop exits immediately when last assistant has other finish without tool calls"
 ```
 
-Expected: fails before implementation.
+Expected: pass after implementation. The repo blocks root-level test runs through `do-not-run-tests-from-root`; always run this from `packages/opencode`.
 
-- [ ] **Step 4: Implement minimal fix**
+- [x] **Step 4: Implement minimal fix**
 
-Change the finish reason allowlist to treat `"other"` like `"tool-calls"` and `"unknown"` only where the model should continue after tool activity.
+Change the finish reason allowlist so `"other"` is treated like `"tool-calls"` only where the model should continue after tool activity; this matches the AI SDK v6 adapter behavior that replaced the older `"unknown"` path.
 
-- [ ] **Step 5: Run focused and nearby tests**
+- [x] **Step 5: Run focused and nearby tests**
 
 ```bash
-bun test packages/opencode/test/session/prompt.test.ts
+cd packages/opencode
+bun test test/session/prompt.test.ts -t "loop continues when finish is tool-calls|loop continues when finish is stop but assistant has tool parts|loop continues when finish is other after tool activity|loop exits immediately when last assistant has other finish without tool calls"
 ```
 
 Expected: pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add packages/opencode/src/session/prompt.ts packages/opencode/test/session/prompt.test.ts
@@ -1450,3 +1470,22 @@ The feature is ready when:
 - Plannotator can critique long plans without replacing ULM operation artifacts.
 - Final completion requires runtime summary, report render, stage gate, and operation audit.
 - Verification ladder passes or exact residual risks are documented.
+
+## Live Implementation Checklist
+
+Below is the checklist to update as work progresses. The goal is not complete until every item is checked and the completion audit maps the original prompt to concrete artifacts.
+
+- [x] Task 1: Fix AI SDK `other` finish-reason handling for tool-loop continuation and TUI final-state rendering.
+- [ ] Task 2: Add persistent operation goals.
+- [ ] Task 3: Add local cybersecurity tool inventory and acquisition guidance.
+- [ ] Task 4: Add duration-aware pentest kickoff and adaptive planning.
+- [ ] Task 5: Add supervisor review engine.
+- [ ] Task 6: Enforce foreground command discipline for commands expected to exceed two minutes.
+- [ ] Task 7: Expand supervised command profiles for overnight discovery.
+- [ ] Task 8: Wire supervisor reviews into runtime scheduler/daemon.
+- [ ] Task 9: Integrate Plannotator as plan critic.
+- [ ] Task 10: Add compact supervisor/goal/tool-inventory prompt context.
+- [ ] Task 11: Expose supervisor state in CLI/TUI/API surfaces.
+- [ ] Task 12: Add overnight supervisor harness scenario.
+- [ ] Task 13: Update autonomy/profile/agent documentation.
+- [ ] Task 14: Run final verification ladder and completion audit.
