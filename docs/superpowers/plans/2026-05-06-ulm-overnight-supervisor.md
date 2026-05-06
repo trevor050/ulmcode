@@ -912,7 +912,7 @@ git commit -m "feat: add ULM operation supervisor reviews"
 - Modify: `tools/ulmcode-profile/plugins/ulmcode-runtime-guard.js`
 - Test: existing profile skill/runtime guard tests
 
-- [ ] **Step 1: Update shell tool guidance**
+- [x] **Step 1: Update shell tool guidance**
 
 Add policy:
 
@@ -920,7 +920,7 @@ Add policy:
 If a command is expected to run longer than two minutes, do not run it as a foreground shell command. Use command_supervise, task(background=true), operation_schedule/operation_run, runtime_scheduler, or runtime_daemon.
 ```
 
-- [ ] **Step 2: Update `command_supervise` guidance**
+- [x] **Step 2: Update `command_supervise` guidance**
 
 Make it the default for:
 
@@ -931,7 +931,7 @@ Make it the default for:
 - long report/review lanes.
 - any command with uncertain runtime beyond two minutes.
 
-- [ ] **Step 3: Update profile shell strategy**
+- [x] **Step 3: Update profile shell strategy**
 
 Add examples:
 
@@ -940,22 +940,24 @@ bad: nmap -sV -p- 10.0.0.0/16
 good: command_supervise with profileID=service-inventory and operationID/laneID/workUnitID
 ```
 
-- [ ] **Step 4: Update runtime guard plugin**
+- [x] **Step 4: Update runtime guard plugin**
 
 Inject the foreground-command rule into long-run sessions and operation resumes.
 
-- [ ] **Step 5: Add or update tests**
+- [x] **Step 5: Add or update tests**
 
 Run:
 
 ```bash
-bun run --cwd packages/opencode test:ulm-skills
-bun run --cwd packages/opencode test:ulm-rebuild-audit
+cd packages/opencode
+bun run test:ulm-skills
+bun run test:ulm-rebuild-audit
+bun run typecheck
 ```
 
 Expected: pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add packages/opencode/src/tool/shell/shell.txt packages/opencode/src/tool/command_supervise.txt tools/ulmcode-profile/plugins/shell-strategy/shell_strategy.md tools/ulmcode-profile/plugins/ulmcode-runtime-guard.js
@@ -1490,7 +1492,7 @@ Below is the checklist to update as work progresses. The goal is not complete un
 - [x] Task 3: Add local cybersecurity tool inventory and acquisition guidance.
 - [x] Task 4: Add duration-aware pentest kickoff and adaptive planning.
 - [x] Task 5: Add supervisor review engine.
-- [ ] Task 6: Enforce foreground command discipline for commands expected to exceed two minutes.
+- [x] Task 6: Enforce foreground command discipline for commands expected to exceed two minutes.
 - [ ] Task 7: Expand supervised command profiles for overnight discovery.
 - [ ] Task 8: Wire supervisor reviews into runtime scheduler/daemon.
 - [ ] Task 9: Integrate Plannotator as plan critic.

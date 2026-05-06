@@ -207,7 +207,7 @@ if (!opencodeConfig.instructions?.includes("__ULMCODE_PROFILE_DIR__/plugins/shel
 }
 
 const shellStrategy = await fs.readFile(path.join(profileRoot, "plugins", "shell-strategy", "shell_strategy.md"), "utf8")
-for (const needle of ["Shell Non-Interactive Strategy", "GIT_TERMINAL_PROMPT", "Process Continuity"]) {
+for (const needle of ["Shell Non-Interactive Strategy", "GIT_TERMINAL_PROMPT", "Process Continuity", "Long Command Handoff"]) {
   if (!shellStrategy.includes(needle)) throw new Error(`shell strategy is missing ${needle}`)
 }
 
