@@ -20,7 +20,7 @@ export function getPlatformPackage({ platform, arch, libcFamily, packageBaseName
       suffix = "-musl";
     }
   }
-  
+
   // Map platform names: win32 -> windows (for package name)
   const os = platform === "win32" ? "windows" : platform;
   return `${packageBaseName}-${os}-${arch}${suffix}`;

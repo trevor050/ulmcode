@@ -1,4 +1,4 @@
-import type { APICallError, ModelMessage } from "ai"
+import type { ModelMessage } from "ai"
 import { mergeDeep, unique } from "remeda"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import type { JSONSchema } from "zod/v4/core"

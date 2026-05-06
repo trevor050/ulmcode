@@ -60048,11 +60048,11 @@ function renderAgentHeader(agent, model, variant, agentColorsByName) {
   process.stdout.write(`
 `);
   if (modelLabel) {
-    process.stdout.write(`  ${modelLabel}  
+    process.stdout.write(`  ${modelLabel}
 `);
   }
   if (agentLabel) {
-    process.stdout.write(`  ${import_picocolors7.default.dim("\u2514\u2500")} ${agentLabel}  
+    process.stdout.write(`  ${import_picocolors7.default.dim("\u2514\u2500")} ${agentLabel}
 `);
   }
   process.stdout.write(`
@@ -60063,7 +60063,7 @@ function openThinkBlock() {
   ${import_picocolors7.default.dim("\u2503  Thinking:")} `);
 }
 function closeThinkBlock() {
-  process.stdout.write(`  
+  process.stdout.write(`
 
 `);
 }
@@ -60083,7 +60083,7 @@ function writePaddedText(text, atLineStart) {
     }
     if (ch === `
 `) {
-      parts.push(`  
+      parts.push(`
 `);
       lineStart = true;
       continue;
@@ -60138,7 +60138,7 @@ function renderCompletionMetaLine(state, messageID) {
   const model = state.currentModel ?? "unknown-model";
   const variant = state.currentVariant ? ` (${state.currentVariant})` : "";
   process.stdout.write(import_picocolors8.default.dim(`
-  ${displayChars.treeEnd} ${agent} \xB7 ${model}${variant} \xB7 ${elapsedSec}s  
+  ${displayChars.treeEnd} ${agent} \xB7 ${model}${variant} \xB7 ${elapsedSec}s
 `));
   state.completionMetaPrintedByMessageId[messageID] = true;
 }
@@ -60270,7 +60270,7 @@ function handleToolPart(_ctx, part, state) {
     const suffix = header.description ? ` ${import_picocolors8.default.dim(header.description)}` : "";
     state.hasReceivedMeaningfulWork = true;
     process.stdout.write(`
-  ${import_picocolors8.default.cyan(header.icon)} ${import_picocolors8.default.bold(header.title)}${suffix}  
+  ${import_picocolors8.default.cyan(header.icon)} ${import_picocolors8.default.bold(header.title)}${suffix}
 `);
   }
   if (status === "completed" || status === "error") {
@@ -60278,7 +60278,7 @@ function handleToolPart(_ctx, part, state) {
       return;
     const output = part.state?.output || "";
     if (output.trim()) {
-      process.stdout.write(import_picocolors8.default.dim(`  ${displayChars.treeEnd} output  
+      process.stdout.write(import_picocolors8.default.dim(`  ${displayChars.treeEnd} output
 `));
       const padded = writePaddedText(output, true);
       process.stdout.write(import_picocolors8.default.dim(padded.output + (padded.atLineStart ? "" : "  ")));
@@ -60346,7 +60346,7 @@ function handleToolExecute(ctx, payload, state) {
   const suffix = header.description ? ` ${import_picocolors8.default.dim(header.description)}` : "";
   state.hasReceivedMeaningfulWork = true;
   process.stdout.write(`
-  ${import_picocolors8.default.cyan(header.icon)} ${import_picocolors8.default.bold(header.title)}${suffix}  
+  ${import_picocolors8.default.cyan(header.icon)} ${import_picocolors8.default.bold(header.title)}${suffix}
 `);
 }
 function handleToolResult(ctx, payload, state) {
@@ -60360,7 +60360,7 @@ function handleToolResult(ctx, payload, state) {
     return;
   const output = props?.output || "";
   if (output.trim()) {
-    process.stdout.write(import_picocolors8.default.dim(`  ${displayChars.treeEnd} output  
+    process.stdout.write(import_picocolors8.default.dim(`  ${displayChars.treeEnd} output
 `));
     const padded = writePaddedText(output, true);
     process.stdout.write(import_picocolors8.default.dim(padded.output + (padded.atLineStart ? "" : "  ")));
@@ -63479,7 +63479,7 @@ var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def) =>
             })));
           }
         }
-        
+
         if (${id}.value === undefined) {
           if (${k3} in input) {
             newResult[${k3}] = undefined;
@@ -63487,7 +63487,7 @@ var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def) =>
         } else {
           newResult[${k3}] = ${id}.value;
         }
-        
+
       `);
       } else {
         doc.write(`
@@ -63497,7 +63497,7 @@ var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def) =>
             path: iss.path ? [${k3}, ...iss.path] : [${k3}]
           })));
         }
-        
+
         if (${id}.value === undefined) {
           if (${k3} in input) {
             newResult[${k3}] = undefined;
@@ -63505,7 +63505,7 @@ var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def) =>
         } else {
           newResult[${k3}] = ${id}.value;
         }
-        
+
       `);
       }
     }

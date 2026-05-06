@@ -17,7 +17,7 @@ function getLibcFamily() {
   if (process.platform !== "linux") {
     return undefined; // Not needed on non-Linux
   }
-  
+
   try {
     const detectLibc = require("detect-libc");
     return detectLibc.familySync();
@@ -85,7 +85,7 @@ function main() {
   const libcFamily = getLibcFamily();
   const packageBaseName = getPackageBaseName();
   const avx2Supported = supportsAvx2();
-  
+
   let packageCandidates;
   try {
     packageCandidates = getPlatformPackageCandidates({

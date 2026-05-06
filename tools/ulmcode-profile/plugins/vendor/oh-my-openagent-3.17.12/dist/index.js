@@ -6611,7 +6611,7 @@ var require_connection = __commonJS((exports) => {
       }
       if (responseMessage.id === null) {
         if (responseMessage.error) {
-          logger2.error(`Received response message without id: Error is: 
+          logger2.error(`Received response message without id: Error is:
 ${JSON.stringify(responseMessage.error, undefined, 4)}`);
         } else {
           logger2.error(`Received response message without id. No further error information provided.`);
@@ -8448,7 +8448,7 @@ YOUR PLAN OUTPUT MUST FOLLOW THIS EXACT STRUCTURE:
 ## Task Dependency Graph
 [Dependency table - see Section 1]
 
-## Parallel Execution Graph  
+## Parallel Execution Graph
 [Wave structure - see Section 2]
 
 ## Tasks
@@ -75359,15 +75359,15 @@ Each TODO item MUST include:
 - [ ] N. [Task Title]
 
   **What to do**: [Clear steps]
-  
+
   **Dependencies**: [Task numbers this depends on] | None
   **Blocks**: [Task numbers that depend on this]
   **Parallel Group**: Wave N (with Tasks X, Y)
-  
+
   **Recommended Agent Profile**:
   - **Category**: \`[visual-engineering | ultrabrain | artistry | quick | unspecified-low | unspecified-high | writing]\`
   - **Skills**: [\`skill-1\`, \`skill-2\`]
-  
+
   **Acceptance Criteria**: [Verifiable conditions]
 \`\`\`
 
@@ -79629,7 +79629,7 @@ git status
 git diff --staged --stat
 git diff --stat
 
-# Group 2: History context  
+# Group 2: History context
 git log -30 --oneline
 git log -30 --pretty=format:"%s"
 
@@ -79665,7 +79665,7 @@ Count from git log -30:
 
 DECISION:
 - If Korean >= 50% -> KOREAN
-- If English >= 50% -> ENGLISH  
+- If English >= 50% -> ENGLISH
 - If Mixed -> Use MAJORITY language
 \`\`\`
 
@@ -79685,7 +79685,7 @@ plain_count = non-semantic commits with >3 words
 short_count = commits with <=3 words
 
 IF semantic_count >= 15 (50%): STYLE = SEMANTIC
-ELSE IF plain_count >= 15: STYLE = PLAIN  
+ELSE IF plain_count >= 15: STYLE = PLAIN
 ELSE IF short_count >= 10: STYLE = SHORT
 ELSE: STYLE = PLAIN (safe default)
 \`\`\`
@@ -79732,7 +79732,7 @@ BRANCH_STATE:
   has_upstream: true | false
   commits_ahead: N  # Local-only commits
   merge_base: <hash>
-  
+
 REWRITE_SAFETY:
   - If has_upstream AND commits_ahead > 0 AND already pushed:
     -> WARN before force push
@@ -79758,7 +79758,7 @@ ELSE IF all commits are local (not pushed):
   -> Fixup freely, reset if needed, rebase to clean
 
 ELSE IF pushed but not merged:
-  -> STRATEGY = CAREFUL_REWRITE  
+  -> STRATEGY = CAREFUL_REWRITE
   -> Fixup OK but warn about force push
 \`\`\`
 </branch_analysis>
@@ -79862,7 +79862,7 @@ FOR EACH planned commit with 3+ files:
   1. List all files in this commit
   2. Write ONE sentence explaining why they MUST be together
   3. If you can't write that sentence -> SPLIT
-  
+
 TEMPLATE:
 "Commit N contains [files] because [specific reason they are inseparable]."
 
@@ -79870,7 +79870,7 @@ VALID reasons:
   VALID: "implementation file + its direct test file"
   VALID: "type definition + the only file that uses it"
   VALID: "migration + model change (would break without both)"
-  
+
 INVALID reasons (MUST SPLIT instead):
   INVALID: "all related to feature X" (too vague)
   INVALID: "part of the same PR" (not a reason)
@@ -79975,13 +79975,13 @@ CONSIDER RESET & REBUILD when:
   - History is messy (many small fixups already)
   - Commits are not atomic (mixed concerns)
   - Dependency order is wrong
-  
+
 RESET WORKFLOW:
   1. git reset --soft $(git merge-base HEAD main)
   2. All changes now staged
   3. Re-commit in proper atomic units
   4. Clean history from scratch
-  
+
 ONLY IF:
   - All commits are local (not pushed)
   - User explicitly allows OR branch is clearly WIP
@@ -80057,16 +80057,16 @@ git log -1 --oneline
 \`\`\`
 IF style == SEMANTIC AND language == KOREAN:
   -> "feat: \uB85C\uADF8\uC778 \uAE30\uB2A5 \uCD94\uAC00"
-  
+
 IF style == SEMANTIC AND language == ENGLISH:
   -> "feat: add login feature"
-  
+
 IF style == PLAIN AND language == KOREAN:
   -> "\uB85C\uADF8\uC778 \uAE30\uB2A5 \uCD94\uAC00"
-  
+
 IF style == PLAIN AND language == ENGLISH:
   -> "Add login feature"
-  
+
 IF style == SHORT:
   -> "format" / "type fix" / "lint"
 \`\`\`
@@ -80104,7 +80104,7 @@ git log --oneline $(git merge-base HEAD main 2>/dev/null || git merge-base HEAD 
 IF fixup was used AND branch has upstream:
   -> Requires: git push --force-with-lease
   -> WARN user about force push implications
-  
+
 IF only new commits:
   -> Regular: git push
 \`\`\`
@@ -80116,7 +80116,7 @@ COMMIT SUMMARY:
   Strategy: <what was done>
   Commits created: N
   Fixups merged: M
-  
+
 HISTORY:
   <hash1> <message1>
   <hash2> <message2>
@@ -80338,7 +80338,7 @@ DETAILS:
   Author: John Doe <john@example.com>
   Date: 2024-06-15
   Files changed: 3
-  
+
 DIFF EXCERPT (if applicable):
   + def calculate_discount(price, rate):
   +     return price * (1 - rate)
@@ -80364,7 +80364,7 @@ var GIT_MASTER_OVERVIEW_SECTION = `# Git Master Agent
 
 You are a Git expert combining three specializations:
 1. **Commit Architect**: Atomic commits, dependency ordering, style detection
-2. **Rebase Surgeon**: History rewriting, conflict resolution, branch cleanup  
+2. **Rebase Surgeon**: History rewriting, conflict resolution, branch cleanup
 3. **History Archaeologist**: Finding when/where specific changes were introduced
 
 ---
@@ -80686,7 +80686,7 @@ REBASE SUMMARY:
   Commits before: N
   Commits after: M
   Conflicts resolved: K
-  
+
 HISTORY (after rebase):
   <hash1> <message1>
   <hash2> <message2>
@@ -83027,13 +83027,13 @@ Fire ALL of these simultaneously using \`call_omo_agent\`:
 call_omo_agent(
   subagent_type="explore",
   run_in_background=true,
-  prompt="Find all occurrences and definitions of [TARGET]. 
+  prompt="Find all occurrences and definitions of [TARGET].
   Report: file paths, line numbers, usage patterns."
 )
 
 // Agent 2: Find related code
 call_omo_agent(
-  subagent_type="explore", 
+  subagent_type="explore",
   run_in_background=true,
   prompt="Find all code that imports, uses, or depends on [TARGET].
   Report: dependency chains, import graphs."
@@ -83139,8 +83139,8 @@ Based on Phase 1 results, build:
 
 ### Dependency Graph
 \`\`\`
-[TARGET] 
-\u251C\u2500\u2500 imports from: 
+[TARGET]
+\u251C\u2500\u2500 imports from:
 \u2502   \u251C\u2500\u2500 module-a (types)
 \u2502   \u2514\u2500\u2500 module-b (utils)
 \u251C\u2500\u2500 imported by:
@@ -86957,7 +86957,7 @@ function buildRetryGuidance(errorInfo) {
   }
   let guidance = `
  [task CALL FAILED - IMMEDIATE RETRY REQUIRED]
- 
+
  **Error Type**: ${errorInfo.errorType}
  **Fix**: ${pattern.fixHint}
  `;
@@ -86969,7 +86969,7 @@ function buildRetryGuidance(errorInfo) {
   }
   guidance += `
  **Action**: Retry task NOW with corrected parameters.
- 
+
  Example of CORRECT call:
  \`\`\`
  task(
@@ -100659,30 +100659,30 @@ function createDelegateTaskPresentation(options) {
   }).join(`
 `);
   const description = `Spawn agent task with category-based or direct agent selection.
-  
+
   \u26A0\uFE0F  CRITICAL: You MUST provide EITHER category OR subagent_type. Omitting BOTH will FAIL.
-  
+
   **COMMON MISTAKE (DO NOT DO THIS):**
   \`\`\`
   task(description="...", prompt="...", run_in_background=false)  // \u274C FAILS - missing category AND subagent_type
   \`\`\`
-  
+
   **CORRECT - Using category:**
   \`\`\`
   task(category="quick", load_skills=[], description="Fix type error", prompt="...", run_in_background=false)
   \`\`\`
-  
+
   **CORRECT - Using subagent_type:**
   \`\`\`
   task(subagent_type="explore", load_skills=[], description="Find patterns", prompt="...", run_in_background=true)
   \`\`\`
-  
+
   REQUIRED: Provide ONE of:
   - category: For task delegation (uses Sisyphus-Junior with category-optimized model)
   - subagent_type: For direct agent invocation (explore, librarian, oracle, etc.)
-  
+
   **DO NOT provide both.** If category is provided, subagent_type is ignored.
-  
+
   - load_skills: ALWAYS REQUIRED. Pass [] if no skills needed, or ["skill-1", "skill-2"] for category tasks.
   - category: Use predefined category \u2192 Spawns Sisyphus-Junior with category config
     Available categories:
@@ -100691,12 +100691,12 @@ function createDelegateTaskPresentation(options) {
   - run_in_background: REQUIRED. true=async (returns task_id), false=sync (waits). Use background=true ONLY for parallel exploration with 5+ independent queries.
   - task_id: Existing task to continue (from previous task output). Continues the same subagent session with FULL CONTEXT PRESERVED.
   - command: The command that triggered this task (optional, for slash command tracking).
-  
+
   **WHEN TO USE task_id:**
   - Task failed/incomplete \u2192 task_id with "fix: [specific issue]"
   - Need follow-up on previous result \u2192 task_id with additional question
   - Multi-turn conversation with same agent \u2192 always task_id instead of new task
-  
+
   Prompts MUST be in English.`;
   return {
     availableCategories,
@@ -101239,7 +101239,7 @@ import { existsSync as existsSync84, readdirSync as readdirSync24 } from "fs";
 function createTaskList(config2) {
   return tool({
     description: `List all active tasks with summary information.
-    
+
 Returns tasks excluding completed and deleted statuses by default.
 For each task's blockedBy field, filters to only include unresolved (non-completed) blockers.
 Returns summary format: id, subject, status, owner, blockedBy (not full description).`,
@@ -118491,7 +118491,7 @@ Your response has **FAILED** if:
 
 Use the right tool for the job:
 - **Semantic search** (definitions, references): LSP tools
-- **Structural patterns** (function shapes, class structures): ast_grep_search  
+- **Structural patterns** (function shapes, class structures): ast_grep_search
 - **Text patterns** (strings, comments, logs): grep
 - **File patterns** (find by name/extension): glob
 - **History/evolution** (when added, who changed): git commands
@@ -118695,7 +118695,7 @@ Task(
   prompt="Architecture consultation:
   Request: [user's request]
   Current state: [gathered context]
-  
+
   Analyze: options, trade-offs, long-term implications, risks"
 )
 \`\`\`
@@ -120235,7 +120235,7 @@ Issue **REJECT** ONLY when:
 ## Anti-Patterns (DO NOT DO THESE)
 
 \u274C "Task 3 could be clearer about error handling" \u2192 NOT a blocker
-\u274C "Consider adding acceptance criteria for..." \u2192 NOT a blocker  
+\u274C "Consider adding acceptance criteria for..." \u2192 NOT a blocker
 \u274C "The approach in Task 5 might be suboptimal" \u2192 NOT YOUR JOB
 \u274C "Missing documentation for edge case X" \u2192 NOT a blocker unless X is the main case
 \u274C Rejecting because you'd do it differently \u2192 NEVER
@@ -120256,7 +120256,7 @@ Issue **REJECT** ONLY when:
 If REJECT:
 **Blocking Issues** (max 3):
 1. [Specific issue + what needs to change]
-2. [Specific issue + what needs to change]  
+2. [Specific issue + what needs to change]
 3. [Specific issue + what needs to change]
 
 ---
@@ -124652,11 +124652,11 @@ Generate plan to: \`.sisyphus/plans/{name}.md\`
 ## TL;DR
 
 > **Quick Summary**: [1-2 sentences capturing the core objective and approach]
-> 
+>
 > **Deliverables**: [Bullet list of concrete outputs]
 > - [Output 1]
 > - [Output 2]
-> 
+>
 > **Estimated Effort**: [Quick | Short | Medium | Large | XL]
 > **Parallel Execution**: [YES - N waves | NO - sequential]
 > **Critical Path**: [Task X \u2192 Task Y \u2192 Task Z]

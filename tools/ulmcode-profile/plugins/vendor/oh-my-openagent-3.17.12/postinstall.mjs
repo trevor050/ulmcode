@@ -68,7 +68,7 @@ function getLibcFamily() {
   if (process.platform !== "linux") {
     return undefined;
   }
-  
+
   try {
     const detectLibc = require("detect-libc");
     return detectLibc.familySync();

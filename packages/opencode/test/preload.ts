@@ -47,9 +47,6 @@ const testManagedConfigDir = path.join(dir, "managed")
 process.env["OPENCODE_TEST_MANAGED_CONFIG_DIR"] = testManagedConfigDir
 process.env["OPENCODE_DISABLE_DEFAULT_PLUGINS"] = "true"
 
-// Keep dependency install tests reliable: Config.installDependencies() has a defensive delay in prod,
-// but tests should skip it to avoid 5s timeout flakes.
-process.env["OPENCODE_TEST_FAST_DEP_INSTALL"] = "1"
 // Write the cache version file to prevent global/index.ts from clearing the cache
 const cacheDir = path.join(dir, "cache", "opencode")
 await fs.mkdir(cacheDir, { recursive: true })
