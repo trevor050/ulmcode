@@ -70,12 +70,75 @@ function check(input: LiteralRunCheck): LiteralRunCheck {
   return input
 }
 
+const runtimeProofChecks = new Set(["literal-runtime-proof", "literal-work-proof"])
+
 function statusFor(checks: LiteralRunCheck[], literalElapsedSeconds: number | undefined, targetElapsedSeconds: number) {
-  const requiredSetupFailed = checks.some((item) => item.required && item.status === "fail" && item.id !== "literal-runtime-proof")
+  const requiredSetupFailed = checks.some(
+    (item) => item.required && item.status === "fail" && !runtimeProofChecks.has(item.id),
+  )
   if (requiredSetupFailed) return "blocked"
-  if (literalElapsedSeconds !== undefined && literalElapsedSeconds >= targetElapsedSeconds) return "passed"
-  if (checks.some((item) => item.id === "literal-runtime-proof" && item.status === "fail")) return "incomplete"
+  if (
+    literalElapsedSeconds !== undefined &&
+    literalElapsedSeconds >= targetElapsedSeconds &&
+    !checks.some((item) => item.required && item.status === "fail")
+  ) {
+    return "passed"
+  }
+  if (checks.some((item) => runtimeProofChecks.has(item.id) && item.status === "fail")) return "incomplete"
   return "ready"
+}
+
+function countItems(input: unknown) {
+  return Array.isArray(input) ? input.length : 0
+}
+
+function workProofFromHeartbeat(heartbeat: {
+  cycles?: Array<{
+    launchedJobs?: unknown[]
+    launchedCommandJobs?: unknown[]
+    run?: {
+      completedLanes?: unknown[]
+      failedLanes?: unknown[]
+      syncedJobs?: unknown[]
+      completedWorkUnits?: unknown[]
+      failedWorkUnits?: unknown[]
+    }
+  }>
+  recoveredJobs?: unknown[]
+}) {
+  const cycleCounts = (heartbeat.cycles ?? []).reduce(
+    (acc, cycle) => ({
+      modelLaunches: acc.modelLaunches + countItems(cycle.launchedJobs),
+      commandLaunches: acc.commandLaunches + countItems(cycle.launchedCommandJobs),
+      completedLanes: acc.completedLanes + countItems(cycle.run?.completedLanes),
+      failedLanes: acc.failedLanes + countItems(cycle.run?.failedLanes),
+      syncedJobs: acc.syncedJobs + countItems(cycle.run?.syncedJobs),
+      completedWorkUnits: acc.completedWorkUnits + countItems(cycle.run?.completedWorkUnits),
+      failedWorkUnits: acc.failedWorkUnits + countItems(cycle.run?.failedWorkUnits),
+    }),
+    {
+      modelLaunches: 0,
+      commandLaunches: 0,
+      completedLanes: 0,
+      failedLanes: 0,
+      syncedJobs: 0,
+      completedWorkUnits: 0,
+      failedWorkUnits: 0,
+    },
+  )
+  return {
+    ...cycleCounts,
+    recoveries: countItems(heartbeat.recoveredJobs),
+    total:
+      cycleCounts.modelLaunches +
+      cycleCounts.commandLaunches +
+      cycleCounts.completedLanes +
+      cycleCounts.failedLanes +
+      cycleCounts.syncedJobs +
+      cycleCounts.completedWorkUnits +
+      cycleCounts.failedWorkUnits +
+      countItems(heartbeat.recoveredJobs),
+  }
 }
 
 function formatMarkdown(result: LiteralRunReadinessResult) {
@@ -191,9 +254,25 @@ export async function auditLiteralRunReadiness(
     }),
   )
 
-  const heartbeat = await readJson<{ elapsedSeconds?: number; reason?: string; cycles?: unknown[] }>(daemonHeartbeatPath)
+  const heartbeat = await readJson<{
+    elapsedSeconds?: number
+    reason?: string
+    cycles?: Array<{
+      launchedJobs?: unknown[]
+      launchedCommandJobs?: unknown[]
+      run?: {
+        completedLanes?: unknown[]
+        failedLanes?: unknown[]
+        syncedJobs?: unknown[]
+        completedWorkUnits?: unknown[]
+        failedWorkUnits?: unknown[]
+      }
+    }>
+    recoveredJobs?: unknown[]
+  }>(daemonHeartbeatPath)
   const literalElapsedSeconds = heartbeat?.elapsedSeconds
   const log = await readText(daemonLogPath)
+  const workProof = heartbeat ? workProofFromHeartbeat(heartbeat) : undefined
   checks.push(
     check({
       id: "literal-runtime-proof",
@@ -202,6 +281,17 @@ export async function auditLiteralRunReadiness(
       detail: heartbeat
         ? `elapsed_seconds=${literalElapsedSeconds ?? "missing"}; reason=${heartbeat.reason ?? "missing"}; log=${log?.trim() ? "present" : "missing"}`
         : "daemon heartbeat is missing; no wall-clock run proof exists",
+      path: daemonHeartbeatPath,
+    }),
+  )
+  checks.push(
+    check({
+      id: "literal-work-proof",
+      status: workProof && workProof.total > 0 ? "ok" : "fail",
+      required: true,
+      detail: workProof
+        ? `model_launches=${workProof.modelLaunches}; command_launches=${workProof.commandLaunches}; completed_lanes=${workProof.completedLanes}; synced_jobs=${workProof.syncedJobs}; recoveries=${workProof.recoveries}`
+        : "daemon heartbeat is missing; no lane launch, command launch, recovery, or completion proof exists",
       path: daemonHeartbeatPath,
     }),
   )

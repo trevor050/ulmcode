@@ -46,7 +46,13 @@ describe("ULM literal run readiness audit", () => {
           operationID: "literal-operation",
           elapsedSeconds: 20 * 60 * 60,
           reason: "runtime window elapsed",
-          cycles: [],
+          cycles: [
+            {
+              launchedJobs: ["job-recon"],
+              launchedCommandJobs: ["cmd-http"],
+              run: { completedLanes: ["recon"], syncedJobs: ["job-recon"], completedWorkUnits: ["work-http"] },
+            },
+          ],
         },
         null,
         2,
@@ -58,6 +64,44 @@ describe("ULM literal run readiness audit", () => {
     expect(passed.status).toBe("passed")
     expect(passed.literalElapsedSeconds).toBe(20 * 60 * 60)
     expect(await fs.readFile(passed.markdownPath, "utf8")).toContain("status: passed")
+  })
+
+  test("does not accept idle daemon heartbeats as useful autonomy proof", async () => {
+    await using dir = await tmpdir({ git: true })
+    const operationID = "Idle Daemon"
+    await writeOperationGraph(dir.path, { operationID, budgetUSD: 20 })
+    await writeRuntimeSupervisor({
+      operationID,
+      worktree: dir.path,
+      bunPath: "bun",
+      scriptPath: path.join(__dirname, "..", "..", "script", "ulm-runtime-daemon.ts"),
+      durationSeconds: 20 * 60 * 60,
+      intervalSeconds: 60,
+      schedulerCyclesPerTick: 1,
+      supervisor: "all",
+    })
+
+    const schedulerDir = path.join(operationPath(dir.path, operationID), "scheduler")
+    await fs.mkdir(schedulerDir, { recursive: true })
+    await fs.writeFile(
+      path.join(schedulerDir, "daemon-heartbeat.json"),
+      JSON.stringify(
+        {
+          operationID: "idle-daemon",
+          elapsedSeconds: 20 * 60 * 60,
+          reason: "runtime window elapsed",
+          cycles: [],
+        },
+        null,
+        2,
+      ) + "\n",
+    )
+    await fs.writeFile(path.join(schedulerDir, "daemon.jsonl"), JSON.stringify({ tick: 1 }) + "\n")
+
+    const result = await auditLiteralRunReadiness(dir.path, { operationID })
+    expect(result.status).toBe("incomplete")
+    expect(result.checks.find((item) => item.id === "literal-runtime-proof")?.status).toBe("ok")
+    expect(result.checks.find((item) => item.id === "literal-work-proof")?.status).toBe("fail")
   })
 
   test("runs through the operator script and supports strict mode", async () => {
