@@ -4,9 +4,11 @@ import DESCRIPTION from "./operation_resume.txt"
 import { BackgroundJob } from "@/background/job"
 import { Instance } from "@/project/instance"
 import { InstanceState } from "@/effect/instance-state"
-import { taskRestartArgs } from "./task_restart_args"
+import { commandRestartArgs, taskRestartArgs } from "./task_restart_args"
 import { TaskTool } from "./task"
+import { CommandSuperviseTool } from "./command_supervise"
 import { buildOperationResumeBrief, formatOperationResumeBrief, readOperationStatus, writeOperationCheckpoint } from "@/ulm/artifact"
+import { markRecoveredLanesRunning } from "@/ulm/operation-recovery"
 
 export const Parameters = Schema.Struct({
   operationID: Schema.String,
@@ -19,22 +21,6 @@ export const Parameters = Schema.Struct({
     description: "Maximum stale lanes to restart when recoverStaleTasks is true. Defaults to all restartable lanes.",
   }),
 })
-
-type Metadata = {
-  operationID: string
-  root: string
-  health: {
-    ready: boolean
-    status: "ready" | "attention_required"
-    gaps: string[]
-  }
-  recovery?: {
-    requested: boolean
-    restarted: number
-    skipped: number
-    checkpointUpdated: boolean
-  }
-}
 
 function operationID(job: BackgroundJob.Info) {
   const value = job.metadata?.operationID
@@ -62,6 +48,8 @@ export const OperationResumeTool = Tool.define(
     const jobs = yield* BackgroundJob.Service
     const task = yield* TaskTool
     const taskDef = yield* task.init()
+    const command = yield* CommandSuperviseTool
+    const commandDef = yield* command.init()
 
     return {
       description: DESCRIPTION,
@@ -75,14 +63,23 @@ export const OperationResumeTool = Tool.define(
             const candidates = (yield* jobs.list())
               .filter((job) => operationID(job) === params.operationID)
               .filter((job) => recoverableStatus(job.status))
-              .map((job) => ({ job, restartArgs: taskRestartArgs(job) }))
-            const restartable = candidates.filter((item) => item.restartArgs !== undefined).slice(0, maxRecoveries)
+              .map((job) => ({ job, taskArgs: taskRestartArgs(job), commandArgs: commandRestartArgs(job) }))
+            const restartable = candidates.filter((item) => item.taskArgs !== undefined || item.commandArgs !== undefined).slice(0, maxRecoveries)
             const skipped = candidates.length - restartable.length
             const restarted: string[] = []
 
             for (const item of restartable) {
-              const result = yield* taskDef.execute(item.restartArgs!, ctx)
-              restarted.push([`task_id: ${item.job.id}`, `previous_status: ${item.job.status}`, result.output].join("\n"))
+              const result = item.taskArgs
+                ? yield* taskDef.execute(item.taskArgs, ctx)
+                : yield* commandDef.execute(item.commandArgs!, ctx)
+              restarted.push(
+                [
+                  item.job.type === "task" ? `task_id: ${item.job.id}` : `command_job_id: ${item.job.id}`,
+                  `job_type: ${item.job.type}`,
+                  `previous_status: ${item.job.status}`,
+                  result.output,
+                ].join("\n"),
+              )
             }
 
             const checkpointUpdated = yield* Effect.gen(function* () {
@@ -93,6 +90,9 @@ export const OperationResumeTool = Tool.define(
               )
               if (!status?.operation) return false
               const operation = status.operation
+              yield* Effect.tryPromise(() =>
+                markRecoveredLanesRunning(worktree, { operationID: params.operationID, jobs: restartable.map((item) => item.job) }),
+              ).pipe(Effect.ignore)
               yield* Effect.tryPromise(() =>
                 writeOperationCheckpoint(worktree, {
                   operationID: operation.operationID,

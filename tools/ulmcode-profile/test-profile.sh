@@ -5,6 +5,7 @@ PROFILE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 python3 -m json.tool "$PROFILE_DIR/opencode.json" >/dev/null
 python3 -m json.tool "$PROFILE_DIR/package.json" >/dev/null
 python3 -m json.tool "$PROFILE_DIR/oh-my-openagent.jsonc" >/dev/null
+python3 -m json.tool "$PROFILE_DIR/tool-manifest.json" >/dev/null
 find "$PROFILE_DIR/skills" -name SKILL.md -print | sort | while read -r skill; do
   grep -q '^---$' "$skill"
   grep -q '^name:' "$skill"
@@ -30,6 +31,9 @@ if grep -q 'oh-my-openagent@latest' "$PROFILE_DIR/opencode.json"; then
   exit 1
 fi
 grep -q 'finalHandoff: true' "$PROFILE_DIR/commands/ulm-final-handoff.md"
+grep -q '"defaultSafetyMode": "non_destructive"' "$PROFILE_DIR/tool-manifest.json"
+grep -q '"destructiveSafetyMode": "interactive_destructive"' "$PROFILE_DIR/tool-manifest.json"
+grep -q '"commandProfiles"' "$PROFILE_DIR/tool-manifest.json"
 test -f "$PROFILE_DIR/plugins/ulmcode-runtime-guard.js"
 test -f "$PROFILE_DIR/plugins/vendor/opencode-claude-code-plugin-0.2.2/package.json"
 grep -q '"@khalilgharbaoui/opencode-claude-code-plugin"' "$PROFILE_DIR/plugins/vendor/opencode-claude-code-plugin-0.2.2/package.json"
@@ -57,6 +61,8 @@ test -f "$install_dir/plugins/ulmcode-runtime-guard.js"
 test -f "$install_dir/plugins/vendor/opencode-claude-code-plugin-0.2.2/package.json"
 test -f "$install_dir/plugins/vendor/oh-my-openagent-3.17.12/package.json"
 grep -q 'file:plugins/vendor/oh-my-openagent-3.17.12' "$install_dir/package.json"
+test -f "$install_dir/tool-manifest.json"
+grep -q '"commandProfiles"' "$install_dir/tool-manifest.json"
 test -f "$install_dir/commands/ulm-resume.md"
 test -f "$install_dir/commands/ship.md"
 test -f "$install_dir/.opencode/agents/backend-architect.md"
@@ -67,6 +73,8 @@ test -f "$PROFILE_DIR/../../packages/opencode/script/ulm-lifecycle-smoke.ts"
 (cd "$PROFILE_DIR/../../packages/opencode" && bun run test:ulm-smoke >/dev/null)
 test -f "$PROFILE_DIR/../../packages/opencode/script/ulm-profile-skills.ts"
 (cd "$PROFILE_DIR/../../packages/opencode" && bun run test:ulm-skills >/dev/null)
+test -f "$PROFILE_DIR/../../packages/opencode/script/ulm-tool-manifest.ts"
+(cd "$PROFILE_DIR/../../packages/opencode" && bun run test:ulm-tool-manifest >/dev/null)
 test -f "$PROFILE_DIR/../../packages/opencode/script/ulm-lab-replay.ts"
 (cd "$PROFILE_DIR/../../packages/opencode" && bun run test:ulm-lab >/dev/null)
 test -f "$PROFILE_DIR/../../packages/opencode/script/ulm-lab-target-smoke.ts"

@@ -23,10 +23,80 @@ import {
   writeRuntimeSummary,
 } from "@/ulm/artifact"
 import { OperationEvent } from "@/ulm/event"
+import { writeOperationGraph } from "@/ulm/operation-graph"
 import { disposeAllInstances } from "../fixture/fixture"
 
 async function tmpdir() {
   return fs.mkdtemp(path.join(os.tmpdir(), "ulm-artifact-"))
+}
+
+async function completeGraphForHandoff(worktree: string, operationID = "school") {
+  const graph = await writeOperationGraph(worktree, { operationID, budgetUSD: 10 })
+  const parsed = JSON.parse(await fs.readFile(graph.json, "utf8"))
+  const root = path.join(worktree, ".ulmcode", "operations", operationID)
+  for (const lane of parsed.lanes) {
+    lane.status = "complete"
+    for (const artifact of lane.expectedArtifacts) {
+      const target = path.join(root, artifact.replace(/\/+$/g, ""))
+      if (artifact.endsWith("/")) {
+        await fs.mkdir(target, { recursive: true })
+        await fs.writeFile(path.join(target, ".keep"), "complete\n")
+      } else {
+        await fs.mkdir(path.dirname(target), { recursive: true })
+        try {
+          const stat = await fs.stat(target)
+          if (stat.size > 0) continue
+        } catch {}
+        await fs.writeFile(
+          target,
+          artifact === "reports/report.md"
+            ? [
+                "# Assessment Report",
+                "",
+                "## Executive Summary",
+                "complete ".repeat(20),
+                "## Scope, Authorization, and Methodology",
+                "complete ".repeat(20),
+                "## Environment Overview",
+                "complete ".repeat(20),
+                "## Attack Path Narrative",
+                "complete ".repeat(20),
+                "## Findings Detail",
+                "complete ".repeat(20),
+                "## Risk Register and Prioritized Roadmap",
+                "complete ".repeat(20),
+                "## Validation Limits and Known Unknowns",
+                "complete ".repeat(20),
+                "## Evidence Map",
+                "complete ".repeat(20),
+                "## Appendix: Raw Evidence Index",
+                "complete ".repeat(20),
+              ].join("\n")
+            : "complete\n",
+        )
+      }
+    }
+  }
+  await fs.writeFile(graph.json, JSON.stringify(parsed, null, 2))
+  await fs.mkdir(path.join(root, "lane-complete"), { recursive: true })
+  for (const lane of parsed.lanes) {
+    await fs.writeFile(
+      path.join(root, "lane-complete", `${lane.id}.json`),
+      JSON.stringify(
+        {
+          operationID,
+          laneID: lane.id,
+          status: "complete",
+          completedAt: new Date().toISOString(),
+          summary: `${lane.id} complete.`,
+          artifacts: lane.expectedArtifacts,
+          evidenceRefs: ["ev-1"],
+        },
+        null,
+        2,
+      ),
+    )
+  }
 }
 
 describe("ULM artifact ledger", () => {
@@ -430,6 +500,26 @@ describe("ULM artifact ledger", () => {
     expect(status.lastEvents).toHaveLength(1)
   })
 
+  test("reads operation graph and lane proof health in operation status", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "recon",
+      status: "running",
+      summary: "Recon running.",
+    })
+    const graph = await writeOperationGraph(worktree, { operationID: "school", budgetUSD: 10 })
+    const parsed = JSON.parse(await fs.readFile(graph.json, "utf8"))
+    parsed.lanes.find((lane: { id: string }) => lane.id === "recon").status = "complete"
+    await fs.writeFile(graph.json, JSON.stringify(parsed, null, 2))
+
+    const status = await readOperationStatus(worktree, "school")
+
+    expect(status.graph?.lanes.byStatus.complete).toBe(1)
+    expect(status.graph?.lanes.missingProofs).toContain("recon")
+  })
+
   test("lists operation statuses for CLI dashboards", async () => {
     const worktree = await tmpdir()
     await writeOperationCheckpoint(worktree, {
@@ -576,10 +666,26 @@ describe("ULM artifact ledger", () => {
     const readme = await fs.readFile(result.readme, "utf8")
     expect(readme).toContain("Assessment Report")
     expect(readme).toContain("Non-Reportable Findings")
+    expect(readme).toContain("findings.json")
+    const findingsJson = JSON.parse(await fs.readFile(result.findingsJson, "utf8"))
+    expect(findingsJson.reportable[0]?.findingID).toBe("weak-mfa-coverage")
+    expect(findingsJson.retained[0]?.findingID).toBe("legacy-tls-suspicion")
+    const evidenceIndex = JSON.parse(await fs.readFile(result.evidenceIndex, "utf8"))
+    expect(evidenceIndex.evidence[0]?.referencedBy).toEqual(["weak-mfa-coverage"])
+    expect(await fs.readFile(result.operatorReview, "utf8")).toContain("runtime summary present: no")
+    expect(await fs.readFile(result.executiveSummary, "utf8")).toContain("Weak MFA coverage")
+    expect(await fs.readFile(result.technicalAppendix, "utf8")).toContain("ev-1")
+    expect(await fs.readFile(result.runtimeSummaryMarkdown, "utf8")).toContain("No runtime summary was recorded")
     const manifest = JSON.parse(await fs.readFile(result.manifest, "utf8"))
     expect(manifest.findings).toEqual(["weak-mfa-coverage"])
     expect(manifest.nonReportableFindings).toEqual(["legacy-tls-suspicion"])
     expect(manifest.artifacts.operationPlan).toContain("operation-plan.json")
+    expect(manifest.artifacts.findingsJson).toBe(result.findingsJson)
+    expect(manifest.artifacts.evidenceIndex).toBe(result.evidenceIndex)
+    expect(manifest.artifacts.operatorReview).toBe(result.operatorReview)
+    expect(manifest.artifacts.executiveSummary).toBe(result.executiveSummary)
+    expect(manifest.artifacts.technicalAppendix).toBe(result.technicalAppendix)
+    expect(manifest.artifacts.runtimeSummaryMarkdown).toBe(result.runtimeSummaryMarkdown)
     expect(manifest.counts.findings).toBe(2)
     expect(manifest.counts.reportableFindings).toBe(1)
     expect(manifest.counts.byState.rejected).toBe(1)
@@ -596,8 +702,84 @@ describe("ULM artifact ledger", () => {
       fetches: { total: 2, repeatedTargets: [] },
       backgroundTasks: [],
     })
+    const rerendered = await renderReport(worktree, { operationID: "school", title: "Assessment Report" })
+    expect(await fs.readFile(rerendered.runtimeSummaryMarkdown, "utf8")).toContain("gpt-5.5")
+    await completeGraphForHandoff(worktree)
     const handoffLint = await lintReport(worktree, "school", { finalHandoff: true })
     expect(handoffLint.ok).toBe(true)
+  })
+
+  test("final handoff lint rejects corrupt rendered package integrity", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "handoff",
+      status: "complete",
+      summary: "Testing identified one report-ready finding.",
+    })
+    await writeOperationPlan(worktree, {
+      operationID: "school",
+      assumptions: ["Testing is authorized."],
+      phases: [
+        {
+          stage: "reporting",
+          objective: "Finalize report.",
+          actions: ["Render deliverables"],
+          successCriteria: ["Manifest includes handoff artifacts"],
+          subagents: ["report-writer"],
+          noSubagents: ["risk acceptance"],
+        },
+      ],
+      reportingCloseout: ["Run report_lint", "Run report_render", "Run runtime_summary"],
+    })
+    await writeEvidence(worktree, {
+      operationID: "school",
+      evidenceID: "ev-1",
+      title: "IdP policy export",
+      kind: "file",
+      summary: "MFA policy export.",
+      path: "evidence/raw/idp-policy.json",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "report_ready",
+      severity: "high",
+      confidence: 0.9,
+      affectedAssets: ["IdP"],
+      evidence: [{ id: "ev-1", path: "evidence/raw/idp-policy.json" }],
+      description: "MFA is not enforced for administrators.",
+      impact: "Administrator takeover is more likely after password compromise.",
+      remediation: "Require phishing-resistant MFA for privileged accounts.",
+    })
+    await writeRuntimeSummary(worktree, {
+      operationID: "school",
+      modelCalls: { total: 5, byModel: { "gpt-5.5": 5 } },
+      compaction: { count: 0, pressure: "low" },
+      fetches: { total: 2, repeatedTargets: [] },
+      backgroundTasks: [],
+    })
+    const result = await renderReport(worktree, { operationID: "school", title: "Assessment Report" })
+    await completeGraphForHandoff(worktree)
+
+    const cleanLint = await lintReport(worktree, "school", { finalHandoff: true })
+    expect(cleanLint.ok).toBe(true)
+
+    await fs.writeFile(result.pdf, "not a pdf\n")
+    let lint = await lintReport(worktree, "school", { finalHandoff: true })
+    expect(lint.ok).toBe(false)
+    expect(lint.gaps).toContain("deliverables/final/report.pdf is not a readable PDF")
+
+    await renderReport(worktree, { operationID: "school", title: "Assessment Report" })
+    await fs.writeFile(
+      result.manifest,
+      JSON.stringify({ operationID: "school", artifacts: { html: "/tmp/missing.html" }, counts: {} }, null, 2),
+    )
+    lint = await lintReport(worktree, "school", { finalHandoff: true })
+    expect(lint.ok).toBe(false)
+    expect(lint.gaps).toContain("deliverables/final/manifest.json missing artifact path: pdf")
+    expect(lint.gaps).toContain("deliverables/final/manifest.json artifact html does not match report.html")
   })
 
   test("rendered reports satisfy outline section lint", async () => {
@@ -647,6 +829,8 @@ describe("ULM artifact ledger", () => {
     await writeReportOutline(worktree, { operationID: "school", targetPages: 4 })
     await renderReport(worktree, { operationID: "school", title: "Assessment Report" })
     await writeRuntimeSummary(worktree, { operationID: "school" })
+    await renderReport(worktree, { operationID: "school", title: "Assessment Report" })
+    await completeGraphForHandoff(worktree)
 
     const lint = await lintReport(worktree, "school", {
       finalHandoff: true,
@@ -915,6 +1099,27 @@ describe("ULM artifact ledger", () => {
     expect(audit.recommendedTools).toContain("runtime_summary")
     expect(JSON.parse(await fs.readFile(audit.files.json, "utf8")).operationID).toBe("school")
     expect(await fs.readFile(audit.files.markdown, "utf8")).toContain("final_handoff: attention_required")
+  })
+
+  test("operation audit blocks final handoff when graph lanes are incomplete or missing proof", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "handoff",
+      status: "complete",
+      summary: "Ready for handoff review.",
+    })
+    const graph = await writeOperationGraph(worktree, { operationID: "school", budgetUSD: 10 })
+    const parsed = JSON.parse(await fs.readFile(graph.json, "utf8"))
+    for (const lane of parsed.lanes) lane.status = "complete"
+    await fs.writeFile(graph.json, JSON.stringify(parsed, null, 2))
+
+    const audit = await buildOperationAudit(worktree, "school", { finalHandoff: true })
+
+    expect(audit.ok).toBe(false)
+    expect(audit.blockers).toContain("resume: operation lane recon is missing completion proof")
+    expect(audit.blockers).toContain("final_handoff: operation lane recon is missing completion proof")
   })
 
   test("operation audit forwards strict outline section gates", async () => {
@@ -1358,6 +1563,12 @@ describe("ULM artifact ledger", () => {
     expect(result.gaps).toContain("plans/operation-plan.json is required")
     expect(result.gaps).toContain("deliverables/final/report.pdf is required")
     expect(result.gaps).toContain("deliverables/final/README.md is required")
+    expect(result.gaps).toContain("deliverables/final/findings.json is required")
+    expect(result.gaps).toContain("deliverables/final/evidence-index.json is required")
+    expect(result.gaps).toContain("deliverables/final/operator-review.md is required")
+    expect(result.gaps).toContain("deliverables/final/executive-summary.md is required")
+    expect(result.gaps).toContain("deliverables/final/technical-appendix.md is required")
+    expect(result.gaps).toContain("deliverables/final/runtime-summary.md is required")
     expect(result.gaps).toContain("deliverables/runtime-summary.json is required")
   })
 })

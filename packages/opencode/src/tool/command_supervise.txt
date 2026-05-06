@@ -1,0 +1,3 @@
+Launch or plan a supervised ULMCode command profile.
+
+Use this for long-running authorized recon and inventory commands that should not block the main model loop. The tool reads the vetted `tools/ulmcode-profile/tool-manifest.json` command profile, renders its command template with supplied variables, writes a durable command plan under `.ulmcode/operations/<operation>/commands/`, and can launch the command as a persisted background job. Pass `laneID` when the command belongs to an operation graph lane, and pass `workUnitID` when launching a unit returned by `operation_queue_next`, so `operation_run` can reconcile completion. Leave `dryRun=true` when checking install blockers or planning; set `dryRun=false` only for authorized non-destructive profiles.

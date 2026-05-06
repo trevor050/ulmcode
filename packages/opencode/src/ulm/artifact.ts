@@ -10,6 +10,17 @@ export const RISK_LEVELS = ["low", "medium", "high", "critical"] as const
 export const FINDING_STATES = ["candidate", "needs_validation", "validated", "report_ready", "rejected"] as const
 export const SEVERITIES = ["info", "low", "medium", "high", "critical"] as const
 export const EVIDENCE_KINDS = ["command_output", "http_response", "screenshot", "file", "note", "log"] as const
+export const FINAL_PACKAGE_FILES = [
+  "report.pdf",
+  "report.html",
+  "findings.json",
+  "evidence-index.json",
+  "operator-review.md",
+  "executive-summary.md",
+  "technical-appendix.md",
+  "runtime-summary.md",
+  "manifest.json",
+] as const
 
 export type Stage = (typeof STAGES)[number]
 export type OperationStatus = (typeof OPERATION_STATUSES)[number]
@@ -200,6 +211,18 @@ export type OperationStatusSummary = {
     manifest: boolean
   }
   runtimeSummary: boolean
+  graph?: {
+    exists: boolean
+    lanes: {
+      total: number
+      byStatus: Record<string, number>
+      failed: string[]
+      running: string[]
+      incomplete: string[]
+      missingProofs: string[]
+      invalidProofs: string[]
+    }
+  }
   runtime?: {
     generatedAt: string
     modelCalls?: RuntimeSummaryRecord["modelCalls"]
@@ -210,6 +233,22 @@ export type OperationStatusSummary = {
     notes?: RuntimeSummaryRecord["notes"]
   }
   lastEvents: unknown[]
+}
+
+type OperationGraphStatusRecord = {
+  lanes?: Array<{
+    id?: string
+    status?: string
+    expectedArtifacts?: string[]
+  }>
+}
+
+type LaneProofRecord = {
+  operationID?: string
+  laneID?: string
+  status?: string
+  artifacts?: string[]
+  evidenceRefs?: string[]
 }
 
 export type OperationResumeBrief = {
@@ -312,6 +351,12 @@ export type ReportRenderResult = {
   pdf: string
   readme: string
   manifest: string
+  findingsJson: string
+  evidenceIndex: string
+  operatorReview: string
+  executiveSummary: string
+  technicalAppendix: string
+  runtimeSummaryMarkdown: string
   finalDir: string
   findings: number
 }
@@ -334,6 +379,14 @@ export type RuntimeSummaryInput = {
     budgetUSD?: number
     remainingUSD?: number
     byAgent?: Record<
+      string,
+      {
+        calls?: number
+        totalTokens?: number
+        costUSD?: number
+      }
+    >
+    byLane?: Record<
       string,
       {
         calls?: number
@@ -372,6 +425,7 @@ export type RuntimeSummaryInput = {
 export type RuntimeUsageMessage = {
   role?: string
   agent?: string
+  laneID?: string
   modelID?: string
   providerID?: string
   summary?: boolean
@@ -523,6 +577,89 @@ async function exists(file: string) {
   }
 }
 
+async function fileSize(file: string) {
+  try {
+    const stat = await fs.stat(file)
+    return stat.size
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined
+    throw error
+  }
+}
+
+async function nonEmptyArtifact(root: string, relativePath: string) {
+  if (!relativePath || path.isAbsolute(relativePath) || relativePath.includes("..") || relativePath.includes("*")) return false
+  const resolved = path.resolve(root, relativePath.replace(/\/+$/g, ""))
+  if (!resolved.startsWith(path.resolve(root) + path.sep) && resolved !== path.resolve(root)) return false
+  try {
+    const stat = await fs.stat(resolved)
+    if (stat.isDirectory()) return (await fs.readdir(resolved)).length > 0
+    return stat.size > 0
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false
+    throw error
+  }
+}
+
+function proofCoversExpected(artifact: string, expected: string) {
+  const cleanArtifact = artifact.replace(/\/+$/g, "")
+  const cleanExpected = expected.replace(/\/+$/g, "")
+  if (expected.endsWith("/")) return cleanArtifact === cleanExpected || cleanArtifact.startsWith(`${cleanExpected}/`)
+  return cleanArtifact === cleanExpected
+}
+
+async function laneProofIsValid(root: string, operationID: string, lane: NonNullable<OperationGraphStatusRecord["lanes"]>[number]) {
+  const laneID = lane.id
+  if (!laneID) return false
+  const proof = await readJson<LaneProofRecord>(path.join(root, "lane-complete", `${laneID}.json`))
+  if (!proof) return false
+  if (proof.operationID !== operationID || proof.laneID !== laneID || proof.status !== "complete") return false
+  if (!proof.artifacts?.length) return false
+  for (const artifact of proof.artifacts) {
+    if (!(await nonEmptyArtifact(root, artifact))) return false
+  }
+  for (const expected of lane.expectedArtifacts ?? []) {
+    if (!proof.artifacts.some((artifact) => proofCoversExpected(artifact, expected))) return false
+  }
+  return true
+}
+
+async function readGraphStatus(root: string, operationID: string): Promise<OperationStatusSummary["graph"]> {
+  const graph = await readJson<OperationGraphStatusRecord>(path.join(root, "plans", "operation-graph.json"))
+  if (!graph?.lanes) return undefined
+  const byStatus: Record<string, number> = {}
+  const failed: string[] = []
+  const running: string[] = []
+  const incomplete: string[] = []
+  const missingProofs: string[] = []
+  const invalidProofs: string[] = []
+  for (const lane of graph.lanes) {
+    const id = lane.id ?? "unknown"
+    const status = lane.status ?? "unknown"
+    byStatus[status] = (byStatus[status] ?? 0) + 1
+    if (status === "failed") failed.push(id)
+    if (status === "running") running.push(id)
+    if (status !== "complete") incomplete.push(id)
+    if (status === "complete") {
+      const proofPath = path.join(root, "lane-complete", `${id}.json`)
+      if (!(await exists(proofPath))) missingProofs.push(id)
+      else if (!(await laneProofIsValid(root, operationID, lane))) invalidProofs.push(id)
+    }
+  }
+  return {
+    exists: true,
+    lanes: {
+      total: graph.lanes.length,
+      byStatus,
+      failed,
+      running,
+      incomplete,
+      missingProofs,
+      invalidProofs,
+    },
+  }
+}
+
 function finite(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0
 }
@@ -548,12 +685,14 @@ export function summarizeRuntimeUsage(messages: RuntimeUsageMessage[]) {
     totalTokens: 0,
     costUSD: 0,
     byAgent: {},
+    byLane: {},
   }
 
   for (const message of messages) {
     if (message.role !== "assistant") continue
     const model = message.modelID ?? "unknown"
     const agent = message.agent ?? "unknown"
+    const laneID = message.laneID
     const tokens = message.tokens
     const totalTokens = derivedTotal(tokens)
     const cost = finite(message.cost)
@@ -574,6 +713,14 @@ export function summarizeRuntimeUsage(messages: RuntimeUsageMessage[]) {
       totalTokens: (agentUsage.totalTokens ?? 0) + totalTokens,
       costUSD: roundUsage((agentUsage.costUSD ?? 0) + cost),
     }
+    if (laneID) {
+      const laneUsage = usage.byLane![laneID] ?? { calls: 0, totalTokens: 0, costUSD: 0 }
+      usage.byLane![laneID] = {
+        calls: (laneUsage.calls ?? 0) + 1,
+        totalTokens: (laneUsage.totalTokens ?? 0) + totalTokens,
+        costUSD: roundUsage((laneUsage.costUSD ?? 0) + cost),
+      }
+    }
   }
 
   return { modelCalls, usage }
@@ -591,8 +738,12 @@ function mergeRuntimeUsage(input: RuntimeSummaryInput) {
         ...derived.usage,
         ...input.usage,
         byAgent: {
-          ...(derived.usage.byAgent ?? {}),
-          ...(input.usage.byAgent ?? {}),
+          ...derived.usage.byAgent,
+          ...input.usage.byAgent,
+        },
+        byLane: {
+          ...derived.usage.byLane,
+          ...input.usage.byLane,
         },
       }
     : derived.usage
@@ -756,6 +907,10 @@ function resumeGaps(status: OperationStatusSummary, options: OperationResumeOpti
   const now = new Date(options.now ?? Date.now())
   if (!operation) gaps.push("operation checkpoint is missing")
   if (!status.plans.operation) gaps.push("operation plan is missing")
+  if (!status.graph) gaps.push("operation graph is missing")
+  for (const lane of status.graph?.lanes.failed ?? []) gaps.push(`operation lane ${lane} is failed`)
+  for (const lane of status.graph?.lanes.missingProofs ?? []) gaps.push(`operation lane ${lane} is missing completion proof`)
+  for (const lane of status.graph?.lanes.invalidProofs ?? []) gaps.push(`operation lane ${lane} has invalid completion proof`)
   if (!status.runtimeSummary) gaps.push("runtime summary is missing")
   gaps.push(...runtimeHealthGaps(status))
   if (operation?.status === "running" && staleAfter !== undefined) {
@@ -1526,6 +1681,12 @@ function finalReadme(input: {
     "",
     "- `report.html`: browser-readable final report.",
     "- `report.pdf`: print-ready PDF report.",
+    "- `findings.json`: machine-readable reportable and retained finding ledger.",
+    "- `evidence-index.json`: machine-readable evidence map for claim review.",
+    "- `operator-review.md`: operator handoff notes and unresolved review items.",
+    "- `executive-summary.md`: board/client-ready executive summary.",
+    "- `technical-appendix.md`: detailed evidence and validation appendix.",
+    "- `runtime-summary.md`: summarized runtime, budget, and background job state.",
     "- `manifest.json`: machine-readable artifact map and counts.",
     "- `README.md`: this handoff note.",
     "",
@@ -1550,6 +1711,169 @@ function finalReadme(input: {
     "## Source Artifacts",
     "",
     "See the parent operation folder for status, plans, evidence records, report outline, and runtime summary.",
+    "",
+  ].join("\n")
+}
+
+function finalFindingsJson(input: {
+  operationID: string
+  reportable: FindingRecord[]
+  nonReportable: FindingRecord[]
+  counts: Record<FindingState, number>
+}) {
+  return {
+    operationID: input.operationID,
+    generatedAt: new Date().toISOString(),
+    counts: input.counts,
+    reportable: input.reportable,
+    retained: input.nonReportable,
+  }
+}
+
+function finalEvidenceIndexJson(input: { operationID: string; evidence: EvidenceRecord[]; findings: FindingRecord[] }) {
+  return {
+    operationID: input.operationID,
+    generatedAt: new Date().toISOString(),
+    evidence: input.evidence.map((item) => ({
+      id: item.evidenceID,
+      kind: item.kind,
+      title: item.title,
+      summary: item.summary,
+      path: item.path,
+      source: item.source,
+      command: item.command,
+      referencedBy: input.findings
+        .filter((finding) =>
+          finding.evidence.some((ref) => ref.id === item.evidenceID || (ref.path && ref.path === item.path)),
+        )
+        .map((finding) => finding.findingID),
+    })),
+  }
+}
+
+function executiveSummaryMarkdown(input: {
+  title: string
+  operationID: string
+  operation?: OperationRecord
+  reportable: FindingRecord[]
+  evidence: EvidenceRecord[]
+  counts: Record<FindingState, number>
+}) {
+  const highImpact = input.reportable.filter((finding) => finding.severity === "critical" || finding.severity === "high")
+  return [
+    `# Executive Summary`,
+    "",
+    `Report: ${input.title}`,
+    `Operation: ${input.operationID}`,
+    `Stage: ${input.operation?.stage ?? "unknown"}`,
+    `Status: ${input.operation?.status ?? "unknown"}`,
+    "",
+    "## Overview",
+    "",
+    input.operation?.summary ?? "No operation summary was recorded.",
+    "",
+    "## Key Numbers",
+    "",
+    `- reportable findings: ${input.reportable.length}`,
+    `- critical/high findings: ${highImpact.length}`,
+    `- evidence records: ${input.evidence.length}`,
+    `- retained non-reportable findings: ${input.counts.candidate + input.counts.needs_validation + input.counts.rejected}`,
+    "",
+    "## Priority Items",
+    "",
+    ...(highImpact.length
+      ? highImpact.map((finding) => `- ${finding.findingID}: ${finding.title} (${finding.severity})`)
+      : ["- No critical or high report-ready findings were recorded."]),
+    "",
+  ].join("\n")
+}
+
+function technicalAppendixMarkdown(input: {
+  operationID: string
+  operation?: OperationRecord
+  plan?: OperationPlanRecord
+  reportable: FindingRecord[]
+  nonReportable: FindingRecord[]
+  evidence: EvidenceRecord[]
+}) {
+  return [
+    "# Technical Appendix",
+    "",
+    `Operation: ${input.operationID}`,
+    "",
+    "## Scope And Methodology",
+    "",
+    input.operation?.objective ?? "No operation objective was recorded.",
+    "",
+    "## Assumptions",
+    "",
+    ...(input.plan?.assumptions?.length ? input.plan.assumptions.map((item) => `- ${item}`) : ["- No assumptions recorded."]),
+    "",
+    "## Reportable Findings",
+    "",
+    ...(input.reportable.length
+      ? input.reportable.flatMap((finding) => [
+          `### ${finding.findingID}: ${finding.title}`,
+          "",
+          `- severity: ${finding.severity}`,
+          `- confidence: ${finding.confidence}`,
+          `- affected assets: ${finding.affectedAssets.join(", ")}`,
+          `- evidence: ${finding.evidence.map((item) => item.path ?? item.id).join(", ")}`,
+          "",
+          finding.description,
+          "",
+        ])
+      : ["No validated or report-ready findings were recorded.", ""]),
+    "## Retained Non-Reportable Findings",
+    "",
+    ...(input.nonReportable.length
+      ? input.nonReportable.map((finding) => `- ${finding.findingID}: ${finding.title} (${finding.state})`)
+      : ["- None recorded."]),
+    "",
+    "## Evidence Index",
+    "",
+    ...(input.evidence.length
+      ? input.evidence.map((item) => `- ${item.evidenceID}: ${item.title} (${item.kind})${item.path ? ` - ${item.path}` : ""}`)
+      : ["- No evidence records were recorded."]),
+    "",
+  ].join("\n")
+}
+
+function operatorReviewMarkdown(input: {
+  operationID: string
+  operation?: OperationRecord
+  reportable: FindingRecord[]
+  nonReportable: FindingRecord[]
+  evidence: EvidenceRecord[]
+  runtimeSummaryExists: boolean
+}) {
+  const needsReview = input.nonReportable.filter((finding) => finding.state === "candidate" || finding.state === "needs_validation")
+  return [
+    "# Operator Review",
+    "",
+    `Operation: ${input.operationID}`,
+    "",
+    "## Handoff State",
+    "",
+    `- stage: ${input.operation?.stage ?? "unknown"}`,
+    `- status: ${input.operation?.status ?? "unknown"}`,
+    `- reportable findings: ${input.reportable.length}`,
+    `- evidence records: ${input.evidence.length}`,
+    `- runtime summary present: ${input.runtimeSummaryExists ? "yes" : "no"}`,
+    "",
+    "## Blockers",
+    "",
+    ...(input.operation?.blockers?.length ? input.operation.blockers.map((item) => `- ${item}`) : ["- None recorded."]),
+    "",
+    "## Review Before Client Delivery",
+    "",
+    ...(needsReview.length
+      ? needsReview.map((finding) => `- ${finding.findingID}: ${finding.title} remains ${finding.state}`)
+      : ["- No candidate or needs-validation findings remain."]),
+    "",
+    "## Next Actions",
+    "",
+    ...(input.operation?.nextActions?.length ? input.operation.nextActions.map((item) => `- ${item}`) : ["- None recorded."]),
     "",
   ].join("\n")
 }
@@ -1957,6 +2281,7 @@ export async function readOperationStatus(
       manifest: await exists(path.join(root, "deliverables", "final", "manifest.json")),
     },
     runtimeSummary: !!runtime,
+    graph: await readGraphStatus(root, id),
     runtime: runtime
       ? {
           generatedAt: runtime.generatedAt,
@@ -2065,7 +2390,7 @@ export async function lintReport(
   const gaps: string[] = []
   const requireOperationPlan = options.finalHandoff || options.requireOperationPlan
   const requireRenderedDeliverables = options.finalHandoff || options.requireRenderedDeliverables
-  const requireRuntimeSummary = options.finalHandoff || options.requireRuntimeSummary
+  const requireRuntimeSummary = Boolean(options.finalHandoff || options.requireRuntimeSummary)
   const operation = await readJson<OperationRecord>(path.join(root, "operation.json"))
   if (!operation) gaps.push("operation.json is missing")
   if (operation && operation.status !== "complete" && operation.stage === "handoff") {
@@ -2172,21 +2497,26 @@ export async function lintReport(
     gaps.push("plans/operation-plan.json is required")
   }
   if (requireRenderedDeliverables) {
-    if (!(await exists(path.join(root, "deliverables", "final", "report.html")))) {
-      gaps.push("deliverables/final/report.html is required")
-    }
-    if (!(await exists(path.join(root, "deliverables", "final", "report.pdf")))) {
-      gaps.push("deliverables/final/report.pdf is required")
-    }
     if (!(await exists(path.join(root, "deliverables", "final", "README.md")))) {
       gaps.push("deliverables/final/README.md is required")
     }
-    if (!(await exists(path.join(root, "deliverables", "final", "manifest.json")))) {
-      gaps.push("deliverables/final/manifest.json is required")
+    for (const file of FINAL_PACKAGE_FILES) {
+      if (!(await exists(path.join(root, "deliverables", "final", file)))) {
+        gaps.push(`deliverables/final/${file} is required`)
+      }
     }
+    gaps.push(...(await finalPackageIntegrityGaps(root, { requireRuntimeSummary })))
   }
   if (requireRuntimeSummary && !(await exists(path.join(root, "deliverables", "runtime-summary.json")))) {
     gaps.push("deliverables/runtime-summary.json is required")
+  }
+  if (options.finalHandoff) {
+    const graph = await readGraphStatus(root, slug(operationID, "operation"))
+    if (!graph) gaps.push("plans/operation-graph.json is required")
+    for (const lane of graph?.lanes.incomplete ?? []) gaps.push(`operation lane ${lane} is not complete`)
+    for (const lane of graph?.lanes.failed ?? []) gaps.push(`operation lane ${lane} is failed`)
+    for (const lane of graph?.lanes.missingProofs ?? []) gaps.push(`operation lane ${lane} is missing completion proof`)
+    for (const lane of graph?.lanes.invalidProofs ?? []) gaps.push(`operation lane ${lane} has invalid completion proof`)
   }
 
   return {
@@ -2256,6 +2586,97 @@ function renderFindingSections(reportable: FindingRecord[]) {
         )
         .join("\n")
     : "<p>No validated or report-ready findings were recorded.</p>"
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function manifestPathValue(finalDir: string, value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return undefined
+  return path.resolve(path.isAbsolute(value) ? value : path.join(finalDir, value))
+}
+
+async function parseRequiredJson(file: string, gapLabel: string, gaps: string[]) {
+  try {
+    JSON.parse(await fs.readFile(file, "utf8"))
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return
+    gaps.push(`${gapLabel} is not valid JSON`)
+  }
+}
+
+async function finalPackageIntegrityGaps(root: string, input: { requireRuntimeSummary: boolean }) {
+  const gaps: string[] = []
+  const finalDir = path.join(root, "deliverables", "final")
+  const manifestPath = path.join(finalDir, "manifest.json")
+  const expectedArtifacts: Record<string, string> = {
+    html: path.join(finalDir, "report.html"),
+    pdf: path.join(finalDir, "report.pdf"),
+    readme: path.join(finalDir, "README.md"),
+    findingsJson: path.join(finalDir, "findings.json"),
+    evidenceIndex: path.join(finalDir, "evidence-index.json"),
+    operatorReview: path.join(finalDir, "operator-review.md"),
+    executiveSummary: path.join(finalDir, "executive-summary.md"),
+    technicalAppendix: path.join(finalDir, "technical-appendix.md"),
+    runtimeSummaryMarkdown: path.join(finalDir, "runtime-summary.md"),
+  }
+  let manifest: Record<string, unknown> | undefined
+  try {
+    const parsed = JSON.parse(await fs.readFile(manifestPath, "utf8"))
+    if (isRecord(parsed)) manifest = parsed
+    else gaps.push("deliverables/final/manifest.json is not a JSON object")
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      gaps.push("deliverables/final/manifest.json is not valid JSON")
+    }
+  }
+
+  const artifacts = isRecord(manifest?.artifacts) ? manifest.artifacts : undefined
+  if (manifest && !artifacts) gaps.push("deliverables/final/manifest.json missing artifacts object")
+  for (const [key, expected] of Object.entries(expectedArtifacts)) {
+    if (artifacts && !(key in artifacts)) {
+      gaps.push(`deliverables/final/manifest.json missing artifact path: ${key}`)
+    } else if (artifacts) {
+      const actual = manifestPathValue(finalDir, artifacts[key])
+      if (!actual || actual !== path.resolve(expected)) {
+        gaps.push(`deliverables/final/manifest.json artifact ${key} does not match ${path.basename(expected)}`)
+      }
+    }
+    const size = await fileSize(expected)
+    if (size === 0) gaps.push(`deliverables/final/${path.basename(expected)} is empty`)
+  }
+
+  if (input.requireRuntimeSummary) {
+    const runtimeSummary = path.join(root, "deliverables", "runtime-summary.json")
+    if (artifacts) {
+      const actual = manifestPathValue(finalDir, artifacts.runtimeSummary)
+      if (!actual) gaps.push("deliverables/final/manifest.json missing artifact path: runtimeSummary")
+      else if (actual !== path.resolve(runtimeSummary)) {
+        gaps.push("deliverables/final/manifest.json artifact runtimeSummary does not match runtime-summary.json")
+      }
+    }
+    if (!(await exists(runtimeSummary))) gaps.push("deliverables/runtime-summary.json is required")
+  }
+
+  const pdf = await readText(path.join(finalDir, "report.pdf"))
+  if (pdf !== undefined && !pdf.startsWith("%PDF-")) gaps.push("deliverables/final/report.pdf is not a readable PDF")
+  const html = await readText(path.join(finalDir, "report.html"))
+  if (html !== undefined) {
+    const lowerHtml = html.toLowerCase()
+    if (!lowerHtml.includes("<!doctype html") || !lowerHtml.includes("<html")) {
+      gaps.push("deliverables/final/report.html is not readable HTML")
+    }
+  }
+  await parseRequiredJson(path.join(finalDir, "findings.json"), "deliverables/final/findings.json", gaps)
+  await parseRequiredJson(path.join(finalDir, "evidence-index.json"), "deliverables/final/evidence-index.json", gaps)
+
+  const sourceRuntimeMarkdown = await readText(path.join(root, "deliverables", "runtime-summary.md"))
+  const finalRuntimeMarkdown = await readText(path.join(finalDir, "runtime-summary.md"))
+  if (sourceRuntimeMarkdown !== undefined && finalRuntimeMarkdown !== undefined && sourceRuntimeMarkdown !== finalRuntimeMarkdown) {
+    gaps.push("deliverables/final/runtime-summary.md does not match deliverables/runtime-summary.md")
+  }
+  return gaps
 }
 
 function renderReportSections(input: {
@@ -2366,6 +2787,8 @@ export async function renderReport(worktree: string, input: ReportRenderInput): 
   const reportable = findings.filter((finding) => finding.state === "report_ready" || finding.state === "validated")
   const nonReportable = findings.filter((finding) => finding.state !== "report_ready" && finding.state !== "validated")
   const counts = findingCounts(findings)
+  const runtimeSummaryMarkdownSource = await readText(path.join(root, "deliverables", "runtime-summary.md"))
+  const runtimeSummaryExists = Boolean(runtimeSummaryMarkdownSource)
   const title = input.title ?? operation?.objective ?? `ULMCode Operation ${operationID}`
   const finalDir = path.join(root, "deliverables", "final")
   const reportBody = authoredReport
@@ -2406,9 +2829,27 @@ export async function renderReport(worktree: string, input: ReportRenderInput): 
   const pdfPath = path.join(finalDir, "report.pdf")
   const readmePath = path.join(finalDir, "README.md")
   const manifestPath = path.join(finalDir, "manifest.json")
+  const findingsJsonPath = path.join(finalDir, "findings.json")
+  const evidenceIndexPath = path.join(finalDir, "evidence-index.json")
+  const operatorReviewPath = path.join(finalDir, "operator-review.md")
+  const executiveSummaryPath = path.join(finalDir, "executive-summary.md")
+  const technicalAppendixPath = path.join(finalDir, "technical-appendix.md")
+  const runtimeSummaryMarkdownPath = path.join(finalDir, "runtime-summary.md")
   await fs.writeFile(htmlPath, html)
   await fs.writeFile(pdfPath, buildPdf({ title, operationID, operation, reportable, nonReportable, evidence, reportHtml: html }))
   await fs.writeFile(readmePath, finalReadme({ title, operationID, operation, reportable, nonReportable, evidence }))
+  await writeJson(findingsJsonPath, finalFindingsJson({ operationID, reportable, nonReportable, counts }))
+  await writeJson(evidenceIndexPath, finalEvidenceIndexJson({ operationID, evidence, findings }))
+  await fs.writeFile(
+    operatorReviewPath,
+    operatorReviewMarkdown({ operationID, operation, reportable, nonReportable, evidence, runtimeSummaryExists }),
+  )
+  await fs.writeFile(executiveSummaryPath, executiveSummaryMarkdown({ title, operationID, operation, reportable, evidence, counts }))
+  await fs.writeFile(technicalAppendixPath, technicalAppendixMarkdown({ operationID, operation, plan, reportable, nonReportable, evidence }))
+  await fs.writeFile(
+    runtimeSummaryMarkdownPath,
+    runtimeSummaryMarkdownSource ?? "# Runtime Summary\n\nNo runtime summary was recorded before report rendering.\n",
+  )
   await writeJson(manifestPath, {
     operationID,
     title,
@@ -2419,6 +2860,12 @@ export async function renderReport(worktree: string, input: ReportRenderInput): 
       html: htmlPath,
       pdf: pdfPath,
       readme: readmePath,
+      findingsJson: findingsJsonPath,
+      evidenceIndex: evidenceIndexPath,
+      operatorReview: operatorReviewPath,
+      executiveSummary: executiveSummaryPath,
+      technicalAppendix: technicalAppendixPath,
+      runtimeSummaryMarkdown: runtimeSummaryMarkdownPath,
       reportOutline: path.join(root, "reports", "report-outline.md"),
       evidence: path.join(root, "evidence"),
       runtimeSummary: path.join(root, "deliverables", "runtime-summary.json"),
@@ -2446,6 +2893,12 @@ export async function renderReport(worktree: string, input: ReportRenderInput): 
     pdf: pdfPath,
     readme: readmePath,
     manifest: manifestPath,
+    findingsJson: findingsJsonPath,
+    evidenceIndex: evidenceIndexPath,
+    operatorReview: operatorReviewPath,
+    executiveSummary: executiveSummaryPath,
+    technicalAppendix: technicalAppendixPath,
+    runtimeSummaryMarkdown: runtimeSummaryMarkdownPath,
     finalDir,
     findings: reportable.length,
   }

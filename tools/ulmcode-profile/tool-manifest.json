@@ -1,0 +1,151 @@
+{
+  "version": 1,
+  "lastReviewed": "2026-05-05",
+  "policy": {
+    "defaultSafetyMode": "non_destructive",
+    "destructiveSafetyMode": "interactive_destructive",
+    "installFailureBehavior": "record_blocker_with_fallback",
+    "notes": [
+      "Profiles are starting points, not permission grants. Operators still need written authorization and scope.",
+      "Prefer package-manager installs only when the tool is missing and the operation plan names the tool purpose."
+    ]
+  },
+  "tools": [
+    {
+      "id": "nmap",
+      "purpose": "service inventory and version fingerprinting",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "darwin", "command": "brew install nmap" },
+        { "platform": "linux", "command": "sudo apt-get update && sudo apt-get install -y nmap" }
+      ],
+      "validate": "nmap --version",
+      "safeExamples": [
+        "nmap -sV --version-light -oA evidence/raw/nmap-service-scan <authorized-target>",
+        "nmap -Pn -p 80,443,8080 --script=http-title -oA evidence/raw/nmap-http-titles <authorized-target>"
+      ],
+      "outputParsers": ["normal", "grepable", "xml"],
+      "fallbacks": ["masscan-lite", "httpx"]
+    },
+    {
+      "id": "httpx",
+      "purpose": "HTTP discovery, status/title/tech capture, and URL inventory",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "darwin", "command": "brew install httpx" },
+        { "platform": "go", "command": "go install github.com/projectdiscovery/httpx/cmd/httpx@latest" }
+      ],
+      "validate": "httpx -version",
+      "safeExamples": [
+        "httpx -l evidence/raw/hosts.txt -title -tech-detect -status-code -json -o evidence/raw/httpx.jsonl",
+        "httpx -u https://<authorized-host> -follow-host-redirects -json -o evidence/raw/httpx-single.jsonl"
+      ],
+      "outputParsers": ["jsonl"],
+      "fallbacks": ["curl", "nmap"]
+    },
+    {
+      "id": "dnsx",
+      "purpose": "DNS resolution and record inventory",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "darwin", "command": "brew install dnsx" },
+        { "platform": "go", "command": "go install github.com/projectdiscovery/dnsx/cmd/dnsx@latest" }
+      ],
+      "validate": "dnsx -version",
+      "safeExamples": [
+        "dnsx -l evidence/raw/domains.txt -a -aaaa -cname -resp -json -o evidence/raw/dnsx.jsonl"
+      ],
+      "outputParsers": ["jsonl"],
+      "fallbacks": ["dig"]
+    },
+    {
+      "id": "gowitness",
+      "purpose": "browser screenshots for authorized HTTP surfaces",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "go", "command": "go install github.com/sensepost/gowitness@latest" }
+      ],
+      "validate": "gowitness version",
+      "safeExamples": [
+        "gowitness scan file -f evidence/raw/urls.txt --screenshot-path evidence/screenshots --write-db"
+      ],
+      "outputParsers": ["sqlite", "screenshots"],
+      "fallbacks": ["playwright", "browser-use"]
+    },
+    {
+      "id": "ffuf",
+      "purpose": "authorized content discovery with conservative rate controls",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "darwin", "command": "brew install ffuf" },
+        { "platform": "go", "command": "go install github.com/ffuf/ffuf/v2@latest" }
+      ],
+      "validate": "ffuf -V",
+      "safeExamples": [
+        "ffuf -u https://<authorized-host>/FUZZ -w wordlists/common.txt -rate 25 -of json -o evidence/raw/ffuf.json"
+      ],
+      "outputParsers": ["json"],
+      "fallbacks": ["feroxbuster"]
+    },
+    {
+      "id": "zap-baseline",
+      "purpose": "passive web baseline checks and spidering in authorized scope",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "docker", "command": "docker pull ghcr.io/zaproxy/zaproxy:stable" }
+      ],
+      "validate": "docker image inspect ghcr.io/zaproxy/zaproxy:stable",
+      "safeExamples": [
+        "docker run --rm -v \"$PWD/evidence/raw:/zap/wrk\" ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t https://<authorized-host> -r zap.html -J zap.json"
+      ],
+      "outputParsers": ["json", "html"],
+      "fallbacks": ["manual-browser-review"]
+    }
+  ],
+  "commandProfiles": [
+    {
+      "id": "service-inventory",
+      "tool": "nmap",
+      "safety": "non_destructive",
+      "template": "nmap -sV --version-light -oA {outputPrefix} {target}",
+      "heartbeatSeconds": 120,
+      "idleTimeoutSeconds": 900,
+      "hardTimeoutSeconds": 7200,
+      "restartable": true,
+      "artifacts": ["evidence/raw/nmap-service-scan.nmap", "evidence/raw/nmap-service-scan.xml"]
+    },
+    {
+      "id": "http-discovery",
+      "tool": "httpx",
+      "safety": "non_destructive",
+      "template": "httpx -l {inputFile} -title -tech-detect -status-code -json -o {outputPrefix}.jsonl",
+      "heartbeatSeconds": 60,
+      "idleTimeoutSeconds": 600,
+      "hardTimeoutSeconds": 3600,
+      "restartable": true,
+      "artifacts": ["evidence/raw/httpx.jsonl"]
+    },
+    {
+      "id": "content-discovery",
+      "tool": "ffuf",
+      "safety": "non_destructive",
+      "template": "ffuf -u {url}/FUZZ -w {wordlist} -rate 25 -of json -o {outputPrefix}.json",
+      "heartbeatSeconds": 60,
+      "idleTimeoutSeconds": 600,
+      "hardTimeoutSeconds": 7200,
+      "restartable": true,
+      "artifacts": ["evidence/raw/ffuf.json"]
+    },
+    {
+      "id": "passive-web-baseline",
+      "tool": "zap-baseline",
+      "safety": "non_destructive",
+      "template": "docker run --rm -v \"$PWD/evidence/raw:/zap/wrk\" ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t {url} -r zap.html -J zap.json",
+      "heartbeatSeconds": 180,
+      "idleTimeoutSeconds": 1200,
+      "hardTimeoutSeconds": 10800,
+      "restartable": false,
+      "artifacts": ["evidence/raw/zap.json", "evidence/raw/zap.html"]
+    }
+  ]
+}

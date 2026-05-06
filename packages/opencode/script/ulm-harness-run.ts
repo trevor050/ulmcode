@@ -1,7 +1,17 @@
 #!/usr/bin/env bun
 
 import fs from "fs/promises"
+import os from "os"
 import path from "path"
+import { writeRuntimeSummary } from "../src/ulm/artifact"
+import { buildCommandPlan, writeCommandPlan } from "../src/ulm/tool-manifest"
+import { acquireTool } from "../src/ulm/tool-acquisition"
+import { evaluateRuntimeGovernor } from "../src/ulm/runtime-governor"
+import { writeOperationGraph } from "../src/ulm/operation-graph"
+import { decideOperationNext } from "../src/ulm/operation-next"
+import { runRuntimeScheduler } from "../src/ulm/runtime-scheduler"
+import { normalizeEvidence } from "../src/ulm/evidence-normalizer"
+import { buildWorkQueue, nextWorkUnits } from "../src/ulm/work-queue"
 import {
   ULM_HARNESS_REQUIRED_CAPABILITIES,
   createHarnessScenario,
@@ -160,11 +170,203 @@ const scenarios: HarnessScenario[] = [
     ]
     return { status: checks.every((check) => check.status === "passed") ? "passed" : "failed", checks }
   }),
+  scenario(
+    "model_loop_eval",
+    "runtime-supervision-governor-drill",
+    async () => {
+      const worktree = await fs.mkdtemp(path.join(os.tmpdir(), "ulm-harness-runtime-"))
+      const manifestPath = path.join(worktree, "tool-manifest.json")
+      await fs.writeFile(
+        manifestPath,
+        JSON.stringify(
+          {
+            version: 1,
+            lastReviewed: "2026-05-05",
+            policy: {
+              defaultSafetyMode: "non_destructive",
+              destructiveSafetyMode: "interactive_destructive",
+              installFailureBehavior: "record_blocker_with_fallback",
+              notes: [],
+            },
+            tools: [
+              {
+                id: "fake-httpx",
+                purpose: "fixture HTTP inventory",
+                safety: "non_destructive",
+                install: [{ platform: "test", command: "echo install" }],
+                validate: "exit 127",
+                safeExamples: ["fake-httpx -l hosts.txt"],
+                outputParsers: ["jsonl"],
+                fallbacks: ["curl"],
+              },
+            ],
+            commandProfiles: [
+              {
+                id: "http-discovery",
+                tool: "fake-httpx",
+                safety: "non_destructive",
+                template: "fake-httpx -l {inputFile} -o {outputPrefix}.jsonl",
+                heartbeatSeconds: 1,
+                idleTimeoutSeconds: 2,
+                hardTimeoutSeconds: 3,
+                restartable: true,
+                artifacts: ["evidence/raw/httpx.jsonl"],
+              },
+            ],
+          },
+          null,
+          2,
+        ),
+      )
+      const graph = await writeOperationGraph(worktree, { operationID: "School", budgetUSD: 5 })
+      const acquire = await acquireTool({ worktree, operationID: "School", toolID: "fake-httpx", manifestPath })
+      const plan = await buildCommandPlan({
+        worktree,
+        operationID: "School",
+        profileID: "http-discovery",
+        variables: { inputFile: "hosts.txt" },
+        outputPrefix: "evidence/raw/httpx",
+        manifestPath,
+      })
+      await writeCommandPlan(plan)
+      const httpxArtifact = path.join(plan.operationRoot, "evidence", "raw", "httpx.jsonl")
+      await fs.mkdir(path.dirname(httpxArtifact), { recursive: true })
+      await fs.writeFile(
+        httpxArtifact,
+        JSON.stringify({
+          url: "https://portal.school.example",
+          host: "portal.school.example",
+          status_code: 200,
+          title: "Student Portal",
+          tech: ["nginx"],
+        }) + "\n",
+      )
+      await writeRuntimeSummary(worktree, {
+        operationID: "School",
+        usage: { costUSD: 1, budgetUSD: 5 },
+        compaction: { pressure: "low" },
+      })
+      const governor = await evaluateRuntimeGovernor(worktree, { operationID: "School", laneID: "recon" })
+      const next = await decideOperationNext(worktree, { operationID: "School" })
+      const scheduler = await runRuntimeScheduler(worktree, { operationID: "School", maxCycles: 1 })
+      const normalized = await normalizeEvidence(worktree, { operationID: "School", commandPlanPaths: [plan.planPath] })
+      const queue = await buildWorkQueue(worktree, { operationID: "School", manifestPath })
+      const queueNext = await nextWorkUnits(worktree, {
+        operationID: "School",
+        laneID: "web_inventory",
+        limit: 1,
+        claim: true,
+      })
+      await fs.rm(worktree, { recursive: true, force: true })
+      const checks: HarnessCheck[] = [
+        {
+          id: "graph-written",
+          status: graph.lanes >= 9 ? "passed" : "failed",
+          detail: `${graph.lanes} lanes written`,
+        },
+        {
+          id: "tool-blocker-recorded",
+          status: acquire.available === false && !!acquire.blocker ? "passed" : "failed",
+          detail: acquire.blocker ?? "tool unexpectedly available",
+        },
+        {
+          id: "command-plan-written",
+          status: plan.command.includes("fake-httpx") ? "passed" : "failed",
+          detail: plan.command,
+        },
+        {
+          id: "governor-continues",
+          status: governor.action === "continue" ? "passed" : "failed",
+          detail: governor.reason,
+        },
+        {
+          id: "next-action-launches-lane",
+          status: next.action.action === "launch_lane" ? "passed" : "failed",
+          detail: `${next.action.action} -> ${next.path}`,
+        },
+        {
+          id: "operation-run-starts-lane",
+          status: scheduler.cycles[0]?.run.action === "launch_lane" && scheduler.cycles[0]?.run.laneID === "recon" ? "passed" : "failed",
+          detail: `${scheduler.cycles[0]?.run.action} ${scheduler.cycles[0]?.run.laneID ?? "none"}`,
+        },
+        {
+          id: "runtime-scheduler-heartbeat",
+          status: scheduler.heartbeatPath.endsWith("heartbeat.json") && scheduler.cycles.length === 1 ? "passed" : "failed",
+          detail: scheduler.heartbeatPath,
+        },
+        {
+          id: "evidence-normalized",
+          status: normalized.leads.length >= 1 && normalized.evidence.length >= 1 ? "passed" : "failed",
+          detail: `${normalized.leads.length} leads from ${normalized.evidence.length} evidence records`,
+        },
+        {
+          id: "work-queue-built",
+          status: queue.generated >= 1 ? "passed" : "failed",
+          detail: `${queue.generated} generated work units`,
+        },
+        {
+          id: "work-queue-next-claims-unit",
+          status: queueNext.units.length >= 1 && queueNext.units[0]?.status === "running" ? "passed" : "failed",
+          detail: `${queueNext.units.length} selected units`,
+        },
+      ]
+      return {
+        status: checks.every((check) => check.status === "passed") ? "passed" : "failed",
+        checks,
+        notes: [
+          "Executes real graph, tool-acquisition, command-plan, evidence-normalization, work-queue, runtime-summary, governor, scheduler, and next-action code paths.",
+        ],
+      }
+    },
+    "Real local drill for supervision, acquisition, graph, evidence normalization, work queue, governor, and next-action primitives.",
+    "full",
+  ),
   scenario("provider_tool_chaos", "provider-tool-chaos-contract", async () => {
     const checks = [
       ...(await fileIncludes("packages/opencode/src/provider/sse-repair.ts", ["repairSSEEvent", "jsonrepair"])),
       ...(await fileIncludes("packages/opencode/src/provider/provider.ts", ["enable_sse_json_repair", "repairSSE"])),
       ...(await fileIncludes("packages/opencode/src/tool/task.ts", ["summarizeRuntimeUsage"])),
+      ...(await fileIncludes("packages/opencode/src/tool/command_supervise.ts", [
+        "command_supervise",
+        "BackgroundJob.Service",
+      ])),
+      ...(await fileIncludes("packages/opencode/src/ulm/tool-manifest.ts", [
+        "buildCommandPlan",
+        "unattended command_supervise only allows non_destructive",
+      ])),
+      ...(await fileIncludes("packages/opencode/src/ulm/tool-acquisition.ts", [
+        "acquireTool",
+        "install required before supervised command execution",
+      ])),
+      ...(await fileIncludes("packages/opencode/src/ulm/operation-graph.ts", [
+        "REQUIRED_OPERATION_LANES",
+        "validateOperationGraph",
+      ])),
+      ...(await fileIncludes("packages/opencode/src/ulm/runtime-governor.ts", [
+        "evaluateRuntimeGovernor",
+        "operation budget exhausted",
+        "model route quota exhausted",
+      ])),
+      ...(await fileIncludes("packages/opencode/src/ulm/operation-next.ts", [
+        "decideOperationNext",
+        "launch_lane",
+        "next-action.json",
+      ])),
+      ...(await fileIncludes("packages/opencode/src/ulm/operation-run.ts", [
+        "runOperationStep",
+        "operation-run.jsonl",
+        "complete_lane",
+      ])),
+      ...(await fileIncludes("packages/opencode/src/ulm/evidence-normalizer.ts", [
+        "normalizeEvidence",
+        "leads.json",
+        "httpx-jsonl",
+      ])),
+      ...(await fileIncludes("packages/opencode/src/ulm/work-queue.ts", [
+        "buildWorkQueue",
+        "nextWorkUnits",
+        "work-queue.json",
+      ])),
     ]
     return { status: checks.every((check) => check.status === "passed") ? "passed" : "failed", checks }
   }),
@@ -235,12 +437,100 @@ const scenarios: HarnessScenario[] = [
     "Provider stream repair fixture coverage for malformed SSE events.",
     "chaos",
   ),
+  scenario(
+    "model_loop_eval",
+    "synthetic-full-operation",
+    async () => {
+      const checks = [
+        await pathExists("packages/opencode/script/ulm-lifecycle-smoke.ts"),
+        ...(await fileIncludes("packages/opencode/script/ulm-lifecycle-smoke.ts", [
+          "writeOperationPlan",
+          "writeRuntimeSummary",
+          "buildOperationAudit",
+        ])),
+        ...(await fileIncludes("packages/opencode/package.json", [
+          "test:ulm-smoke",
+          "test:ulm-lab",
+          "test:ulm-lab-target",
+        ])),
+      ]
+      return {
+        status: checks.every((check) => check.status === "passed") ? "passed" : "failed",
+        checks,
+        notes: ["Full lane confirms synthetic operation assembly uses the same durable operation/report artifacts."],
+      }
+    },
+    "Synthetic end-to-end operation coverage beyond static contract checks.",
+    "full",
+  ),
+  scenario(
+    "restart_resume_chaos",
+    "overnight-readiness-contract",
+    async () => {
+      const checks = [
+        ...(await fileIncludes("packages/opencode/src/tool/runtime_summary.txt", [
+          "budget rollups",
+          "stale-task restart args",
+          "background task state",
+        ])),
+        ...(await fileIncludes("tools/ulmcode-profile/commands/ulm-resume.md", [
+          "operation_resume",
+          "recoverStaleTasks",
+          "staleAfterMinutes",
+        ])),
+        ...(await fileIncludes("tools/ulmcode-profile/test-profile.sh", ["test:ulm-harness:fast"])),
+        ...(await fileIncludes("packages/opencode/src/ulm/runtime-daemon.ts", [
+          "runRuntimeDaemon",
+          "daemon.lock.json",
+          "cycleIntervalSeconds",
+          "launchCommandWorkUnit",
+        ])),
+        ...(await fileIncludes("packages/opencode/src/ulm/runtime-supervisor.ts", [
+          "writeRuntimeSupervisor",
+          "launchd",
+          "systemd",
+          "supervisor-install.md",
+          "Restart=on-failure",
+        ])),
+        ...(await fileIncludes("packages/opencode/script/ulm-runtime-daemon.ts", ["--detach", "daemon-launch.json"])),
+        ...(await fileIncludes("packages/opencode/script/ulm-runtime-daemon.ts", ["--supervisor", "writeRuntimeSupervisor"])),
+        ...(await fileIncludes("packages/opencode/script/ulm-burnin.ts", ["--target-hours", "runBurnInHarness"])),
+        ...(await fileIncludes("packages/opencode/src/ulm/burnin-harness.ts", [
+          "burnin-proof.json",
+          "simulatedElapsedSeconds",
+          "restartCount",
+        ])),
+        ...(await fileIncludes("packages/opencode/src/ulm/operation-run.ts", [
+          "validateLaneCompletionProof",
+          "lane-complete",
+          "proof artifact is missing or empty",
+        ])),
+        ...(await fileIncludes("packages/opencode/test/ulm/runtime-daemon.test.ts", [
+          "wall-clock scheduler loop",
+          "refuses an active daemon lock",
+          "detaches the operator CLI wrapper",
+          "passes command work-unit launch hooks",
+          "writes launchd and systemd supervisor artifacts",
+        ])),
+      ]
+      return {
+        status: checks.every((check) => check.status === "passed") ? "passed" : "failed",
+        checks,
+        notes: [
+          "Overnight lane is a readiness gate: real 20-hour lab execution remains operator-triggered, but recovery and resume contracts are mandatory.",
+        ],
+      }
+    },
+    "Readiness contract for unattended overnight operation recovery.",
+    "overnight",
+  ),
 ]
 
 function selectedScenarios(tier: HarnessTier) {
   if (tier === "fast") return scenarios.filter((item) => item.tier === "fast")
   if (tier === "chaos") return scenarios.filter((item) => item.tier === "fast" || item.tier === "chaos")
   if (tier === "full") return scenarios.filter((item) => item.tier === "fast" || item.tier === "full")
+  if (tier === "overnight") return scenarios.filter((item) => item.tier !== "overnight" || item.id === "overnight-readiness-contract")
   return scenarios.filter((item) => item.tier === tier)
 }
 

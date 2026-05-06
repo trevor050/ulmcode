@@ -17,12 +17,55 @@ import {
   writeReportOutline,
   writeRuntimeSummary,
 } from "../src/ulm/artifact"
+import { writeOperationGraph } from "../src/ulm/operation-graph"
 
 const worktree = await fs.mkdtemp(path.join(os.tmpdir(), "ulm-lifecycle-smoke-"))
 const operationID = "school-assessment"
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
+}
+
+async function completeGraphForHandoff(worktree: string, operationID: string) {
+  const graph = await writeOperationGraph(worktree, { operationID, budgetUSD: 5 })
+  const parsed = JSON.parse(await fs.readFile(graph.json, "utf8")) as { lanes: Array<{ id: string; status: string; expectedArtifacts: string[] }> }
+  const root = path.join(worktree, ".ulmcode", "operations", operationID)
+  for (const lane of parsed.lanes) {
+    lane.status = "complete"
+    for (const artifact of lane.expectedArtifacts) {
+      const target = path.join(root, artifact.replace(/\/+$/g, ""))
+      if (artifact.endsWith("/")) {
+        await fs.mkdir(target, { recursive: true })
+        await fs.writeFile(path.join(target, ".keep"), "complete\n")
+        continue
+      }
+      await fs.mkdir(path.dirname(target), { recursive: true })
+      try {
+        const stat = await fs.stat(target)
+        if (stat.size > 0) continue
+      } catch {}
+      await fs.writeFile(target, "complete\n")
+    }
+  }
+  await fs.writeFile(graph.json, JSON.stringify(parsed, null, 2) + "\n")
+  await fs.mkdir(path.join(root, "lane-complete"), { recursive: true })
+  for (const lane of parsed.lanes) {
+    await fs.writeFile(
+      path.join(root, "lane-complete", `${lane.id}.json`),
+      JSON.stringify(
+        {
+          operationID,
+          laneID: lane.id,
+          status: "complete",
+          completedAt: new Date().toISOString(),
+          summary: `${lane.id} complete.`,
+          artifacts: lane.expectedArtifacts,
+        },
+        null,
+        2,
+      ) + "\n",
+    )
+  }
 }
 
 await writeOperationCheckpoint(worktree, {
@@ -113,11 +156,6 @@ await writeOperationCheckpoint(worktree, {
   riskLevel: "high",
 })
 
-const rendered = await renderReport(worktree, {
-  operationID,
-  title: "ULMCode Smoke Assessment Report",
-})
-
 const runtime = await writeRuntimeSummary(worktree, {
   operationID,
   sessionMessages: [
@@ -152,6 +190,13 @@ const runtime = await writeRuntimeSummary(worktree, {
   compaction: { count: 0, pressure: "low" },
   notes: ["Smoke test generated all final handoff artifacts."],
 })
+
+const rendered = await renderReport(worktree, {
+  operationID,
+  title: "ULMCode Smoke Assessment Report",
+})
+
+await completeGraphForHandoff(worktree, operationID)
 
 const finalLint = await lintReport(worktree, operationID, { finalHandoff: true })
 assert(finalLint.ok, `final handoff lint failed: ${finalLint.gaps.join("; ")}`)

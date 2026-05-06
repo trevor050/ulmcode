@@ -2,4 +2,4 @@ Create a compact restart brief for a ULMCode operation from disk state.
 
 Use this before resuming a long-running operation after context compaction, process restart, handoff, or uncertainty about current state. The brief lists checkpoint state, health gaps, active/background tasks, recommended follow-up tools, and a continuation prompt that can restart work without rereading every artifact manually.
 
-For unattended runs, pass `staleAfterMinutes` so stale checkpoints and stale background jobs are called out before new work starts. Pass `recoverStaleTasks: true` when restartable stale/error/cancelled background lanes should be relaunched immediately from their saved task metadata before the refreshed brief is returned. Use `maxRecoveries` to cap automatic recovery breadth.
+For unattended runs, pass `staleAfterMinutes` so stale checkpoints and stale background jobs are called out before new work starts. Pass `recoverStaleTasks: true` when restartable stale/error/cancelled background lanes or supervised commands should be relaunched immediately from saved metadata before the refreshed brief is returned. Use `maxRecoveries` to cap automatic recovery breadth.

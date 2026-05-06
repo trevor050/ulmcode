@@ -1,0 +1,11 @@
+Build or refresh a durable ULM operation work queue from normalized leads.
+
+Use this after `evidence_normalize` creates `leads.json`. The tool reads
+non-destructive command profiles from `tools/ulmcode-profile/tool-manifest.json`,
+converts discovered hosts and URLs into `command_supervise`-ready work units,
+writes `.ulmcode/operations/<operation>/work-queue.json`, and creates input
+files such as `queues/http-discovery-hosts.txt`.
+
+The queue deduplicates profile/variable combinations and never emits destructive
+profiles. It does not launch commands by itself; use queued unit variables with
+`command_supervise` so approvals, scope, and runtime choices stay explicit.

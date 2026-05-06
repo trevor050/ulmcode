@@ -2,9 +2,11 @@ import * as Tool from "./tool"
 import DESCRIPTION from "./operation_recover.txt"
 import { BackgroundJob } from "@/background/job"
 import { Instance } from "@/project/instance"
-import { taskRestartArgs } from "./task_restart_args"
+import { commandRestartArgs, taskRestartArgs } from "./task_restart_args"
 import { TaskTool } from "./task"
+import { CommandSuperviseTool } from "./command_supervise"
 import { readOperationStatus, writeOperationCheckpoint } from "@/ulm/artifact"
+import { markRecoveredLanesRunning } from "@/ulm/operation-recovery"
 import { Effect, Schema } from "effect"
 
 export const Parameters = Schema.Struct({
@@ -16,14 +18,6 @@ export const Parameters = Schema.Struct({
     description: "Maximum number of restartable tasks to launch. Defaults to all restartable tasks.",
   }),
 })
-
-type Metadata = {
-  operationID: string
-  restarted: number
-  skipped: number
-  dryRun: boolean
-  checkpointUpdated: boolean
-}
 
 function operationID(job: BackgroundJob.Info) {
   const value = job.metadata?.operationID
@@ -53,6 +47,8 @@ export const OperationRecoverTool = Tool.define(
     const jobs = yield* BackgroundJob.Service
     const task = yield* TaskTool
     const taskDef = yield* task.init()
+    const command = yield* CommandSuperviseTool
+    const commandDef = yield* command.init()
 
     return {
       description: DESCRIPTION,
@@ -64,15 +60,24 @@ export const OperationRecoverTool = Tool.define(
           const candidates = (yield* jobs.list())
             .filter((job) => operationID(job) === params.operationID)
             .filter((job) => recoverableStatus(job.status))
-            .map((job) => ({ job, restartArgs: taskRestartArgs(job) }))
-          const restartable = candidates.filter((item) => item.restartArgs !== undefined).slice(0, maxTasks)
+            .map((job) => ({ job, taskArgs: taskRestartArgs(job), commandArgs: commandRestartArgs(job) }))
+          const restartable = candidates.filter((item) => item.taskArgs !== undefined || item.commandArgs !== undefined).slice(0, maxTasks)
           const skipped = candidates.length - restartable.length
           const results: string[] = []
 
           if (!dryRun) {
             for (const item of restartable) {
-              const restarted = yield* taskDef.execute(item.restartArgs!, ctx)
-              results.push([`task_id: ${item.job.id}`, `previous_status: ${item.job.status}`, restarted.output].join("\n"))
+              const restarted = item.taskArgs
+                ? yield* taskDef.execute(item.taskArgs, ctx)
+                : yield* commandDef.execute(item.commandArgs!, ctx)
+              results.push(
+                [
+                  item.job.type === "task" ? `task_id: ${item.job.id}` : `command_job_id: ${item.job.id}`,
+                  `job_type: ${item.job.type}`,
+                  `previous_status: ${item.job.status}`,
+                  restarted.output,
+                ].join("\n"),
+              )
             }
           }
           const checkpointUpdated = yield* Effect.gen(function* () {
@@ -84,6 +89,9 @@ export const OperationRecoverTool = Tool.define(
             )
             if (!status?.operation) return false
             const operation = status.operation
+            yield* Effect.tryPromise(() =>
+              markRecoveredLanesRunning(worktree, { operationID: params.operationID, jobs: restartable.map((item) => item.job) }),
+            ).pipe(Effect.ignore)
             yield* Effect.tryPromise(() =>
               writeOperationCheckpoint(worktree, {
                 operationID: operation.operationID,
@@ -109,9 +117,10 @@ export const OperationRecoverTool = Tool.define(
                 ? restartable
                     .map((item) =>
                       [
-                        `task_id: ${item.job.id}`,
+                        item.job.type === "task" ? `task_id: ${item.job.id}` : `command_job_id: ${item.job.id}`,
+                        `job_type: ${item.job.type}`,
                         `previous_status: ${item.job.status}`,
-                        `restart_args: ${JSON.stringify(item.restartArgs)}`,
+                        `restart_args: ${JSON.stringify(item.taskArgs ?? item.commandArgs)}`,
                       ].join("\n"),
                     )
                     .join("\n\n")

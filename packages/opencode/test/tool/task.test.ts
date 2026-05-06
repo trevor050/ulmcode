@@ -1,4 +1,6 @@
 import { afterEach, describe, expect } from "bun:test"
+import fs from "fs/promises"
+import path from "path"
 import { Deferred, Effect, Exit, Fiber, Layer, Option } from "effect"
 import { Agent } from "../../src/agent/agent"
 import { Config } from "@/config/config"
@@ -915,6 +917,115 @@ describe("tool.task", () => {
       expect(recovered.other?.status).toBe("stale")
       expect(recovered.status.operation?.summary).toContain("Recovered 1 background lane")
       expect(recovered.status.operation?.nextActions).toContain("Poll recovered background lanes with task_status")
+    }),
+  )
+
+  it.instance("operation_recover restarts stale supervised command jobs", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const storage = yield* Storage.Service
+      const jobs = yield* BackgroundJob.Service
+      const worktree = (yield* TestInstance).directory
+      const manifestPath = path.join(worktree, "tools", "ulmcode-profile", "tool-manifest.json")
+      yield* Effect.promise(async () => {
+        await writeOperationCheckpoint(worktree, {
+          operationID: "command-school",
+          objective: "Recover stale command lane",
+          stage: "recon",
+          status: "running",
+          summary: "Command lane was running before reload.",
+          nextActions: ["Recover stale command lane"],
+          activeTasks: ["tool_stale_command"],
+        })
+        await fs.mkdir(path.dirname(manifestPath), { recursive: true })
+        await fs.writeFile(
+          manifestPath,
+          JSON.stringify(
+            {
+              version: 1,
+              lastReviewed: "2026-05-05",
+              policy: {
+                defaultSafetyMode: "non_destructive",
+                destructiveSafetyMode: "interactive_destructive",
+                installFailureBehavior: "record_blocker_with_fallback",
+                notes: [],
+              },
+              tools: [
+                {
+                  id: "printf",
+                  purpose: "test command",
+                  safety: "non_destructive",
+                  install: [],
+                  validate: "printf --help",
+                  safeExamples: ["printf ok"],
+                  outputParsers: ["text"],
+                  fallbacks: [],
+                },
+              ],
+              commandProfiles: [
+                {
+                  id: "command-recovery",
+                  tool: "printf",
+                  safety: "non_destructive",
+                  template: "mkdir -p evidence/raw && printf recovered > {outputPrefix}.txt",
+                  heartbeatSeconds: 1,
+                  idleTimeoutSeconds: 5,
+                  hardTimeoutSeconds: 10,
+                  restartable: true,
+                  artifacts: [],
+                },
+              ],
+            },
+            null,
+            2,
+          ),
+        )
+      })
+      yield* Effect.addFinalizer(() => storage.remove(["background_job", "tool_stale_command"]).pipe(Effect.ignore))
+      yield* jobs.start({
+        id: "tool_stale_command",
+        type: "command_supervise",
+        title: "command recovery",
+        metadata: {
+          operationID: "command-school",
+          laneID: "recon",
+          workUnitID: "work-unit-command",
+          profileID: "command-recovery",
+          variables: {},
+          outputPrefix: "evidence/raw/recovered-command",
+          manifestPath,
+          worktree,
+        },
+        run: Effect.never,
+      })
+
+      const recovered = yield* Effect.gen(function* () {
+        const recover = yield* OperationRecoverTool
+        const recoverDef = yield* recover.init()
+        const jobsAfterReload = yield* BackgroundJob.Service
+        const result = yield* recoverDef.execute(
+          { operationID: "command-school" },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: {},
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+        const launchedID = result.output.match(/^job_id: (tool_[A-Za-z0-9]+)/m)?.[1]
+        const launched = launchedID ? yield* jobsAfterReload.wait({ id: launchedID }) : undefined
+        return { result, launched }
+      }).pipe(Effect.provide(Layer.fresh(BackgroundJob.layer)))
+
+      expect(recovered.result.metadata.restarted).toBe(1)
+      expect(recovered.result.output).toContain("command_job_id: tool_stale_command")
+      expect(recovered.result.output).toContain("profile_id: command-recovery")
+      expect(recovered.launched?.info?.status).toBe("completed")
+      expect(yield* Effect.promise(() => fs.readFile(path.join(worktree, ".ulmcode", "operations", "command-school", "evidence", "raw", "recovered-command.txt"), "utf8"))).toBe("recovered")
     }),
   )
 

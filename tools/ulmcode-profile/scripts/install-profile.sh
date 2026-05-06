@@ -23,6 +23,7 @@ cp -R "$PROFILE_DIR/local-opencode/.opencode/commands" "$TARGET_DIR/.opencode/co
 cp "$PROFILE_DIR/package.json" "$TARGET_DIR/package.json"
 cp "$PROFILE_DIR/oh-my-openagent.jsonc" "$TARGET_DIR/oh-my-openagent.jsonc"
 cp "$PROFILE_DIR/oh-my-openagent.jsonc" "$TARGET_DIR/.opencode/oh-my-openagent.jsonc"
+cp "$PROFILE_DIR/tool-manifest.json" "$TARGET_DIR/tool-manifest.json"
 sed "s#__ULMCODE_PROFILE_DIR__#$TARGET_DIR#g" "$PROFILE_DIR/opencode.json" > "$TARGET_DIR/opencode.json"
 
 cat > "$TARGET_DIR/ulmcode-launch.sh" <<'SH'

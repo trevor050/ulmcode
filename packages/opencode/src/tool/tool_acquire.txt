@@ -1,0 +1,3 @@
+Validate and optionally install a tool from the ULMCode tool manifest.
+
+Use this before `command_supervise` when a command profile depends on a local tool. By default it records validation status, install blockers, install commands, and fallbacks without installing anything. Omit `toolID` to run a clean-machine preflight for every manifest tool and write `tools/tool-preflight.json` plus `.md`. Set `install=true` only when the operator has authorized local package installation.

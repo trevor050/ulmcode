@@ -55,7 +55,7 @@ export const ULM_HARNESS_REQUIRED_CAPABILITIES = [
 ] as const
 
 export type HarnessCapabilityID = (typeof ULM_HARNESS_REQUIRED_CAPABILITIES)[number]["id"]
-export type HarnessTier = "fast" | "full" | "chaos" | "nightly"
+export type HarnessTier = "fast" | "full" | "chaos" | "overnight"
 export type HarnessCheckStatus = "passed" | "failed" | "skipped"
 export type HarnessScenarioStatus = HarnessCheckStatus
 

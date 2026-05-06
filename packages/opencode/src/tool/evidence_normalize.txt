@@ -1,0 +1,9 @@
+Normalize supervised command outputs into durable evidence records and unverified leads.
+
+Use this after `command_supervise` writes raw output, after resume when command
+artifacts exist but evidence is sparse, and before finding validation/reporting.
+
+The tool reads explicit artifact paths or discovered `command-plan.json` files,
+parses structured outputs when possible, writes `evidence-index.json`,
+`leads.json`, and citable `evidence_record` entries. Leads are intentionally
+not findings; promote a lead with `finding_record` only after validation.

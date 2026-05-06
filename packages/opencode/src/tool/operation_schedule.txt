@@ -1,0 +1,3 @@
+Create a durable ULMCode operation graph and lane schedule.
+
+Use this after `operation_plan` and before launching broad execution. It converts the operation into required parallel lanes with dependencies, model routes, budgets, allowed tools, expected artifacts, safety mode, and stale recovery policy. The graph is the resumable work queue for long-running operations; do not rely on prose-only plans for overnight execution.

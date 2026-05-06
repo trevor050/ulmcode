@@ -21,7 +21,7 @@ Usage notes:
 6. If the agent description mentions that it should be used proactively, then you should try your best to use it without the user having to ask for it first. Use your judgement.
 7. For long-running independent work, set background=true and poll the returned task_id with task_status.
 8. If a background task is stale after a restart or process reload, pass the restart_args emitted by task_status or task_list back to this tool to continue the same subagent session in the background.
-9. During ULMCode operations, pass operationID so background task metadata can be scoped to the correct operation in runtime summaries.
+9. During ULMCode operations, pass operationID and laneID so background task metadata can be scoped to the correct operation and reconciled by operation_run.
 
 Example usage (NOTE: The agents below are fictional examples for illustration only - use the actual agents listed above):
 

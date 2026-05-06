@@ -14,6 +14,7 @@ import { Cause, Effect, Exit, Option, Schema, Scope, Stream } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { Instance } from "@/project/instance"
 import { summarizeRuntimeUsage, type RuntimeUsageMessage } from "@/ulm/artifact"
+import { ModelID, ProviderID } from "@/provider/schema"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -35,6 +36,12 @@ export const Parameters = Schema.Struct({
   command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
   operationID: Schema.optional(Schema.String).annotate({
     description: "Optional ULMCode operation ID used to scope persisted background task metadata.",
+  }),
+  laneID: Schema.optional(Schema.String).annotate({
+    description: "Optional ULMCode operation lane ID used to reconcile background task completion with the operation graph.",
+  }),
+  modelRoute: Schema.optional(Schema.String).annotate({
+    description: "Optional provider/model route override for operation lanes, for example openai/gpt-5.5-fast.",
   }),
   background: Schema.optional(Schema.Boolean).annotate({
     description: "When true, launch the subagent in the background and return immediately.",
@@ -84,6 +91,14 @@ function currentWorktree() {
   } catch {
     return undefined
   }
+}
+
+function modelFromRoute(route: string | undefined) {
+  if (!route) return undefined
+  const [providerID, ...modelParts] = route.split("/")
+  const modelID = modelParts.join("/")
+  if (!providerID || !modelID) return undefined
+  return { providerID: ProviderID.make(providerID), modelID: ModelID.make(modelID) }
 }
 
 function runtimeUsageMessage(message: MessageV2.WithParts): RuntimeUsageMessage {
@@ -183,7 +198,8 @@ export const TaskTool = Tool.define(
       const msg = yield* Effect.sync(() => MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }))
       if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
 
-      const model = next.model ?? {
+      const routeModel = modelFromRoute(params.modelRoute)
+      const model = routeModel ?? next.model ?? {
         modelID: msg.info.modelID,
         providerID: msg.info.providerID,
       }
@@ -199,6 +215,8 @@ export const TaskTool = Tool.define(
         sessionId: nextSession.id,
         model,
         ...(params.operationID ? { operationID: params.operationID } : {}),
+        ...(params.laneID ? { laneID: params.laneID } : {}),
+        ...(params.modelRoute ? { modelRoute: params.modelRoute } : {}),
         ...(background ? { background: true } : {}),
       }
 
@@ -296,6 +314,8 @@ export const TaskTool = Tool.define(
             prompt: params.prompt,
             ...(params.command ? { command: params.command } : {}),
             ...(params.operationID ? { operationID: params.operationID } : {}),
+            ...(params.laneID ? { laneID: params.laneID } : {}),
+            ...(params.modelRoute ? { modelRoute: params.modelRoute } : {}),
             ...(worktree ? { worktree } : {}),
           },
           run: runTask().pipe(
@@ -304,7 +324,10 @@ export const TaskTool = Tool.define(
                 const messages = yield* sessions.messages({ sessionID: nextSession.id }).pipe(
                   Effect.catch(() => Effect.succeed<MessageV2.WithParts[]>([])),
                 )
-                const runtimeMessages = messages.map(runtimeUsageMessage)
+                const runtimeMessages = messages.map((message) => ({
+                  ...runtimeUsageMessage(message),
+                  ...(params.laneID ? { laneID: params.laneID } : {}),
+                }))
                 yield* jobs.updateMetadata(nextSession.id, {
                   runtimeMessages,
                   runtimeUsage: summarizeRuntimeUsage(runtimeMessages),
