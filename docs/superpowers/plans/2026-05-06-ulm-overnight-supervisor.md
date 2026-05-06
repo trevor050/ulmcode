@@ -52,7 +52,7 @@ rg -n "^\- \[[ x]\]" /Users/trevorrosato/.config/superpowers/worktrees/opencode/
 
 Expected: shows task checkboxes. Continue from the first unchecked task whose prerequisites are checked.
 
-- [ ] Before claiming completion, run the verification ladder in `Final Verification Ladder`.
+- [x] Before claiming completion, run the verification ladder in `Final Verification Ladder`.
 
 Do not restart from scratch after compaction. The worktree, branch, tests, and this plan are the durable state.
 
@@ -1440,7 +1440,7 @@ git commit -m "docs: document ULM overnight supervisor plan"
 
 **Purpose:** Make sure the rebuild is not vibes in a trench coat.
 
-- [ ] **Step 1: Run focused tests**
+- [x] **Step 1: Run focused tests**
 
 ```bash
 bun test packages/opencode/test/ulm/operation-goal.test.ts packages/opencode/test/tool/operation_goal.test.ts
@@ -1451,7 +1451,7 @@ bun test packages/opencode/test/ulm/operation-supervisor.test.ts packages/openco
 
 Expected: pass.
 
-- [ ] **Step 2: Run ULM profile gates**
+- [x] **Step 2: Run ULM profile gates**
 
 ```bash
 bun run --cwd packages/opencode test:ulm-tool-manifest
@@ -1461,7 +1461,7 @@ bun run --cwd packages/opencode test:ulm-rebuild-audit
 
 Expected: pass.
 
-- [ ] **Step 3: Run ULM lifecycle gates**
+- [x] **Step 3: Run ULM lifecycle gates**
 
 ```bash
 bun run --cwd packages/opencode test:ulm-smoke
@@ -1471,7 +1471,7 @@ bun run --cwd packages/opencode test:ulm-harness:overnight
 
 Expected: pass.
 
-- [ ] **Step 4: Run typecheck**
+- [x] **Step 4: Run typecheck**
 
 ```bash
 bun run --cwd packages/opencode typecheck
@@ -1479,7 +1479,7 @@ bun run --cwd packages/opencode typecheck
 
 Expected: pass.
 
-- [ ] **Step 5: Run full relevant package tests if time allows**
+- [x] **Step 5: Run full relevant package tests if time allows**
 
 ```bash
 bun test packages/opencode/test/ulm
@@ -1489,7 +1489,7 @@ bun test packages/opencode/test/session
 
 Expected: pass or document pre-existing failures with exact failing tests.
 
-- [ ] **Step 6: Optional literal readiness proof**
+- [x] **Step 6: Optional literal readiness proof documented**
 
 Only after accelerated gates pass:
 
@@ -1498,6 +1498,25 @@ bun run --cwd packages/opencode ulm:literal-run-readiness <operationID> --strict
 ```
 
 Expected: passes only for an actual operation with wall-clock daemon proof. Do not present harness overnight readiness as literal 20-hour evidence.
+
+Actual: not run in this implementation pass because no literal 20-hour daemon-owned operation ID exists in the branch. The accelerated overnight harness passed, and `docs/ulm-autonomy/completion-audit.md` records the remaining literal-run proof gap.
+
+**Verification results from final pass:**
+
+- `bun test test/ulm/operation-goal.test.ts test/tool/operation_goal.test.ts`: 7 pass.
+- `bun test test/ulm/tool-inventory.test.ts test/tool/tool_inventory.test.ts`: 4 pass.
+- `bun test test/ulm/pentest-kickoff.test.ts`: 6 pass.
+- `bun test test/ulm/operation-supervisor.test.ts test/tool/operation_supervise.test.ts`: 5 pass.
+- `bun run test:ulm-tool-manifest`: ok, 16 tools and 16 profiles.
+- `bun run test:ulm-skills`: ok, 11 skills and 11 commands.
+- `bun run test:ulm-rebuild-audit`: ok.
+- `bun run test:ulm-smoke`: ok.
+- `bun run test:ulm-harness:fast`: ok.
+- `bun run test:ulm-harness:overnight`: ok.
+- `bun test test/ulm`: 140 pass, 0 fail.
+- `bun test test/tool`: 276 pass, 0 fail.
+- `bun test test/session`: 312 pass, 4 skipped, 1 todo, 0 fail.
+- `bun run typecheck`: pass.
 
 ## Security And Safety Boundaries
 
@@ -1565,4 +1584,4 @@ Below is the checklist to update as work progresses. The goal is not complete un
 - [x] Task 11: Expose supervisor state in CLI/TUI/API surfaces.
 - [x] Task 12: Add overnight supervisor harness scenario.
 - [x] Task 13: Update autonomy/profile/agent documentation.
-- [ ] Task 14: Run final verification ladder and completion audit.
+- [x] Task 14: Run final verification ladder and completion audit.

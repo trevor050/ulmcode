@@ -338,6 +338,14 @@ exports[`tool parameters JSON Schema (wire shape) task 1`] = `
       "description": "A short (3-5 words) description of the task",
       "type": "string",
     },
+    "laneID": {
+      "description": "Optional ULMCode operation lane ID used to reconcile background task completion with the operation graph.",
+      "type": "string",
+    },
+    "modelRoute": {
+      "description": "Optional provider/model route override for operation lanes, for example openai/gpt-5.5-fast.",
+      "type": "string",
+    },
     "operationID": {
       "description": "Optional ULMCode operation ID used to scope persisted background task metadata.",
       "type": "string",

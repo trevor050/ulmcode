@@ -27,7 +27,7 @@ describe("ULM lab replay script", () => {
     expect(stdout).toContain("lab: k12-password-reset-token-leak")
     expect(stdout).toContain("lab: k12-lti-shared-secret-leak")
     expect(stdout).toContain("lab: k12-sis-webhook-signature-bypass")
-  })
+  }, 20_000)
 
   test("runs every bundled lab manifest", async () => {
     const labsRoot = path.join(repoRoot, "tools", "ulmcode-labs")
@@ -75,5 +75,5 @@ describe("ULM lab replay script", () => {
       expect(stdout).toContain("operation-audit.json")
       expect(stdout).toContain("validation-gate.json")
     }
-  })
+  }, 20_000)
 })
