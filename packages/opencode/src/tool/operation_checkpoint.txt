@@ -1,0 +1,3 @@
+Create or update a durable ULMCode operation checkpoint.
+
+Use this during long-running authorized security work whenever the stage changes, a subagent lane starts or ends, evidence is created, risk changes, or the run needs a resumable heartbeat. Keep summaries factual and cite evidence paths instead of making unsupported claims.

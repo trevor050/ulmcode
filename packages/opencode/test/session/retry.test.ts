@@ -113,6 +113,37 @@ describe("session.retry.delay", () => {
       }),
     ),
   )
+
+  it.live("policy stops after configured max retries", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const error = apiError({ "retry-after-ms": "0" })
+        let runs = 0
+        let statusUpdates = 0
+
+        const result = yield* Effect.gen(function* () {
+          runs++
+          return yield* Effect.fail(error)
+        }).pipe(
+          Effect.retry(
+            SessionRetry.policy({
+              maxRetries: 2,
+              parse: (err) => MessageV2.APIError.Schema.parse(err),
+              set: () =>
+                Effect.sync(() => {
+                  statusUpdates++
+                }),
+            }),
+          ),
+          Effect.exit,
+        )
+
+        expect(result._tag).toBe("Failure")
+        expect(runs).toBe(3)
+        expect(statusUpdates).toBe(2)
+      }),
+    ),
+  )
 })
 
 describe("session.retry.retryable", () => {
@@ -123,6 +154,22 @@ describe("session.retry.retryable", () => {
 
   test("maps overloaded provider codes", () => {
     const error = wrap(JSON.stringify({ code: "resource_exhausted" }))
+    expect(SessionRetry.retryable(error)).toBe("Provider is overloaded")
+  })
+
+  test("maps nested overloaded provider errors", () => {
+    const error = wrap(
+      JSON.stringify({
+        type: "error",
+        sequence_number: 2,
+        error: {
+          type: "service_unavailable_error",
+          code: "server_is_overloaded",
+          message: "Our servers are currently overloaded. Please try again later.",
+          param: null,
+        },
+      }),
+    )
     expect(SessionRetry.retryable(error)).toBe("Provider is overloaded")
   })
 
@@ -322,5 +369,28 @@ describe("session.message-v2.fromError", () => {
     if (!MessageV2.APIError.isInstance(result)) throw new Error("expected APIError")
     expect(result.data.isRetryable).toBe(true)
     expect(SessionRetry.retryable(result)).toBe("An error occurred while processing your request.")
+  })
+
+  test("converts OpenAI server_is_overloaded stream chunks to retryable APIError", () => {
+    const result = MessageV2.fromError(
+      {
+        message: JSON.stringify({
+          type: "error",
+          sequence_number: 2,
+          error: {
+            type: "service_unavailable_error",
+            code: "server_is_overloaded",
+            message: "Our servers are currently overloaded. Please try again later.",
+            param: null,
+          },
+        }),
+      },
+      { providerID: ProviderID.make("openai") },
+    )
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    if (!MessageV2.APIError.isInstance(result)) throw new Error("expected APIError")
+    expect(result.data.isRetryable).toBe(true)
+    expect(SessionRetry.retryable(result)).toBe("Provider is overloaded")
   })
 })

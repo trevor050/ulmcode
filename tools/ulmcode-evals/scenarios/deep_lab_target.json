@@ -1,0 +1,15 @@
+{
+  "id": "deep-lab-target-contract",
+  "capability": "deep_lab_target",
+  "tier": "fast",
+  "objective": "Keep lab realism and target smoke coverage visible in the harness.",
+  "checks": [
+    "At least fifteen lab manifests exist",
+    "At least two labs contain multiple findings",
+    "Lab target smoke script exists"
+  ],
+  "acceptance": [
+    "The scorecard reports deep_lab_target coverage",
+    "Lab catalog shrinkage or missing target smoke blocks the fast harness"
+  ]
+}

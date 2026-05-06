@@ -1,0 +1,180 @@
+{
+  "id": "k12-third-party-integration-token-leak",
+  "operationID": "k12-third-party-integration-token-leak",
+  "objective": "Replay a synthetic authorized K-12 third-party integration assessment where a vendor OAuth token leak allows roster preview and sync access.",
+  "assumptions": [
+    "The lab uses synthetic evidence only.",
+    "No real vendor API or school system is contacted.",
+    "Students, tokens, vendors, and integration records are intentionally fake."
+  ],
+  "plan": {
+    "phases": [
+      {
+        "stage": "recon",
+        "objective": "Map third-party integration configuration exposure.",
+        "actions": [
+          "Fetch the synthetic integration config endpoint",
+          "Identify whether vendor OAuth tokens are exposed",
+          "Record the roster-preview authorization behavior"
+        ],
+        "successCriteria": [
+          "Integration config and token exposure evidence are recorded"
+        ],
+        "subagents": [
+          "recon"
+        ],
+        "noSubagents": [
+          "vendor risk ranking stays with the primary operator"
+        ]
+      },
+      {
+        "stage": "validation",
+        "objective": "Validate the leaked token grants roster preview and sync capability.",
+        "actions": [
+          "Use the leaked synthetic token against the roster-preview endpoint",
+          "Trigger a synthetic vendor sync with the leaked token",
+          "Confirm sensitive roster fields are returned and imported"
+        ],
+        "successCriteria": [
+          "A report-ready finding cites token exposure, preview access, and sync evidence"
+        ],
+        "subagents": [
+          "validator",
+          "evidence"
+        ],
+        "noSubagents": [
+          "final integration governance recommendations stay with the primary operator"
+        ]
+      },
+      {
+        "stage": "reporting",
+        "objective": "Render final handoff artifacts.",
+        "actions": [
+          "Run report_lint",
+          "Run report_render",
+          "Run runtime_summary"
+        ],
+        "successCriteria": [
+          "Final handoff lint passes"
+        ],
+        "subagents": [
+          "report-writer"
+        ],
+        "noSubagents": [
+          "client-facing delivery approval is manual"
+        ]
+      }
+    ],
+    "reportingCloseout": [
+      "Run report_lint",
+      "Run report_render",
+      "Run runtime_summary"
+    ]
+  },
+  "report": {
+    "targetPages": 3,
+    "minOutlineWordsPerPage": 80
+  },
+  "evidence": [
+    {
+      "evidenceID": "ev-integration-config-token",
+      "title": "Synthetic vendor integration config exposes OAuth token",
+      "kind": "http_response",
+      "summary": "The integration config endpoint returns a live synthetic vendor OAuth token to unauthenticated callers.",
+      "url": "http://127.0.0.1/api/integrations/vendor/config",
+      "content": "{\"vendor\":\"assessment-sync\",\"oauthAccessToken\":\"vendor-token-demo-5521\",\"scopes\":[\"roster:read\",\"roster:sync\"],\"labFinding\":\"third_party_oauth_token_exposure\"}"
+    },
+    {
+      "evidenceID": "ev-integration-roster-preview",
+      "title": "Synthetic roster preview with leaked vendor token",
+      "kind": "http_response",
+      "summary": "The leaked vendor token grants roster preview access including sensitive student support flags.",
+      "url": "http://127.0.0.1/api/integrations/vendor/roster-preview",
+      "content": "{\"authorized\":true,\"studentCount\":2,\"sensitiveFieldsReturned\":true,\"labFinding\":\"vendor_token_roster_preview_access\"}"
+    },
+    {
+      "evidenceID": "ev-integration-sync-triggered",
+      "title": "Synthetic vendor sync triggered with leaked token",
+      "kind": "http_response",
+      "summary": "The leaked vendor token can trigger roster sync and import sensitive fields.",
+      "url": "http://127.0.0.1/api/integrations/vendor/sync",
+      "content": "{\"synced\":true,\"importedRecords\":2,\"sensitiveFieldsImported\":true,\"labFinding\":\"vendor_token_roster_sync\"}"
+    }
+  ],
+  "findings": [
+    {
+      "findingID": "third-party-integration-token-leak",
+      "title": "Third-party integration exposes vendor OAuth token",
+      "state": "report_ready",
+      "severity": "critical",
+      "confidence": 0.9,
+      "affectedAssets": [
+        "Vendor integration API",
+        "Roster sync workflow",
+        "Student support metadata"
+      ],
+      "evidence": [
+        {
+          "id": "ev-integration-config-token",
+          "path": "evidence/raw/ev-integration-config-token.txt"
+        },
+        {
+          "id": "ev-integration-roster-preview",
+          "path": "evidence/raw/ev-integration-roster-preview.txt"
+        },
+        {
+          "id": "ev-integration-sync-triggered",
+          "path": "evidence/raw/ev-integration-sync-triggered.txt"
+        }
+      ],
+      "description": "The synthetic third-party integration config endpoint exposes a vendor OAuth token with roster read and sync scopes, allowing unauthorized roster preview and sync actions.",
+      "impact": "An attacker could access sensitive roster metadata, trigger unauthorized synchronization, and move student support data into an external vendor workflow.",
+      "remediation": "Never expose vendor tokens to clients, store integration secrets server-side, scope tokens to least privilege, rotate leaked credentials, require service-to-service authentication, and audit vendor sync actions."
+    }
+  ],
+  "runtime": {
+    "sessionMessages": [
+      {
+        "role": "assistant",
+        "agent": "pentest",
+        "modelID": "gpt-5.5",
+        "providerID": "openai",
+        "cost": 0.52,
+        "tokens": {
+          "input": 1420,
+          "output": 650,
+          "reasoning": 410,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "role": "assistant",
+        "agent": "validator",
+        "modelID": "gpt-5.4-mini",
+        "providerID": "openai",
+        "cost": 0.16,
+        "tokens": {
+          "input": 750,
+          "output": 340,
+          "reasoning": 160,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      }
+    ]
+  },
+  "expected": {
+    "reportableFindings": 1,
+    "evidence": 3,
+    "dashboardIncludes": [
+      "# k12-third-party-integration-token-leak - handoff/complete",
+      "risk: high",
+      "findings: 1 total"
+    ]
+  }
+}

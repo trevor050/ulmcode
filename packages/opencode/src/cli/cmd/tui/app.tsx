@@ -44,6 +44,7 @@ import { KeybindProvider, useKeybind } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
+import { UlmOperations } from "@tui/routes/ulm-operations"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
@@ -333,6 +334,11 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
 
     if (route.data.type === "plugin") {
       renderer.setTerminalTitle(`OC | ${route.data.id}`)
+      return
+    }
+
+    if (route.data.type === "ulmOperations") {
+      renderer.setTerminalTitle("OC | ULM Operations")
     }
   })
 
@@ -589,6 +595,19 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
           },
         ]
       : []),
+    {
+      title: "ULM operations",
+      value: "ulm.operations",
+      slash: {
+        name: "ulm",
+        aliases: ["operations"],
+      },
+      onSelect: () => {
+        route.navigate({ type: "ulmOperations" })
+        dialog.clear()
+      },
+      category: "System",
+    },
     {
       title: "View status",
       keybind: "status_view",
@@ -903,6 +922,9 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
           </Match>
           <Match when={route.data.type === "session"}>
             <Session />
+          </Match>
+          <Match when={route.data.type === "ulmOperations"}>
+            <UlmOperations />
           </Match>
         </Switch>
       </Show>

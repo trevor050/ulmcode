@@ -97,6 +97,8 @@ const GO_UPSELL_LAST_SEEN_AT = "go_upsell_last_seen_at"
 const GO_UPSELL_DONT_SHOW = "go_upsell_dont_show"
 const GO_UPSELL_WINDOW = 86_400_000 // 24 hrs
 
+const taskMoney = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
+
 const context = createContext<{
   width: number
   sessionID: string
@@ -1149,11 +1151,14 @@ export function Session() {
                         index={index()}
                         onMouseUp={() => {
                           if (renderer.getSelection()?.getSelectedText()) return
+                          const pendingMessageID = pending()
+                          const queued = !!pendingMessageID && message.id > pendingMessageID
                           dialog.replace(() => (
                             <DialogMessage
                               messageID={message.id}
                               sessionID={route.sessionID}
                               setPrompt={(promptInfo) => prompt?.set(promptInfo)}
+                              queued={queued}
                             />
                           ))
                         }}
@@ -1989,6 +1994,14 @@ function Task(props: ToolProps<typeof TaskTool>) {
     return assistant - first
   })
 
+  const totalCost = createMemo(() => {
+    const id = props.metadata.sessionId
+    if (!id) return 0
+    const rollup = sync.data.session_cost[id]
+    if (rollup) return rollup.self + rollup.subagents
+    return messages().reduce((sum, item) => sum + (item.role === "assistant" ? item.cost : 0), 0)
+  })
+
   const content = createMemo(() => {
     if (!props.input.description) return ""
     let content = [`${Locale.titlecase(props.input.subagent_type ?? "General")} Task — ${props.input.description}`]
@@ -2003,7 +2016,9 @@ function Task(props: ToolProps<typeof TaskTool>) {
     }
 
     if (props.part.state.status === "completed") {
-      content.push(`└ ${tools().length} toolcalls · ${Locale.duration(duration())}`)
+      const cost = totalCost()
+      const costSuffix = cost > 0 ? ` · ${taskMoney.format(cost)}` : ""
+      content.push(`└ ${tools().length} toolcalls · ${Locale.duration(duration())}${costSuffix}`)
     }
 
     return content.join("\n")

@@ -1,0 +1,15 @@
+{
+  "id": "prompt-agent-regression-contract",
+  "capability": "prompt_agent_regression",
+  "tier": "fast",
+  "objective": "Reserve harness coverage for prompt and agent behavior regressions.",
+  "checks": [
+    "Agent orchestration skill exists",
+    "Long-report production skill exists",
+    "ULM test-plan command calls for lifecycle and artifact QA"
+  ],
+  "acceptance": [
+    "The scorecard reports prompt_agent_regression coverage",
+    "Prompt or command drift can fail a fast scenario before behavior gets worse silently"
+  ]
+}

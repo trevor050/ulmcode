@@ -1,0 +1,6 @@
+services:
+  k12-lms-payment-webhook-replay:
+    build:
+      context: ./service
+    ports:
+      - "8091:8080"

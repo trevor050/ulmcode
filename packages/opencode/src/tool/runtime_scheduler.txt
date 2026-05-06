@@ -1,0 +1,13 @@
+Run the ULMCode autonomy scheduler loop for an operation.
+
+Use this as the persistent runtime owner for unattended operations. It reconciles
+background jobs into the operation graph, requeues stale claimed work units that
+never bound to a command job, advances the next operation step, evaluates the
+runtime governor, and writes scheduler heartbeats under
+`.ulmcode/operations/<operation>/scheduler/`.
+
+Keep `maxCycles` small for interactive checks. For real wall-clock operations,
+use `runtime_daemon` inside OpenCode so background jobs are refreshed every tick,
+or use the `ulm:runtime-daemon` package script for terminal-driven artifact
+loops. Both wrappers add interval sleeps, a daemon lock, stale-lock recovery,
+signal shutdown, and a 20-hour default runtime window.

@@ -1,0 +1,6 @@
+services:
+  k12-third-party-integration-token-leak:
+    build:
+      context: ./service
+    ports:
+      - "8093:8080"

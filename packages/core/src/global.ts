@@ -6,7 +6,7 @@ import { Context, Effect, Layer } from "effect"
 import { Flock } from "./util/flock"
 import { Flag } from "./flag/flag"
 
-const app = "opencode"
+const app = process.env.OPENCODE_APP_NAME ?? "opencode"
 const data = path.join(xdgData!, app)
 const cache = path.join(xdgCache!, app)
 const config = path.join(xdgConfig!, app)
@@ -70,6 +70,8 @@ export const layer = Layer.effect(
   Service,
   Effect.sync(() => Service.of(make())),
 )
+
+export const defaultLayer = layer
 
 export const layerWith = (input: Partial<Interface>) =>
   Layer.effect(

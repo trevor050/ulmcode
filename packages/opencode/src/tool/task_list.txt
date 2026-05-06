@@ -1,0 +1,3 @@
+List background tasks known to the current project.
+
+Use this after compaction, reloads, interruptions, or long unattended runs when task IDs may have been lost. During ULMCode operations, pass `operationID` to hide unrelated project-level jobs. Jobs persisted as `running` without an active fiber are reported as `stale`; when enough metadata exists, stale entries include `restart_args` and can be restarted with `task_restart`. Poll a specific task with `task_status` once you identify the task ID.

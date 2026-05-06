@@ -1,0 +1,6 @@
+services:
+  k12-gradebook-mass-assignment:
+    build:
+      context: ./service
+    ports:
+      - "3012:3000"

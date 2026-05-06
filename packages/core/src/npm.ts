@@ -112,21 +112,27 @@ export const layer = Layer.effect(
 
     const add = Effect.fn("Npm.add")(function* (pkg: string) {
       const dir = directory(pkg)
-      const name = (() => {
+      const npaName = (() => {
         try {
-          return npa(pkg).name ?? pkg
+          return npa(pkg).name ?? undefined
         } catch {
-          return pkg
+          return undefined
         }
       })()
 
-      if (yield* afs.existsSafe(path.join(dir, "node_modules", name))) {
-        return resolveEntryPoint(name, path.join(dir, "node_modules", name))
+      if (yield* afs.existsSafe(dir)) {
+        const cachedPkg = yield* afs.readJson(path.join(dir, "package.json")).pipe(Effect.option)
+        if (Option.isSome(cachedPkg)) {
+          const deps = (cachedPkg.value as { dependencies?: Record<string, unknown> }).dependencies
+          const first = deps && Object.keys(deps)[0]
+          if (first) return resolveEntryPoint(first, path.join(dir, "node_modules", first))
+        }
       }
 
       const tree = yield* reify({ dir, add: [pkg] })
       const first = tree.edgesOut.values().next().value?.to
       if (!first) {
+        const name = npaName ?? pkg
         const result = resolveEntryPoint(name, path.join(dir, "node_modules", name))
         if (Option.isSome(result.entrypoint)) return result
         return yield* new InstallFailedError({ add: [pkg], dir })

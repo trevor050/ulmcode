@@ -7,6 +7,7 @@ import { Instance } from "../../src/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
+import { ModelID, ProviderID } from "../../src/provider/schema"
 import { AppRuntime } from "../../src/effect/app-runtime"
 import { tmpdir } from "../fixture/fixture"
 
@@ -29,8 +30,29 @@ function updateMessage<T extends MessageV2.Info>(msg: T) {
   return AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.updateMessage(msg)))
 }
 
+function cost(id: SessionID) {
+  return AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.cost(id)))
+}
+
 function updatePart<T extends MessageV2.Part>(part: T) {
   return AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.updatePart(part)))
+}
+
+async function addAssistantCost(sessionID: SessionID, value: number) {
+  await updateMessage({
+    id: MessageID.ascending(),
+    sessionID,
+    role: "assistant",
+    time: { created: Date.now(), completed: Date.now() },
+    parentID: MessageID.ascending(),
+    modelID: ModelID.make("test"),
+    providerID: ProviderID.make("test"),
+    mode: "",
+    agent: "default",
+    path: { cwd: "/", root: "/" },
+    cost: value,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+  } as unknown as MessageV2.Info)
 }
 
 describe("session.created event", () => {
@@ -164,6 +186,47 @@ describe("step-finish token propagation via Bus event", () => {
 })
 
 describe("Session", () => {
+  test("cost rolls up descendant session assistant spend", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const parent = await create({ title: "cost-parent" })
+        const child = await create({ title: "cost-child", parentID: parent.id })
+        const grandchild = await create({ title: "cost-grandchild", parentID: child.id })
+
+        await addAssistantCost(parent.id, 0.1)
+        await addAssistantCost(child.id, 0.2)
+        await addAssistantCost(grandchild.id, 0.3)
+
+        await expect(cost(parent.id)).resolves.toEqual({
+          self: 0.1,
+          subagents: 0.5,
+          subagent_count: 2,
+        })
+        await expect(cost(child.id)).resolves.toEqual({
+          self: 0.2,
+          subagents: 0.3,
+          subagent_count: 1,
+        })
+
+        await remove(parent.id)
+      },
+    })
+  })
+
+  test("cost rejects missing sessions", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await expect(cost("ses_missing" as SessionID)).rejects.toThrow("NotFoundError")
+      },
+    })
+  })
+
   test("remove works without an instance", async () => {
     await using tmp = await tmpdir({ git: true })
 

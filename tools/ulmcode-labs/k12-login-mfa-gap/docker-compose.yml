@@ -1,0 +1,8 @@
+services:
+  k12-login-mfa-gap:
+    build:
+      context: ./service
+    ports:
+      - "18080:8080"
+    environment:
+      PORT: "8080"

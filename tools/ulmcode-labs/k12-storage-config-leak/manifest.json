@@ -1,0 +1,162 @@
+{
+  "id": "k12-storage-config-leak",
+  "operationID": "k12-storage-config-leak",
+  "objective": "Replay a synthetic authorized K-12 storage exposure assessment with public client config and unauthenticated student-support file access.",
+  "assumptions": [
+    "The lab uses synthetic evidence only.",
+    "No real external target is contacted.",
+    "Student-support records, buckets, and URLs are intentionally fake."
+  ],
+  "plan": {
+    "phases": [
+      {
+        "stage": "recon",
+        "objective": "Map public storage configuration and downloadable file paths.",
+        "actions": [
+          "Load the synthetic client configuration endpoint",
+          "Identify whether bucket names, object prefixes, and signed download URLs are exposed without authentication"
+        ],
+        "successCriteria": [
+          "Storage configuration exposure evidence is recorded with a durable evidence ID"
+        ],
+        "subagents": [
+          "recon"
+        ],
+        "noSubagents": [
+          "student-data handling and disclosure decisions stay with the primary operator"
+        ]
+      },
+      {
+        "stage": "validation",
+        "objective": "Validate unauthenticated student-support file access.",
+        "actions": [
+          "Replay a synthetic unauthenticated download for a student-support export",
+          "Record the missing authentication and authorization control"
+        ],
+        "successCriteria": [
+          "A report-ready finding cites both the leaked config and the unauthenticated file read evidence"
+        ],
+        "subagents": [
+          "validator",
+          "evidence"
+        ],
+        "noSubagents": [
+          "final privacy impact wording stays with the primary operator"
+        ]
+      },
+      {
+        "stage": "reporting",
+        "objective": "Render final handoff artifacts.",
+        "actions": [
+          "Run report_lint",
+          "Run report_render",
+          "Run runtime_summary"
+        ],
+        "successCriteria": [
+          "Final handoff lint passes"
+        ],
+        "subagents": [
+          "report-writer"
+        ],
+        "noSubagents": [
+          "client-facing delivery approval is manual"
+        ]
+      }
+    ],
+    "reportingCloseout": [
+      "Run report_lint",
+      "Run report_render",
+      "Run runtime_summary"
+    ]
+  },
+  "evidence": [
+    {
+      "evidenceID": "ev-public-storage-config",
+      "title": "Synthetic public storage configuration response",
+      "kind": "http_response",
+      "summary": "The client configuration endpoint disclosed a storage bucket, student-support prefix, and unauthenticated download URL template.",
+      "url": "http://127.0.0.1/api/config/client",
+      "content": "{\"bucket\":\"demo-district-student-files\",\"publicPrefix\":\"student-support/\",\"downloadTemplate\":\"/api/storage/download?path={path}\",\"labFinding\":\"public_storage_config_leak\"}"
+    },
+    {
+      "evidenceID": "ev-unauthenticated-support-file",
+      "title": "Synthetic unauthenticated student-support file download",
+      "kind": "http_response",
+      "summary": "An unauthenticated request downloaded a synthetic student-support export containing sensitive education-support fields.",
+      "url": "http://127.0.0.1/api/storage/download?path=student-support/iep-export.csv",
+      "content": "{\"authenticated\":false,\"authorized\":true,\"path\":\"student-support/iep-export.csv\",\"preview\":\"student_id,plan_type,accommodation\",\"labFinding\":\"unauthenticated_student_file_read\"}"
+    }
+  ],
+  "findings": [
+    {
+      "findingID": "unauthenticated-student-support-file-access",
+      "title": "Unauthenticated access to student-support storage files",
+      "state": "report_ready",
+      "severity": "high",
+      "confidence": 0.9,
+      "affectedAssets": [
+        "Student file storage",
+        "Client configuration endpoint",
+        "Student-support exports"
+      ],
+      "evidence": [
+        {
+          "id": "ev-public-storage-config",
+          "path": "evidence/raw/synthetic-public-storage-configuration-response.txt"
+        },
+        {
+          "id": "ev-unauthenticated-support-file",
+          "path": "evidence/raw/synthetic-unauthenticated-student-support-file-download.txt"
+        }
+      ],
+      "description": "The synthetic application discloses storage object paths and allows unauthenticated download of a student-support export.",
+      "impact": "An unauthenticated user could access sensitive education-support data, increasing privacy, compliance, and student-safety risk.",
+      "remediation": "Keep bucket names and privileged prefixes out of public config when possible, require authenticated server-side authorization before generating downloads, and enforce object-level access rules for student-support files."
+    }
+  ],
+  "runtime": {
+    "sessionMessages": [
+      {
+        "role": "assistant",
+        "agent": "pentest",
+        "modelID": "gpt-5.5",
+        "providerID": "openai",
+        "cost": 0.42,
+        "tokens": {
+          "input": 1200,
+          "output": 480,
+          "reasoning": 320,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "role": "assistant",
+        "agent": "validator",
+        "modelID": "gpt-5.4-mini",
+        "providerID": "openai",
+        "cost": 0.12,
+        "tokens": {
+          "input": 650,
+          "output": 280,
+          "reasoning": 110,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      }
+    ]
+  },
+  "expected": {
+    "reportableFindings": 1,
+    "evidence": 2,
+    "dashboardIncludes": [
+      "# k12-storage-config-leak - handoff/complete",
+      "risk: high",
+      "findings: 1 total"
+    ]
+  }
+}

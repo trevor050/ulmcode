@@ -21,6 +21,10 @@ export const Info = Schema.Struct({
   .pipe(withStatics((s) => ({ zod: zod(s) })))
 export type Info = Schema.Schema.Type<typeof Info>
 
+export function active(todos: Info[]) {
+  return todos.filter((todo) => todo.status === "pending" || todo.status === "in_progress")
+}
+
 export const Event = {
   Updated: BusEvent.define(
     "todo.updated",
@@ -44,13 +48,14 @@ export const layer = Layer.effect(
     const bus = yield* Bus.Service
 
     const update = Effect.fn("Todo.update")(function* (input: { sessionID: SessionID; todos: Info[] }) {
+      const todos = active(input.todos)
       yield* Effect.sync(() =>
         Database.transaction((db) => {
           db.delete(TodoTable).where(eq(TodoTable.session_id, input.sessionID)).run()
-          if (input.todos.length === 0) return
+          if (todos.length === 0) return
           db.insert(TodoTable)
             .values(
-              input.todos.map((todo, position) => ({
+              todos.map((todo, position) => ({
                 session_id: input.sessionID,
                 content: todo.content,
                 status: todo.status,
@@ -61,7 +66,7 @@ export const layer = Layer.effect(
             .run()
         }),
       )
-      yield* bus.publish(Event.Updated, input)
+      yield* bus.publish(Event.Updated, { sessionID: input.sessionID, todos })
     })
 
     const get = Effect.fn("Todo.get")(function* (sessionID: SessionID) {
@@ -70,11 +75,13 @@ export const layer = Layer.effect(
           db.select().from(TodoTable).where(eq(TodoTable.session_id, sessionID)).orderBy(asc(TodoTable.position)).all(),
         ),
       )
-      return rows.map((row) => ({
-        content: row.content,
-        status: row.status,
-        priority: row.priority,
-      }))
+      return active(
+        rows.map((row) => ({
+          content: row.content,
+          status: row.status,
+          priority: row.priority,
+        })),
+      )
     })
 
     return Service.of({ update, get })

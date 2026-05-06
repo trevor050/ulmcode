@@ -19,7 +19,12 @@ export type PluginRoute = {
   data?: Record<string, unknown>
 }
 
-export type Route = HomeRoute | SessionRoute | PluginRoute
+export type UlmOperationsRoute = {
+  type: "ulmOperations"
+  operationID?: string
+}
+
+export type Route = HomeRoute | SessionRoute | PluginRoute | UlmOperationsRoute
 
 export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
   name: "Route",

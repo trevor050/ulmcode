@@ -1,0 +1,3 @@
+Write the execution-ready ULMCode operation plan.
+
+Use this before broad execution. The plan must define ordered phases, concrete actions, success criteria, where subagents will be used, where they will not be used, assumptions, and the reporting closeout sequence. This is the durable operation order, not a vague checklist.

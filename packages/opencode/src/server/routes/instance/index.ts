@@ -114,6 +114,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket, opts?: CorsOptions): H
     app.get(SessionPaths.status, (c) => handler(c.req.raw, context))
     app.get(SessionPaths.get, (c) => handler(c.req.raw, context))
     app.get(SessionPaths.children, (c) => handler(c.req.raw, context))
+    app.get(SessionPaths.cost, (c) => handler(c.req.raw, context))
     app.get(SessionPaths.todo, (c) => handler(c.req.raw, context))
     app.get(SessionPaths.diff, (c) => handler(c.req.raw, context))
     app.get(SessionPaths.messages, (c) => handler(c.req.raw, context))
@@ -155,7 +156,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket, opts?: CorsOptions): H
     app.get(WorkspacePaths.list, (c) => handler(c.req.raw, context))
     app.get(WorkspacePaths.status, (c) => handler(c.req.raw, context))
     app.delete(WorkspacePaths.remove, (c) => handler(c.req.raw, context))
-    app.post(WorkspacePaths.sessionRestore, (c) => handler(c.req.raw, context))
+    app.post(WorkspacePaths.warp, (c) => handler(c.req.raw, context))
   }
 
   return app

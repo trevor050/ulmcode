@@ -1,0 +1,6 @@
+services:
+  k12-student-search-injection:
+    build:
+      context: ./service
+    ports:
+      - "8084:8080"

@@ -19,6 +19,7 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { Database } from "@/storage/db"
 import { SessionMessageTable, SessionTable } from "@/session/session.sql"
 import { SessionMessage } from "../../src/v2/session-message"
+import { Modelv2 } from "../../src/v2/model"
 import * as DateTime from "effect/DateTime"
 import * as Log from "@opencode-ai/core/util/log"
 import { eq } from "drizzle-orm"
@@ -147,6 +148,73 @@ afterEach(async () => {
 
 describe("session HttpApi", () => {
   it.live(
+    "serves configured provider models through v2 model routes",
+    withTmp(
+      {
+        git: true,
+        config: {
+          formatter: false,
+          lsp: false,
+          provider: {
+            "test-provider": {
+              name: "Test Provider",
+              npm: "@ai-sdk/openai-compatible",
+              env: [],
+              models: {
+                "test-model": {
+                  name: "Test Model",
+                  family: "test-family",
+                  tool_call: true,
+                  cost: {
+                    input: 1,
+                    output: 2,
+                    cache_read: 0.25,
+                    cache_write: 0.5,
+                  },
+                  limit: { context: 128000, input: 64000, output: 4096 },
+                  release_date: "2026-05-05",
+                },
+              },
+              options: {
+                apiKey: "test-key",
+                baseURL: "https://models.example.test/v1",
+              },
+            },
+          },
+        },
+      },
+      (tmp) =>
+        Effect.gen(function* () {
+          const models = yield* requestJson<
+            Array<{
+              id: string
+              providerID: string
+              family?: string
+              name: string
+              capabilities: { tools: boolean }
+              cost: Array<{ input: number; output: number; cache: { read: number; write: number } }>
+              limit: { context: number; input?: number; output: number }
+            }>
+          >("/api/model", { headers: { "x-opencode-directory": tmp.path } })
+          const model = models.find((item) => item.providerID === "test-provider" && item.id === "test-model")
+          expect(model).toMatchObject({
+            id: "test-model",
+            providerID: "test-provider",
+            family: "test-family",
+            name: "Test Model",
+            capabilities: { tools: true },
+            limit: { context: 128000, input: 64000, output: 4096 },
+          })
+          expect(model?.cost[0]).toMatchObject({
+            input: 1,
+            output: 2,
+            cache: { read: 0.25, write: 0.5 },
+          })
+        }),
+    ),
+  )
+
+  it.live(
     "serves read routes through Hono bridge",
     withTmp({ git: true, config: { formatter: false, lsp: false } }, (tmp) =>
       Effect.gen(function* () {
@@ -214,7 +282,11 @@ describe("session HttpApi", () => {
                 id: SessionMessage.ID.create(),
                 type: "assistant",
                 agent: "build",
-                model: { id: "model", providerID: "provider" },
+                model: {
+                  id: Modelv2.ID.make("model"),
+                  providerID: Modelv2.ProviderID.make("provider"),
+                  variant: Modelv2.VariantID.make("default"),
+                },
                 time: { created: DateTime.makeUnsafe(1) },
                 content: [],
               })

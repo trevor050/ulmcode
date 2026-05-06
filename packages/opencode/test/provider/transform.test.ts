@@ -997,6 +997,52 @@ describe("ProviderTransform.schema - moonshot $ref siblings", () => {
       type: "number",
     })
   })
+
+  test("flattens deeply nested object schemas before Kimi depth limits", () => {
+    const schema: any = { type: "object", properties: {} }
+    let current = schema.properties
+    for (let i = 0; i < 12; i++) {
+      current[`level${i}`] = {
+        type: "object",
+        properties: {},
+      }
+      current = current[`level${i}`].properties
+    }
+    current.leaf = { type: "string", description: "deep primitive" }
+
+    const result = ProviderTransform.schema(moonshotModel, schema) as any
+
+    expect(result.type).toBe("object")
+    expect(result.properties.level0).toBeDefined()
+
+    let node = result.properties
+    let flattened: any
+    for (let i = 0; i < 12; i++) {
+      node = node?.[`level${i}`]
+      if (!node) break
+      if (node.additionalProperties === true && !node.properties) {
+        flattened = node
+        break
+      }
+      node = node.properties
+    }
+
+    expect(flattened).toEqual({ type: "object", additionalProperties: true })
+  })
+
+  test("preserves primitive Moonshot schemas", () => {
+    const result = ProviderTransform.schema(moonshotModel, {
+      type: "string",
+      enum: ["one", "two"],
+      description: "primitive values should not be flattened",
+    } as any) as any
+
+    expect(result).toEqual({
+      type: "string",
+      enum: ["one", "two"],
+      description: "primitive values should not be flattened",
+    })
+  })
 })
 
 describe("ProviderTransform.message - DeepSeek reasoning content", () => {
@@ -1495,6 +1541,167 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
       { type: "text", text: "I checked your home directory and looked for PDF files." },
       { type: "tool-call", toolCallId: "toolu_1", toolName: "read", input: { filePath: "/root" } },
       { type: "tool-call", toolCallId: "toolu_2", toolName: "glob", input: { pattern: "**/*.pdf" } },
+    ])
+  })
+
+  test("keeps tool-call and tool-result paired when splitting anthropic messages", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "tool-call", toolCallId: "toolu_1", toolName: "read", input: { filePath: "/root" } },
+          { type: "tool-result", toolCallId: "toolu_1", toolName: "read", output: { type: "text", value: "ok" } },
+          { type: "text", text: "I checked your home directory." },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+
+    expect(result).toHaveLength(2)
+    expect(result[0]).toMatchObject({
+      role: "assistant",
+      content: [{ type: "text", text: "I checked your home directory." }],
+    })
+    expect(result[1]).toMatchObject({
+      role: "assistant",
+      content: [
+        { type: "tool-call", toolCallId: "toolu_1", toolName: "read", input: { filePath: "/root" } },
+        { type: "tool-result", toolCallId: "toolu_1", toolName: "read", output: { type: "text", value: "ok" } },
+      ],
+    })
+  })
+
+  test("leaves provider-executed anthropic tool results with trailing text unchanged", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "srvtoolu_1",
+            toolName: "code_execution",
+            input: { code: "print('ok')", type: "programmatic-tool-call" },
+            providerExecuted: true,
+          },
+          {
+            type: "tool-result",
+            toolCallId: "srvtoolu_1",
+            toolName: "code_execution",
+            output: {
+              type: "json",
+              value: { type: "code_execution_result", stdout: "ok", stderr: "", return_code: 0 },
+            },
+          },
+          { type: "text", text: "The code ran successfully." },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toMatchObject(msgs[0].content)
+  })
+
+  test("keeps provider-executed pairs together when splitting mixed anthropic tool parts", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "tool-call", toolCallId: "toolu_1", toolName: "read", input: { filePath: "/root" } },
+          {
+            type: "tool-call",
+            toolCallId: "srvtoolu_1",
+            toolName: "code_execution",
+            input: { code: "print('ok')", type: "programmatic-tool-call" },
+            providerExecuted: true,
+          },
+          {
+            type: "tool-result",
+            toolCallId: "srvtoolu_1",
+            toolName: "code_execution",
+            output: {
+              type: "json",
+              value: { type: "code_execution_result", stdout: "ok", stderr: "", return_code: 0 },
+            },
+          },
+          { type: "text", text: "The server-side tool ran successfully." },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+
+    expect(result).toHaveLength(2)
+    expect(result[0].content).toMatchObject([
+      {
+        type: "tool-call",
+        toolCallId: "srvtoolu_1",
+        toolName: "code_execution",
+        input: { code: "print('ok')", type: "programmatic-tool-call" },
+        providerExecuted: true,
+      },
+      {
+        type: "tool-result",
+        toolCallId: "srvtoolu_1",
+        toolName: "code_execution",
+        output: { type: "json", value: { type: "code_execution_result", stdout: "ok", stderr: "", return_code: 0 } },
+      },
+      { type: "text", text: "The server-side tool ran successfully." },
+    ])
+    expect(result[1].content).toMatchObject([
+      { type: "tool-call", toolCallId: "toolu_1", toolName: "read", input: { filePath: "/root" } },
+    ])
+  })
+
+  test("keeps tool-call and tool-result paired when interleaved with text", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "tool-call", toolCallId: "toolu_1", toolName: "read", input: { filePath: "/root" } },
+          { type: "text", text: "Let me check." },
+          { type: "tool-result", toolCallId: "toolu_1", toolName: "read", output: { type: "text", value: "ok" } },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+
+    expect(result).toHaveLength(2)
+    expect(result[0]).toMatchObject({
+      role: "assistant",
+      content: [{ type: "text", text: "Let me check." }],
+    })
+    expect(result[1]).toMatchObject({
+      role: "assistant",
+      content: [
+        { type: "tool-call", toolCallId: "toolu_1", toolName: "read", input: { filePath: "/root" } },
+        { type: "tool-result", toolCallId: "toolu_1", toolName: "read", output: { type: "text", value: "ok" } },
+      ],
+    })
+  })
+
+  test("does not split when tool-result follows tool-call with no trailing text", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "I checked your home directory." },
+          { type: "tool-call", toolCallId: "toolu_1", toolName: "read", input: { filePath: "/root" } },
+          { type: "tool-result", toolCallId: "toolu_1", toolName: "read", output: { type: "text", value: "ok" } },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toMatchObject([
+      { type: "text", text: "I checked your home directory." },
+      { type: "tool-call", toolCallId: "toolu_1", toolName: "read", input: { filePath: "/root" } },
+      { type: "tool-result", toolCallId: "toolu_1", toolName: "read", output: { type: "text", value: "ok" } },
     ])
   })
 

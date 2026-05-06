@@ -111,11 +111,20 @@ function buildAuthorizeUrl(redirectUri: string, pkce: PkceCodes, state: string):
   return `${ISSUER}/oauth/authorize?${params.toString()}`
 }
 
-interface TokenResponse {
+export interface TokenResponse {
   id_token: string
   access_token: string
-  refresh_token: string
+  refresh_token?: string
   expires_in?: number
+}
+
+export function requireRefreshToken(tokens: TokenResponse): string {
+  if (!tokens.refresh_token) throw new Error("Token response missing refresh_token")
+  return tokens.refresh_token
+}
+
+export function refreshTokenOrPrevious(tokens: TokenResponse, previous: string): string {
+  return tokens.refresh_token ?? previous
 }
 
 async function exchangeCodeForTokens(code: string, redirectUri: string, pkce: PkceCodes): Promise<TokenResponse> {
@@ -432,17 +441,21 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
               log.info("refreshing codex access token")
               const tokens = await refreshAccessToken(currentAuth.refresh)
               const newAccountId = extractAccountId(tokens) || authWithAccount.accountId
+              const refresh = refreshTokenOrPrevious(tokens, currentAuth.refresh)
+              const expires = Date.now() + (tokens.expires_in ?? 3600) * 1000
               await input.client.auth.set({
                 path: { id: "openai" },
                 body: {
                   type: "oauth",
-                  refresh: tokens.refresh_token,
+                  refresh,
                   access: tokens.access_token,
-                  expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
+                  expires,
                   ...(newAccountId && { accountId: newAccountId }),
                 },
               })
               currentAuth.access = tokens.access_token
+              currentAuth.refresh = refresh
+              currentAuth.expires = expires
               authWithAccount.accountId = newAccountId
             }
 
@@ -509,7 +522,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
                 const accountId = extractAccountId(tokens)
                 return {
                   type: "success" as const,
-                  refresh: tokens.refresh_token,
+                  refresh: requireRefreshToken(tokens),
                   access: tokens.access_token,
                   expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
                   accountId,
@@ -584,7 +597,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
 
                     return {
                       type: "success" as const,
-                      refresh: tokens.refresh_token,
+                      refresh: requireRefreshToken(tokens),
                       access: tokens.access_token,
                       expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
                       accountId: extractAccountId(tokens),

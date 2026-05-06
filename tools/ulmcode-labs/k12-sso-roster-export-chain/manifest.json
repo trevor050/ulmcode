@@ -1,0 +1,256 @@
+{
+  "id": "k12-sso-roster-export-chain",
+  "operationID": "k12-sso-roster-export-chain",
+  "objective": "Replay a synthetic chained district SSO assessment that moves from permissive SSO callback handling into overbroad roster export, vendor sync scope expansion, and weak audit coverage.",
+  "assumptions": [
+    "The lab uses synthetic evidence and fake student records only.",
+    "No real identity provider, roster system, or vendor integration is contacted.",
+    "The service is intentionally vulnerable and must never be deployed."
+  ],
+  "plan": {
+    "phases": [
+      {
+        "stage": "recon",
+        "objective": "Map SSO callback policy, admin session behavior, and sensitive downstream workflows.",
+        "actions": [
+          "Record the synthetic SSO configuration",
+          "Exchange a localhost redirect into an administrator session",
+          "Identify roster export and vendor sync endpoints reachable from that session"
+        ],
+        "successCriteria": [
+          "SSO policy, session exchange, roster export, and vendor sync behavior are recorded as evidence"
+        ],
+        "subagents": [
+          "recon"
+        ],
+        "noSubagents": [
+          "tenant-risk prioritization stays with the primary operator"
+        ]
+      },
+      {
+        "stage": "validation",
+        "objective": "Validate the chained impact across identity, data export, vendor sync, and audit surfaces.",
+        "actions": [
+          "Validate administrator session creation without step-up controls",
+          "Use the session to export sensitive cross-district roster fields",
+          "Use the session to approve excessive vendor sync scopes",
+          "Inspect audit events for elevated export or vendor alerts"
+        ],
+        "successCriteria": [
+          "Three report-ready findings cite distinct but connected evidence sets"
+        ],
+        "subagents": [
+          "validator",
+          "evidence"
+        ],
+        "noSubagents": [
+          "final chain severity and remediation sequencing stay with the primary operator"
+        ]
+      },
+      {
+        "stage": "reporting",
+        "objective": "Produce a dense multi-finding report that explains the chain rather than listing isolated bugs.",
+        "actions": [
+          "Run report_lint with outline section requirements",
+          "Run report_render with authored report preservation",
+          "Run runtime_summary and operation_audit"
+        ],
+        "successCriteria": [
+          "Final handoff lint and operation audit pass with three reportable findings and authored-report coverage"
+        ],
+        "subagents": [
+          "report-writer",
+          "report-reviewer"
+        ],
+        "noSubagents": [
+          "client-facing delivery approval is manual"
+        ]
+      }
+    ],
+    "reportingCloseout": [
+      "Run report_lint",
+      "Run report_render",
+      "Run runtime_summary",
+      "Run operation_audit"
+    ]
+  },
+  "report": {
+    "targetPages": 6,
+    "minOutlineWordsPerPage": 85,
+    "minOutlineSectionWords": 18,
+    "authoredMarkdownFile": "reports/report.md"
+  },
+  "evidence": [
+    {
+      "evidenceID": "ev-sso-config",
+      "title": "Synthetic SSO callback configuration",
+      "kind": "http_response",
+      "summary": "The SSO configuration allows localhost callback targets and does not require signed RelayState.",
+      "url": "http://127.0.0.1/.well-known/sso-config",
+      "content": "{\"callbackAllowlist\":[\"https://admin.demo-district.test/callback\",\"http://localhost:8080/callback\"],\"requireSignedRelayState\":false,\"labFinding\":\"sso_callback_allowlist_overbroad\"}"
+    },
+    {
+      "evidenceID": "ev-sso-exchange",
+      "title": "Synthetic SSO exchange creates admin session without step-up",
+      "kind": "http_response",
+      "summary": "A localhost redirect exchange returns a district-admin session without MFA or step-up authentication.",
+      "url": "http://127.0.0.1/api/sso/exchange",
+      "content": "{\"authenticated\":true,\"role\":\"district-admin\",\"mfaRequired\":false,\"session\":\"sso-admin-session\",\"labFinding\":\"sso_admin_session_without_step_up\"}"
+    },
+    {
+      "evidenceID": "ev-roster-export",
+      "title": "Synthetic cross-district roster export",
+      "kind": "http_response",
+      "summary": "The district-admin session exports sensitive fields across all district tenants.",
+      "url": "http://127.0.0.1/api/roster/export?include=all",
+      "content": "{\"authorized\":true,\"tenantScope\":\"all-districts\",\"recordCount\":3,\"fields\":[\"studentId\",\"iepFlag\",\"guardianEmail\",\"homelessStatus\"],\"labFinding\":\"sso_roster_bulk_export_overexposure\"}"
+    },
+    {
+      "evidenceID": "ev-vendor-sync",
+      "title": "Synthetic vendor sync accepts excessive scopes",
+      "kind": "http_response",
+      "summary": "The district-admin session approves vendor sync access to roster, guardian, and student-support data without additional approval.",
+      "url": "http://127.0.0.1/api/vendor/sync",
+      "content": "{\"accepted\":true,\"vendor\":\"grade-sync-plus\",\"outboundScopes\":[\"roster:read\",\"guardian:read\",\"student-support:read\"],\"approvalRequired\":false,\"labFinding\":\"vendor_sync_excessive_scopes\"}"
+    },
+    {
+      "evidenceID": "ev-chain-audit-gap",
+      "title": "Synthetic audit events lack elevated chain alerts",
+      "kind": "http_response",
+      "summary": "The login, export, and vendor sync chain is logged as informational activity without elevated export or vendor alerts.",
+      "url": "http://127.0.0.1/api/audit/events",
+      "content": "{\"events\":[{\"type\":\"sso_login\",\"severity\":\"info\"},{\"type\":\"vendor_sync\",\"severity\":\"info\"}],\"elevatedExportAlert\":false,\"elevatedVendorAlert\":false,\"labFinding\":\"chained_activity_audit_gap\"}"
+    }
+  ],
+  "findings": [
+    {
+      "findingID": "sso-callback-admin-session",
+      "title": "SSO callback policy enables administrator session creation without step-up",
+      "state": "report_ready",
+      "severity": "high",
+      "confidence": 0.9,
+      "affectedAssets": [
+        "District SSO configuration",
+        "Administrator login workflow"
+      ],
+      "evidence": [
+        {
+          "id": "ev-sso-config",
+          "path": "evidence/raw/ev-sso-config.txt"
+        },
+        {
+          "id": "ev-sso-exchange",
+          "path": "evidence/raw/ev-sso-exchange.txt"
+        }
+      ],
+      "description": "The synthetic SSO configuration allows a localhost callback and unsigned RelayState, and the exchange returns a district-admin session without requiring MFA or a step-up challenge.",
+      "impact": "A stolen assertion or misdirected callback could produce an administrator session that can reach sensitive roster and vendor workflows.",
+      "remediation": "Restrict callback URLs to production hosts, require signed RelayState, enforce phishing-resistant administrator MFA, and require step-up authentication before sensitive workflows."
+    },
+    {
+      "findingID": "sso-roster-bulk-export",
+      "title": "Administrator session can export sensitive roster fields across all districts",
+      "state": "report_ready",
+      "severity": "critical",
+      "confidence": 0.9,
+      "affectedAssets": [
+        "Roster export API",
+        "Tenant authorization layer",
+        "Student support records"
+      ],
+      "evidence": [
+        {
+          "id": "ev-sso-exchange",
+          "path": "evidence/raw/ev-sso-exchange.txt"
+        },
+        {
+          "id": "ev-roster-export",
+          "path": "evidence/raw/ev-roster-export.txt"
+        }
+      ],
+      "description": "The synthetic roster export endpoint accepts the SSO-created administrator session and returns sensitive fields across all district tenants.",
+      "impact": "A compromised administrator session could expose student support status, guardian contact details, and other protected roster fields across tenant boundaries.",
+      "remediation": "Enforce tenant scoping server-side, restrict sensitive field export by explicit purpose, require step-up approval for bulk export, and limit export size and audience."
+    },
+    {
+      "findingID": "vendor-sync-and-audit-gap",
+      "title": "Vendor sync grants excessive scopes without elevated audit coverage",
+      "state": "report_ready",
+      "severity": "high",
+      "confidence": 0.86,
+      "affectedAssets": [
+        "Vendor sync workflow",
+        "Audit event pipeline",
+        "Guardian and student-support data"
+      ],
+      "evidence": [
+        {
+          "id": "ev-vendor-sync",
+          "path": "evidence/raw/ev-vendor-sync.txt"
+        },
+        {
+          "id": "ev-chain-audit-gap",
+          "path": "evidence/raw/ev-chain-audit-gap.txt"
+        }
+      ],
+      "description": "The synthetic vendor sync endpoint accepts broad roster, guardian, and student-support scopes from the administrator session while audit records remain informational.",
+      "impact": "A malicious or compromised administrator workflow could push sensitive student and guardian data to a vendor integration without a meaningful detection signal.",
+      "remediation": "Require approval for sensitive vendor scopes, split sync grants by purpose, apply least privilege to vendor tokens, and elevate audit events for export-to-sync chains."
+    }
+  ],
+  "runtime": {
+    "sessionMessages": [
+      {
+        "role": "assistant",
+        "agent": "pentest",
+        "modelID": "gpt-5.5",
+        "providerID": "openai",
+        "cost": 1.12,
+        "tokens": {
+          "input": 2600,
+          "output": 1300,
+          "reasoning": 900,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "role": "assistant",
+        "agent": "report-writer",
+        "modelID": "gpt-5.5",
+        "providerID": "openai",
+        "cost": 0.74,
+        "tokens": {
+          "input": 1800,
+          "output": 1400,
+          "reasoning": 520,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      }
+    ]
+  },
+  "expected": {
+    "reportableFindings": 3,
+    "evidence": 5,
+    "dashboardIncludes": [
+      "# k12-sso-roster-export-chain - handoff/complete",
+      "risk: high",
+      "findings: 3 total"
+    ],
+    "reportIncludes": [
+      "Authored SSO Roster Export Chain Assessment",
+      "sso-roster-chain-authored-marker",
+      "The highest-priority risk is not any single endpoint by itself"
+    ],
+    "pdfIncludes": [
+      "Authored SSO Roster Export Chain Assessment",
+      "sso-roster-chain-authored-marker",
+      "vendor synchronization"
+    ]
+  }
+}

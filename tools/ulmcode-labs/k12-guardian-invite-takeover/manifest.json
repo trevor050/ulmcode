@@ -1,0 +1,167 @@
+{
+  "id": "k12-guardian-invite-takeover",
+  "operationID": "k12-guardian-invite-takeover",
+  "objective": "Replay a synthetic authorized K-12 guardian-linking assessment with exposed guardian invite codes and account-linking takeover risk.",
+  "assumptions": [
+    "The lab uses synthetic evidence only.",
+    "No real external target is contacted.",
+    "Students, guardians, and invite codes are intentionally fake."
+  ],
+  "plan": {
+    "phases": [
+      {
+        "stage": "recon",
+        "objective": "Map guardian invite and account-linking surfaces.",
+        "actions": [
+          "Request the synthetic guardian invite endpoint for a known student ID",
+          "Check whether invite material is returned without authentication or school verification"
+        ],
+        "successCriteria": [
+          "Invite-code exposure is recorded as evidence"
+        ],
+        "subagents": [
+          "recon"
+        ],
+        "noSubagents": [
+          "family-impact wording stays with the primary operator"
+        ]
+      },
+      {
+        "stage": "validation",
+        "objective": "Validate unauthorized guardian account linking.",
+        "actions": [
+          "Use the exposed synthetic invite code to link an attacker-controlled guardian email",
+          "Inspect whether the account was linked without school-side verification",
+          "Record the disclosure and account-linking evidence"
+        ],
+        "successCriteria": [
+          "A report-ready finding cites invite disclosure and account-link confirmation evidence"
+        ],
+        "subagents": [
+          "validator",
+          "evidence"
+        ],
+        "noSubagents": [
+          "final impact and disclosure wording stay with the primary operator"
+        ]
+      },
+      {
+        "stage": "reporting",
+        "objective": "Render final handoff artifacts.",
+        "actions": [
+          "Run report_lint",
+          "Run report_render",
+          "Run runtime_summary"
+        ],
+        "successCriteria": [
+          "Final handoff lint passes"
+        ],
+        "subagents": [
+          "report-writer"
+        ],
+        "noSubagents": [
+          "client-facing delivery approval is manual"
+        ]
+      }
+    ],
+    "reportingCloseout": [
+      "Run report_lint",
+      "Run report_render",
+      "Run runtime_summary"
+    ]
+  },
+  "report": {
+    "targetPages": 3,
+    "minOutlineWordsPerPage": 80
+  },
+  "evidence": [
+    {
+      "evidenceID": "ev-guardian-invite-disclosure",
+      "title": "Synthetic exposed guardian invite response",
+      "kind": "http_response",
+      "summary": "The guardian invite endpoint returned a live invite code for a synthetic student without authentication.",
+      "url": "http://127.0.0.1/api/guardian/invite?studentId=student-2241",
+      "content": "{\"authenticated\":false,\"studentId\":\"student-2241\",\"inviteCode\":\"guardian-invite-2241\",\"expiresInMinutes\":10080,\"labFinding\":\"guardian_invite_code_disclosure\"}"
+    },
+    {
+      "evidenceID": "ev-guardian-link-confirmation",
+      "title": "Synthetic unauthorized guardian account link",
+      "kind": "http_response",
+      "summary": "The exposed invite code linked an attacker-controlled guardian email to the synthetic student record without school-side verification.",
+      "url": "http://127.0.0.1/api/guardian/accept",
+      "content": "{\"linked\":true,\"studentId\":\"student-2241\",\"guardianEmail\":\"attacker-guardian@example.test\",\"guardianCount\":2,\"verifiedBySchool\":false,\"labFinding\":\"guardian_account_takeover\"}"
+    }
+  ],
+  "findings": [
+    {
+      "findingID": "guardian-invite-code-takeover",
+      "title": "Guardian invite codes allow unauthorized student account linking",
+      "state": "report_ready",
+      "severity": "high",
+      "confidence": 0.9,
+      "affectedAssets": [
+        "Guardian invite workflow",
+        "Student account linking",
+        "Family portal access controls"
+      ],
+      "evidence": [
+        {
+          "id": "ev-guardian-invite-disclosure",
+          "path": "evidence/raw/ev-guardian-invite-disclosure.txt"
+        },
+        {
+          "id": "ev-guardian-link-confirmation",
+          "path": "evidence/raw/ev-guardian-link-confirmation.txt"
+        }
+      ],
+      "description": "The synthetic guardian invite endpoint exposes active invite codes without authentication, and the account-linking endpoint accepts those codes without school-side or existing-guardian verification.",
+      "impact": "An attacker who can enumerate or obtain a student ID could attach a guardian account to that student and potentially view sensitive classroom, attendance, contact, or support information exposed through family-portal access.",
+      "remediation": "Require authenticated staff or existing-guardian authorization to view invite material, bind invite codes to a verified recipient, shorten expiration windows, store only hashes, rate-limit invite lookups, and require school-side approval or out-of-band guardian verification before linking new accounts."
+    }
+  ],
+  "runtime": {
+    "sessionMessages": [
+      {
+        "role": "assistant",
+        "agent": "pentest",
+        "modelID": "gpt-5.5",
+        "providerID": "openai",
+        "cost": 0.44,
+        "tokens": {
+          "input": 1320,
+          "output": 540,
+          "reasoning": 360,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "role": "assistant",
+        "agent": "validator",
+        "modelID": "gpt-5.4-mini",
+        "providerID": "openai",
+        "cost": 0.12,
+        "tokens": {
+          "input": 620,
+          "output": 310,
+          "reasoning": 140,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      }
+    ]
+  },
+  "expected": {
+    "reportableFindings": 1,
+    "evidence": 2,
+    "dashboardIncludes": [
+      "# k12-guardian-invite-takeover - handoff/complete",
+      "risk: high",
+      "findings: 1 total"
+    ]
+  }
+}

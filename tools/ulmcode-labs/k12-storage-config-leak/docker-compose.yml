@@ -1,0 +1,6 @@
+services:
+  k12-storage-config-leak:
+    build:
+      context: ./service
+    ports:
+      - "8083:8080"

@@ -1,0 +1,8 @@
+services:
+  k12-attendance-bulk-update-csrf:
+    build:
+      context: ./service
+    ports:
+      - "18090:8080"
+    environment:
+      PORT: "8080"

@@ -1,0 +1,25 @@
+Advance a durable ULM operation graph.
+
+Use this after `operation_schedule` and repeatedly during unattended work. It
+reads the persisted graph, auto-completes running lanes whose lane-complete
+proof references real non-empty expected artifacts, syncs completed/failed background jobs that include laneID
+metadata, calls the next-action logic, marks launchable lanes as running, and
+writes `plans/operation-run.jsonl`.
+
+Modes:
+- `advance`: pick and mark the next lane running when the governor allows it.
+- `complete_lane`: mark a lane complete and unlock dependent lanes.
+- `fail_lane`: mark a lane failed and preserve the blocker.
+
+`complete_lane` requires a concrete `summary` plus explicit `artifacts`; report
+and validation lanes should also include `evidenceRefs`. Empty directories,
+missing files, absolute paths, and paths escaping the operation root are rejected.
+
+The tool returns background `task` launch parameters and suggested command
+profiles, but the parent model still invokes `task` or `command_supervise` so
+tool permissions and approvals stay explicit.
+
+Set `launchModelLane=true` when you want this tool to immediately invoke the
+background `task` tool for the selected lane after mutating graph state. Command
+profiles are still returned for explicit `command_supervise` calls because they
+need runtime variables such as target, URL, input file, or wordlist.

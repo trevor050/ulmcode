@@ -28,6 +28,19 @@ const npmLayer = (cache: string) =>
     Layer.provide(NodeFileSystem.layer),
   )
 
+async function seedCache(cache: string, pkg: string, installedName: string) {
+  const installRoot = path.join(cache, "packages", Npm.sanitize(pkg))
+  const pkgDir = path.join(installRoot, "node_modules", installedName)
+  await fs.mkdir(pkgDir, { recursive: true })
+  await Bun.write(path.join(installRoot, "package.json"), JSON.stringify({ dependencies: { [installedName]: pkg } }))
+  await Bun.write(
+    path.join(pkgDir, "package.json"),
+    JSON.stringify({ name: installedName, version: "1.0.0", main: "index.js" }),
+  )
+  await Bun.write(path.join(pkgDir, "index.js"), "export const cached = true\n")
+  return { installRoot, pkgDir }
+}
+
 describe("Npm.sanitize", () => {
   test("keeps normal scoped package specs unchanged", () => {
     expect(Npm.sanitize("@opencode/acme")).toBe("@opencode/acme")
@@ -61,6 +74,46 @@ describe("Npm.add", () => {
     }).pipe(Effect.scoped, Effect.provide(npmLayer(path.join(tmp.path, "cache"))), Effect.runPromise)
 
     expect(Option.isSome(entry.entrypoint)).toBe(true)
+  })
+
+  test("resolves cached remote tarball specs to the actual installed package name", async () => {
+    await using tmp = await tmpdir()
+    const spec = "https://example.com/downloads/example-plugin-1.0.0.tgz"
+    const installed = "@example/plugin"
+    const { pkgDir } = await seedCache(path.join(tmp.path, "cache"), spec, installed)
+
+    const entry = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* npm.add(spec)
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(path.join(tmp.path, "cache"))), Effect.runPromise)
+
+    expect(entry.directory).toBe(pkgDir)
+  })
+
+  test("resolves cached git specs to the actual installed package name", async () => {
+    await using tmp = await tmpdir()
+    const spec = "git+https://github.com/example/some-plugin.git"
+    const installed = "some-plugin"
+    const { pkgDir } = await seedCache(path.join(tmp.path, "cache"), spec, installed)
+
+    const entry = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* npm.add(spec)
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(path.join(tmp.path, "cache"))), Effect.runPromise)
+
+    expect(entry.directory).toBe(pkgDir)
+  })
+
+  test("still resolves cached registry packages by package name", async () => {
+    await using tmp = await tmpdir()
+    const { pkgDir } = await seedCache(path.join(tmp.path, "cache"), "prettier", "prettier")
+
+    const entry = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* npm.add("prettier")
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(path.join(tmp.path, "cache"))), Effect.runPromise)
+
+    expect(entry.directory).toBe(pkgDir)
   })
 })
 

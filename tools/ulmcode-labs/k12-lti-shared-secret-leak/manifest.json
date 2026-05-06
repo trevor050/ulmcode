@@ -1,0 +1,187 @@
+{
+  "id": "k12-lti-shared-secret-leak",
+  "operationID": "k12-lti-shared-secret-leak",
+  "objective": "Replay a synthetic authorized K-12 LTI integration assessment with a leaked shared secret and forged instructor launch.",
+  "assumptions": [
+    "The lab uses synthetic evidence only.",
+    "No real external target is contacted.",
+    "LTI consumers, users, course IDs, signatures, and gradebook effects are intentionally fake."
+  ],
+  "plan": {
+    "phases": [
+      {
+        "stage": "recon",
+        "objective": "Map exposed LTI configuration and launch metadata.",
+        "actions": [
+          "Load the synthetic LTI configuration endpoint",
+          "Identify whether the consumer key, launch URL, and shared secret are exposed to unauthenticated users"
+        ],
+        "successCriteria": [
+          "The leaked LTI shared-secret configuration is recorded with a durable evidence ID"
+        ],
+        "subagents": [
+          "recon"
+        ],
+        "noSubagents": [
+          "credential-handling and disclosure decisions stay with the primary operator"
+        ]
+      },
+      {
+        "stage": "validation",
+        "objective": "Validate forged instructor launch impact from the exposed shared secret.",
+        "actions": [
+          "Create a synthetic signed LTI launch using the exposed shared secret",
+          "Submit the forged instructor launch to the lab target",
+          "Record the role escalation and gradebook-write authorization impact"
+        ],
+        "successCriteria": [
+          "A report-ready finding cites both the leaked shared secret and forged instructor launch evidence"
+        ],
+        "subagents": [
+          "attack-map",
+          "validator",
+          "evidence"
+        ],
+        "noSubagents": [
+          "final education-data impact and remediation wording stay with the primary operator"
+        ]
+      },
+      {
+        "stage": "reporting",
+        "objective": "Render final handoff artifacts.",
+        "actions": [
+          "Run report_lint",
+          "Run report_render",
+          "Run runtime_summary",
+          "Run operation_audit"
+        ],
+        "successCriteria": [
+          "Final handoff lint and operation audit pass"
+        ],
+        "subagents": [
+          "report-writer",
+          "report-reviewer"
+        ],
+        "noSubagents": [
+          "client-facing delivery approval is manual"
+        ]
+      }
+    ],
+    "reportingCloseout": [
+      "Run report_lint",
+      "Run report_render",
+      "Run runtime_summary",
+      "Run operation_audit"
+    ]
+  },
+  "report": {
+    "targetPages": 3,
+    "minOutlineWordsPerPage": 80
+  },
+  "evidence": [
+    {
+      "evidenceID": "ev-lti-public-config",
+      "title": "Synthetic public LTI configuration response",
+      "kind": "http_response",
+      "summary": "The LTI configuration endpoint disclosed the consumer key, launch URL, and shared secret without authentication.",
+      "url": "http://127.0.0.1/.well-known/lti-config.json",
+      "content": "{\"consumerKey\":\"district-lms\",\"launchUrl\":\"/lti/launch\",\"sharedSecret\":\"lti-secret-demo-9421\",\"labFinding\":\"lti_shared_secret_disclosure\"}"
+    },
+    {
+      "evidenceID": "ev-lti-forged-instructor-launch",
+      "title": "Synthetic forged instructor LTI launch",
+      "kind": "http_response",
+      "summary": "A launch signed with the exposed shared secret created an instructor context with gradebook-write capability.",
+      "url": "http://127.0.0.1/lti/launch",
+      "content": "{\"launched\":true,\"userId\":\"synthetic-instructor-9001\",\"role\":\"Instructor\",\"courseId\":\"math-8\",\"gradebookWrite\":true,\"labFinding\":\"forged_lti_instructor_launch\"}"
+    }
+  ],
+  "findings": [
+    {
+      "findingID": "lti-shared-secret-leak",
+      "title": "Public LTI shared secret enables forged instructor launches",
+      "state": "report_ready",
+      "severity": "critical",
+      "confidence": 0.9,
+      "affectedAssets": [
+        "LTI integration configuration",
+        "LMS launch workflow",
+        "Gradebook authorization controls"
+      ],
+      "evidence": [
+        {
+          "id": "ev-lti-public-config",
+          "path": "evidence/raw/ev-lti-public-config.txt"
+        },
+        {
+          "id": "ev-lti-forged-instructor-launch",
+          "path": "evidence/raw/ev-lti-forged-instructor-launch.txt"
+        }
+      ],
+      "description": "The synthetic application exposes an LTI shared secret through a public configuration endpoint and accepts forged launches signed with that secret.",
+      "impact": "An attacker could impersonate an instructor, enter a trusted course context, and reach gradebook-write workflows without a legitimate LMS session.",
+      "remediation": "Remove shared secrets from public configuration, rotate exposed LTI credentials, require server-side secret storage, validate launches against the trusted LMS issuer, and alert on unexpected instructor launches or gradebook-write scopes."
+    }
+  ],
+  "runtime": {
+    "sessionMessages": [
+      {
+        "role": "assistant",
+        "agent": "pentest",
+        "modelID": "gpt-5.5",
+        "providerID": "openai",
+        "cost": 0.58,
+        "tokens": {
+          "input": 1520,
+          "output": 640,
+          "reasoning": 450,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "role": "assistant",
+        "agent": "attack-map",
+        "modelID": "gpt-5.5-fast",
+        "providerID": "openai",
+        "cost": 0.18,
+        "tokens": {
+          "input": 820,
+          "output": 330,
+          "reasoning": 190,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "role": "assistant",
+        "agent": "validator",
+        "modelID": "gpt-5.4-mini",
+        "providerID": "openai",
+        "cost": 0.15,
+        "tokens": {
+          "input": 720,
+          "output": 310,
+          "reasoning": 140,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      }
+    ]
+  },
+  "expected": {
+    "reportableFindings": 1,
+    "evidence": 2,
+    "dashboardIncludes": [
+      "# k12-lti-shared-secret-leak - handoff/complete",
+      "risk: high",
+      "findings: 1 total"
+    ]
+  }
+}

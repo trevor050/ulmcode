@@ -1,0 +1,135 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openai/gpt-5.5-fast",
+  "small_model": "openai/gpt-5.4-mini-fast",
+  "max_retries": 8,
+  "experimental": {
+    "enable_sse_json_repair": true
+  },
+  "default_agent": "pentest",
+  "skills": {
+    "paths": [
+      "__ULMCODE_PROFILE_DIR__/skills/pentest-compact"
+    ]
+  },
+  "instructions": [
+    "__ULMCODE_PROFILE_DIR__/plugins/shell-strategy/shell_strategy.md"
+  ],
+  "agent": {
+    "pentest": {
+      "model": "openai/gpt-5.5-fast",
+      "mode": "primary",
+      "options": {
+        "reasoningEffort": "high"
+      }
+    },
+    "recon": {
+      "model": "openai/gpt-5.4-mini-fast",
+      "mode": "subagent",
+      "options": {
+        "reasoningEffort": "medium"
+      }
+    },
+    "attack-map": {
+      "model": "openai/gpt-5.5-fast",
+      "mode": "subagent",
+      "options": {
+        "reasoningEffort": "high"
+      }
+    },
+    "evidence": {
+      "model": "openai/gpt-5.4-mini-fast",
+      "mode": "subagent",
+      "options": {
+        "reasoningEffort": "medium"
+      }
+    },
+    "validator": {
+      "model": "openai/gpt-5.5-fast",
+      "mode": "subagent",
+      "options": {
+        "reasoningEffort": "xhigh"
+      }
+    },
+    "report-writer": {
+      "model": "openai/gpt-5.5-fast",
+      "mode": "subagent",
+      "options": {
+        "reasoningEffort": "high"
+      }
+    },
+    "report-reviewer": {
+      "model": "openai/gpt-5.5-fast",
+      "mode": "subagent",
+      "options": {
+        "reasoningEffort": "xhigh"
+      }
+    }
+  },
+  "permission": {
+    "*": "allow",
+    "question": "allow",
+    "task": "allow",
+    "todowrite": "allow",
+    "skill": {
+      "*": "deny",
+      "k12-agent-orchestration-and-quality": "allow",
+      "k12-engagement-safety-and-change-control": "allow",
+      "k12-identity-and-privilege-escalation": "allow",
+      "k12-long-report-production": "allow",
+      "k12-recon-and-infrastructure-testing": "allow",
+      "k12-risk-mapping-and-reporting": "allow"
+    }
+  },
+  "plugin": [
+    "__ULMCODE_PROFILE_DIR__/plugins/ulmcode-runtime-guard.js",
+    "@khalilgharbaoui/opencode-claude-code-plugin",
+    "oh-my-openagent"
+  ],
+  "mcp": {
+    "playwright": {
+      "type": "local",
+      "command": [
+        "npx",
+        "@playwright/mcp@latest"
+      ]
+    },
+    "pentestMCP": {
+      "type": "local",
+      "command": [
+        "docker",
+        "run",
+        "--rm",
+        "-i",
+        "ramgameer/pentest-mcp:latest"
+      ]
+    },
+    "vercel": {
+      "type": "remote",
+      "url": "https://mcp.vercel.com",
+      "enabled": false
+    },
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+      "enabled": false
+    }
+  },
+  "provider": {
+    "lmstudio": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "LM Studio",
+      "options": {
+        "baseURL": "http://192.168.1.151:1234/v1"
+      },
+      "models": {
+        "qwen3.6-28b-reap-i1": {
+          "name": "Qwen 28B"
+        },
+        "qwopus3.6-27b-v1-preview-i1": {
+          "name": "Qwopus 27B"
+        }
+      }
+    }
+  }
+}

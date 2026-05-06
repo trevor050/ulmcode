@@ -1,0 +1,167 @@
+{
+  "id": "k12-transcript-export-overexposure",
+  "operationID": "k12-transcript-export-overexposure",
+  "objective": "Replay a synthetic authorized K-12 transcript export assessment where a normal teacher export can request sensitive student fields.",
+  "assumptions": [
+    "The lab uses synthetic evidence only.",
+    "No real external target is contacted.",
+    "Students, transcripts, guardians, and support fields are intentionally fake."
+  ],
+  "plan": {
+    "phases": [
+      {
+        "stage": "recon",
+        "objective": "Map transcript export field policy.",
+        "actions": [
+          "Load the synthetic export schema",
+          "Identify whether sensitive transcript fields require a privileged role or purpose-specific approval"
+        ],
+        "successCriteria": [
+          "Export schema and sensitive-field policy evidence are recorded"
+        ],
+        "subagents": [
+          "recon"
+        ],
+        "noSubagents": [
+          "privacy impact and disclosure wording stay with the primary operator"
+        ]
+      },
+      {
+        "stage": "validation",
+        "objective": "Validate sensitive-field overexposure through include=all.",
+        "actions": [
+          "Request a default teacher transcript export",
+          "Replay the export with include=all",
+          "Record the sensitive fields returned to the normal teacher context"
+        ],
+        "successCriteria": [
+          "A report-ready finding cites both schema policy and sensitive export evidence"
+        ],
+        "subagents": [
+          "validator",
+          "evidence"
+        ],
+        "noSubagents": [
+          "final FERPA/privacy remediation wording stays with the primary operator"
+        ]
+      },
+      {
+        "stage": "reporting",
+        "objective": "Render final handoff artifacts.",
+        "actions": [
+          "Run report_lint",
+          "Run report_render",
+          "Run runtime_summary"
+        ],
+        "successCriteria": [
+          "Final handoff lint passes"
+        ],
+        "subagents": [
+          "report-writer"
+        ],
+        "noSubagents": [
+          "client-facing delivery approval is manual"
+        ]
+      }
+    ],
+    "reportingCloseout": [
+      "Run report_lint",
+      "Run report_render",
+      "Run runtime_summary"
+    ]
+  },
+  "report": {
+    "targetPages": 3,
+    "minOutlineWordsPerPage": 80
+  },
+  "evidence": [
+    {
+      "evidenceID": "ev-transcript-export-schema",
+      "title": "Synthetic transcript export schema response",
+      "kind": "http_response",
+      "summary": "The export schema exposes an include-all mode that adds sensitive student fields without a privileged-role requirement.",
+      "url": "http://127.0.0.1/api/transcripts/export-schema",
+      "content": "{\"defaultFields\":[\"studentId\",\"name\",\"gradeLevel\",\"gpa\"],\"includeAllAdds\":[\"accommodations\",\"disciplineNote\",\"guardianEmail\"],\"roleRequiredForSensitiveFields\":false,\"labFinding\":\"transcript_sensitive_field_policy_gap\"}"
+    },
+    {
+      "evidenceID": "ev-transcript-sensitive-export",
+      "title": "Synthetic teacher transcript export with sensitive fields",
+      "kind": "http_response",
+      "summary": "A normal teacher-context export with include=all returned accommodations, discipline note, and guardian email fields.",
+      "url": "http://127.0.0.1/api/transcripts/export?studentId=student-8201&include=all",
+      "content": "{\"requesterRole\":\"teacher\",\"export\":{\"studentId\":\"student-8201\",\"name\":\"Synthetic Transcript Student\",\"gradeLevel\":\"10\",\"gpa\":3.6,\"accommodations\":\"extended testing time\",\"disciplineNote\":\"synthetic counseling referral\",\"guardianEmail\":\"guardian8201@example.test\"},\"sensitiveFieldsReturned\":true,\"labFinding\":\"transcript_export_overexposure\"}"
+    }
+  ],
+  "findings": [
+    {
+      "findingID": "transcript-export-overexposure",
+      "title": "Transcript export exposes sensitive student fields to normal teacher context",
+      "state": "report_ready",
+      "severity": "high",
+      "confidence": 0.89,
+      "affectedAssets": [
+        "Transcript export API",
+        "Student privacy data",
+        "Teacher reporting workflow"
+      ],
+      "evidence": [
+        {
+          "id": "ev-transcript-export-schema",
+          "path": "evidence/raw/ev-transcript-export-schema.txt"
+        },
+        {
+          "id": "ev-transcript-sensitive-export",
+          "path": "evidence/raw/ev-transcript-sensitive-export.txt"
+        }
+      ],
+      "description": "The synthetic transcript export endpoint allows a normal teacher request to add sensitive fields through include=all without purpose-specific authorization or response-field filtering.",
+      "impact": "Staff accounts with ordinary classroom access could export student-support and guardian data beyond the minimum needed for transcript review, increasing privacy and compliance risk.",
+      "remediation": "Use explicit response schemas per role and purpose, deny client-selected sensitive fields by default, require privileged approval for support or discipline fields, and audit sensitive export requests."
+    }
+  ],
+  "runtime": {
+    "sessionMessages": [
+      {
+        "role": "assistant",
+        "agent": "pentest",
+        "modelID": "gpt-5.5",
+        "providerID": "openai",
+        "cost": 0.44,
+        "tokens": {
+          "input": 1300,
+          "output": 540,
+          "reasoning": 350,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "role": "assistant",
+        "agent": "evidence",
+        "modelID": "gpt-5.4-mini",
+        "providerID": "openai",
+        "cost": 0.12,
+        "tokens": {
+          "input": 640,
+          "output": 310,
+          "reasoning": 115,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      }
+    ]
+  },
+  "expected": {
+    "reportableFindings": 1,
+    "evidence": 2,
+    "dashboardIncludes": [
+      "# k12-transcript-export-overexposure - handoff/complete",
+      "risk: high",
+      "findings: 1 total"
+    ]
+  }
+}

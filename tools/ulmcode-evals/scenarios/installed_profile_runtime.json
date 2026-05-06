@@ -1,0 +1,15 @@
+{
+  "id": "installed-profile-contract",
+  "capability": "installed_profile_runtime",
+  "tier": "fast",
+  "objective": "Validate that ULM profile packaging is tested through an installed temporary config.",
+  "checks": [
+    "Profile installer exists",
+    "Profile config and runtime guard exist",
+    "Profile verifier installs into ULMCODE_CONFIG_DIR"
+  ],
+  "acceptance": [
+    "The scorecard reports installed_profile_runtime coverage",
+    "Profile drift breaks a named harness scenario"
+  ]
+}

@@ -148,6 +148,8 @@ export class Agent implements ACPAgent {
   private shellSnapshots = new Map<string, string>()
   private toolStarts = new Set<string>()
   private permissionQueues = new Map<string, Promise<void>>()
+  private messageCompletionResolvers = new Map<string, () => void>()
+  private completedAssistantMessageIds = new Set<string>()
   private permissionOptions: PermissionOption[] = [
     { optionId: "once", kind: "allow_once", name: "Allow once" },
     { optionId: "always", kind: "allow_always", name: "Always allow" },
@@ -268,6 +270,19 @@ export class Agent implements ACPAgent {
             }
           })
         this.permissionQueues.set(permission.sessionID, next)
+        return
+      }
+
+      case "message.updated": {
+        const info = event.properties.info
+        if (info.role === "assistant" && info.time.completed !== undefined) {
+          this.completedAssistantMessageIds.add(info.id)
+          const resolver = this.messageCompletionResolvers.get(info.id)
+          if (resolver) {
+            this.messageCompletionResolvers.delete(info.id)
+            resolver()
+          }
+        }
         return
       }
 
@@ -530,6 +545,36 @@ export class Agent implements ACPAgent {
         return
       }
     }
+  }
+
+  // Wait until the event subscription has observed the assistant completion
+  // event. The event loop forwards part deltas sequentially, so this prevents
+  // ACP clients from receiving trailing chunks after prompt() has returned
+  // stopReason=end_turn.
+  private waitForMessageCompletion(messageId: string, timeoutMs: number): Promise<void> {
+    if (this.completedAssistantMessageIds.has(messageId)) {
+      this.completedAssistantMessageIds.delete(messageId)
+      return Promise.resolve()
+    }
+    return new Promise<void>((resolve) => {
+      let settled = false
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const finish = (timedOut: boolean) => {
+        if (settled) return
+        settled = true
+        if (timer) clearTimeout(timer)
+        this.messageCompletionResolvers.delete(messageId)
+        if (timedOut) {
+          log.warn("timeout waiting for ACP message completion event", {
+            messageID: messageId,
+            timeoutMs,
+          })
+        }
+        resolve()
+      }
+      this.messageCompletionResolvers.set(messageId, () => finish(false))
+      timer = setTimeout(() => finish(true), timeoutMs)
+    })
   }
 
   async initialize(params: InitializeRequest): Promise<InitializeResponse> {
@@ -1482,6 +1527,10 @@ export class Agent implements ACPAgent {
       })
       const msg = response.data?.info
 
+      if (msg?.id) {
+        await this.waitForMessageCompletion(msg.id, 5000)
+      }
+
       await sendUsageUpdate(this.connection, this.sdk, sessionID, directory)
 
       return {
@@ -1504,6 +1553,10 @@ export class Agent implements ACPAgent {
         directory,
       })
       const msg = response.data?.info
+
+      if (msg?.id) {
+        await this.waitForMessageCompletion(msg.id, 5000)
+      }
 
       await sendUsageUpdate(this.connection, this.sdk, sessionID, directory)
 

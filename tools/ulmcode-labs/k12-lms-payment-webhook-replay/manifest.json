@@ -1,0 +1,180 @@
+{
+  "id": "k12-lms-payment-webhook-replay",
+  "operationID": "k12-lms-payment-webhook-replay",
+  "objective": "Replay a synthetic authorized K-12 LMS payment integration assessment where unsigned, replayable payment webhooks can alter student fee balances.",
+  "assumptions": [
+    "The lab uses synthetic evidence only.",
+    "No real payment processor or school system is contacted.",
+    "Students, balances, events, and payment processor secrets are intentionally fake."
+  ],
+  "plan": {
+    "phases": [
+      {
+        "stage": "recon",
+        "objective": "Map payment webhook verification and idempotency controls.",
+        "actions": [
+          "Review the synthetic payment webhook policy endpoint",
+          "Record the baseline student fee balance",
+          "Identify whether signature, timestamp, and event-id replay controls are enforced"
+        ],
+        "successCriteria": [
+          "Webhook policy and baseline balance evidence are recorded"
+        ],
+        "subagents": [
+          "recon"
+        ],
+        "noSubagents": [
+          "school financial impact interpretation stays with the primary operator"
+        ]
+      },
+      {
+        "stage": "validation",
+        "objective": "Validate a stale unsigned payment event can clear a student balance.",
+        "actions": [
+          "Submit a synthetic unsigned payment webhook with an old timestamp",
+          "Replay the same event id to verify missing idempotency",
+          "Fetch the student balance after replay to prove unauthorized state change"
+        ],
+        "successCriteria": [
+          "A report-ready finding cites policy, replay acceptance, and changed balance evidence"
+        ],
+        "subagents": [
+          "validator",
+          "evidence"
+        ],
+        "noSubagents": [
+          "final remediation sequencing stays with the primary operator"
+        ]
+      },
+      {
+        "stage": "reporting",
+        "objective": "Render final handoff artifacts.",
+        "actions": [
+          "Run report_lint",
+          "Run report_render",
+          "Run runtime_summary"
+        ],
+        "successCriteria": [
+          "Final handoff lint passes"
+        ],
+        "subagents": [
+          "report-writer"
+        ],
+        "noSubagents": [
+          "client-facing delivery approval is manual"
+        ]
+      }
+    ],
+    "reportingCloseout": [
+      "Run report_lint",
+      "Run report_render",
+      "Run runtime_summary"
+    ]
+  },
+  "report": {
+    "targetPages": 3,
+    "minOutlineWordsPerPage": 80
+  },
+  "evidence": [
+    {
+      "evidenceID": "ev-payment-webhook-policy",
+      "title": "Synthetic payment webhook policy response",
+      "kind": "http_response",
+      "summary": "The payment webhook policy reports signatures, timestamps, and idempotency as monitor-only controls.",
+      "url": "http://127.0.0.1/api/payments/webhook-policy",
+      "content": "{\"signatureMode\":\"monitor\",\"timestampWindow\":\"disabled\",\"idempotency\":\"disabled\",\"labFinding\":\"payment_webhook_replay_controls_missing\"}"
+    },
+    {
+      "evidenceID": "ev-payment-replay-accepted",
+      "title": "Synthetic stale unsigned payment webhook accepted twice",
+      "kind": "http_response",
+      "summary": "A stale unsigned payment event was accepted and replayed with the same event id.",
+      "url": "http://127.0.0.1/api/payments/webhook",
+      "content": "{\"accepted\":true,\"signatureVerified\":false,\"replayed\":true,\"studentId\":\"student-9301\",\"balanceCents\":-12500,\"labFinding\":\"payment_webhook_replay\"}"
+    },
+    {
+      "evidenceID": "ev-payment-balance-changed",
+      "title": "Synthetic student balance changed after webhook replay",
+      "kind": "http_response",
+      "summary": "The student fee balance was cleared and over-credited after replaying the unsigned payment webhook.",
+      "url": "http://127.0.0.1/api/payments/student-balance?studentId=student-9301",
+      "content": "{\"studentId\":\"student-9301\",\"balanceCents\":-12500,\"lastEventId\":\"evt-demo-7788\",\"labFinding\":\"student_fee_balance_modified_by_replayed_webhook\"}"
+    }
+  ],
+  "findings": [
+    {
+      "findingID": "lms-payment-webhook-replay",
+      "title": "Payment webhook accepts stale unsigned replay events",
+      "state": "report_ready",
+      "severity": "high",
+      "confidence": 0.9,
+      "affectedAssets": [
+        "LMS payment webhook endpoint",
+        "Student fee balances",
+        "Payment reconciliation workflow"
+      ],
+      "evidence": [
+        {
+          "id": "ev-payment-webhook-policy",
+          "path": "evidence/raw/ev-payment-webhook-policy.txt"
+        },
+        {
+          "id": "ev-payment-replay-accepted",
+          "path": "evidence/raw/ev-payment-replay-accepted.txt"
+        },
+        {
+          "id": "ev-payment-balance-changed",
+          "path": "evidence/raw/ev-payment-balance-changed.txt"
+        }
+      ],
+      "description": "The synthetic payment webhook endpoint accepts stale unsigned payment events and does not enforce idempotency, allowing replayed processor messages to alter student fee balances.",
+      "impact": "An attacker who can reach the webhook endpoint could clear fees, create credits, or corrupt reconciliation records for student accounts.",
+      "remediation": "Require processor signature verification, enforce a short timestamp tolerance, reject duplicate event ids before state changes, reconcile against processor APIs, and alert on replay attempts."
+    }
+  ],
+  "runtime": {
+    "sessionMessages": [
+      {
+        "role": "assistant",
+        "agent": "pentest",
+        "modelID": "gpt-5.5",
+        "providerID": "openai",
+        "cost": 0.48,
+        "tokens": {
+          "input": 1300,
+          "output": 620,
+          "reasoning": 360,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "role": "assistant",
+        "agent": "validator",
+        "modelID": "gpt-5.4-mini",
+        "providerID": "openai",
+        "cost": 0.14,
+        "tokens": {
+          "input": 690,
+          "output": 310,
+          "reasoning": 140,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      }
+    ]
+  },
+  "expected": {
+    "reportableFindings": 1,
+    "evidence": 3,
+    "dashboardIncludes": [
+      "# k12-lms-payment-webhook-replay - handoff/complete",
+      "risk: high",
+      "findings: 1 total"
+    ]
+  }
+}

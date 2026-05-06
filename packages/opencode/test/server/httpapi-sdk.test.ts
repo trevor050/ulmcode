@@ -257,6 +257,35 @@ function seedMessage(directory: string, sessionID: string) {
   )
 }
 
+function seedAssistantCost(directory: string, sessionID: string, cost: number) {
+  const id = SessionID.make(sessionID)
+  return call(
+    async () =>
+      await WithInstance.provide({
+        directory,
+        fn: () =>
+          Effect.runPromise(
+            SessionNs.Service.use((svc) =>
+              svc.updateMessage({
+                id: MessageID.ascending(),
+                sessionID: id,
+                role: "assistant",
+                time: { created: Date.now(), completed: Date.now() },
+                parentID: MessageID.ascending(),
+                modelID: ModelID.make("test"),
+                providerID: ProviderID.make("test"),
+                mode: "",
+                agent: "default",
+                path: { cwd: "/", root: "/" },
+                cost,
+                tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              } as unknown as MessageV2.Info),
+            ).pipe(Effect.provide(SessionNs.defaultLayer)),
+          ),
+      }),
+  )
+}
+
 afterEach(async () => {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original.OPENCODE_EXPERIMENTAL_HTTPAPI
   Flag.OPENCODE_SERVER_PASSWORD = original.OPENCODE_SERVER_PASSWORD
@@ -417,21 +446,25 @@ describe("HttpApi SDK", () => {
   )
 
   parity("matches generated SDK session lifecycle routes across backends", (backend) =>
-    withStandardProject(backend, ({ sdk }) =>
+    withStandardProject(backend, ({ sdk, directory }) =>
       Effect.gen(function* () {
         const parent = yield* capture(() => sdk.session.create({ title: "parent" }))
         const parentID = String(record(parent.data).id)
         const child = yield* capture(() => sdk.session.create({ title: "child", parentID }))
         const childID = String(record(child.data).id)
+        yield* seedAssistantCost(directory, parentID, 0.1)
+        yield* seedAssistantCost(directory, childID, 0.2)
         const get = yield* capture(() => sdk.session.get({ sessionID: parentID }))
         const update = yield* capture(() => sdk.session.update({ sessionID: parentID, title: "renamed" }))
         const roots = yield* capture(() => sdk.session.list({ roots: true, limit: 10 }))
         const all = yield* capture(() => sdk.session.list({ roots: false, limit: 10 }))
         const children = yield* capture(() => sdk.session.children({ sessionID: parentID }))
+        const cost = yield* capture(() => sdk.session.cost({ sessionID: parentID }))
         const todo = yield* capture(() => sdk.session.todo({ sessionID: parentID }))
         const status = yield* capture(() => sdk.session.status())
         const messages = yield* capture(() => sdk.session.messages({ sessionID: parentID }))
         const missingGet = yield* capture(() => sdk.session.get({ sessionID: "ses_missing" }))
+        const missingCost = yield* capture(() => sdk.session.cost({ sessionID: "ses_missing" }))
         const missingMessages = yield* capture(() => sdk.session.messages({ sessionID: "ses_missing", limit: 2 }))
         const invalidCursor = yield* capture(() =>
           sdk.session.messages({ sessionID: parentID, limit: 2, before: "bad" }),
@@ -448,10 +481,12 @@ describe("HttpApi SDK", () => {
             roots,
             all,
             children,
+            cost,
             todo,
             status,
             messages,
             missingGet,
+            missingCost,
             missingMessages,
             invalidCursor,
             deleted,
@@ -461,6 +496,7 @@ describe("HttpApi SDK", () => {
           updatedTitle: record(update.data).title,
           rootTitles: sessionTitles(roots.data),
           allTitles: sessionTitles(all.data),
+          costRollup: record(cost.data),
           childCount: array(children.data).length,
           todoCount: array(todo.data).length,
           messageCount: array(messages.data).length,

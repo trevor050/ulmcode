@@ -278,8 +278,41 @@ export interface Hooks {
       metadata: any
     },
   ) => Promise<void>
+  /**
+   * Called after chat history is assembled and before the LLM is invoked.
+   * Plugins can inspect or replace the message array before tool schemas and
+   * model messages are finalized.
+   */
+  "pre_chat.messages.transform"?: (
+    input: {
+      sessionID: string
+      agent: string
+      model: Model
+      messages: {
+        info: Message
+        parts: Part[]
+      }[]
+    },
+    output: {
+      messages: {
+        info: Message
+        parts: Part[]
+      }[]
+    },
+  ) => Promise<void>
+  /**
+   * @deprecated Use `pre_chat.messages.transform` for message-aware transforms.
+   */
   "experimental.chat.messages.transform"?: (
-    input: {},
+    input: {
+      sessionID?: string
+      agent?: string
+      model?: Model
+      messages?: {
+        info: Message
+        parts: Part[]
+      }[]
+    },
     output: {
       messages: {
         info: Message

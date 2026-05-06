@@ -66,6 +66,7 @@ describe("tui HttpApi bridge", () => {
     await expectTrue(TuiPaths.submitPrompt, headers)
     await expectTrue(TuiPaths.clearPrompt, headers)
     await expectTrue(TuiPaths.executeCommand, headers, { command: "agent_cycle" })
+    await expectTrue(TuiPaths.executeCommand, headers, { command: "ulm_operations" })
     await expectTrue(TuiPaths.showToast, headers, { message: "Saved", variant: "success" })
     await expectTrue(TuiPaths.publish, headers, {
       type: "tui.prompt.append",
