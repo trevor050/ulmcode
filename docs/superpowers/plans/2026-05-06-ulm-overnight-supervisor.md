@@ -1175,7 +1175,7 @@ git commit -m "feat: add Plannotator plan critique lane"
 - Modify: `packages/opencode/test/session/system.test.ts`
 - Modify: `packages/opencode/test/session/prompt.test.ts`
 
-- [ ] **Step 1: Write context-size tests**
+- [x] **Step 1: Write context-size tests**
 
 Tests:
 
@@ -1184,7 +1184,7 @@ Tests:
 - tool inventory summary is capped.
 - missing inventory suggests `tool_inventory`, not full catalog dump.
 
-- [ ] **Step 2: Add compact context block**
+- [x] **Step 2: Add compact context block**
 
 Maximum target:
 
@@ -1200,11 +1200,11 @@ Include:
 - top installed/missing tool facts.
 - foreground command policy.
 
-- [ ] **Step 3: Preserve prompt cache stability**
+- [x] **Step 3: Preserve prompt cache stability**
 
 Keep highly variable state in a compact, clearly bounded block. If a provider supports caching, stable instructions should remain stable.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 bun test packages/opencode/test/session/system.test.ts packages/opencode/test/session/prompt.test.ts
@@ -1212,7 +1212,18 @@ bun test packages/opencode/test/session/system.test.ts packages/opencode/test/se
 
 Expected: pass.
 
-- [ ] **Step 5: Commit**
+Actual:
+
+```bash
+cd packages/opencode
+bun test test/session/system.test.ts
+bun test test/session/prompt.test.ts -t "static prompts preserve compact ULM operation context rules"
+bun run typecheck
+```
+
+Result: pass. A full `bun test test/session/system.test.ts test/session/prompt.test.ts` run hit the pre-existing shell timeout in `shell captures stdout and stderr in completed tool output`; the new system tests and focused prompt guard test pass.
+
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/opencode/src/session/system.ts packages/opencode/src/session/prompt/default.txt packages/opencode/src/session/prompt/plan.txt packages/opencode/test/session/system.test.ts packages/opencode/test/session/prompt.test.ts
@@ -1521,7 +1532,7 @@ Below is the checklist to update as work progresses. The goal is not complete un
 - [x] Task 7: Expand supervised command profiles for overnight discovery.
 - [x] Task 8: Wire supervisor reviews into runtime scheduler/daemon.
 - [x] Task 9: Integrate Plannotator as plan critic.
-- [ ] Task 10: Add compact supervisor/goal/tool-inventory prompt context.
+- [x] Task 10: Add compact supervisor/goal/tool-inventory prompt context.
 - [ ] Task 11: Expose supervisor state in CLI/TUI/API surfaces.
 - [ ] Task 12: Add overnight supervisor harness scenario.
 - [ ] Task 13: Update autonomy/profile/agent documentation.

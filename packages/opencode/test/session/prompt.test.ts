@@ -1,7 +1,8 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { FetchHttpClient } from "effect/unstable/http"
-import { expect } from "bun:test"
+import { expect, test } from "bun:test"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
+import fs from "fs/promises"
 import path from "path"
 import { fileURLToPath } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -239,6 +240,17 @@ const cfg = {
     },
   },
 }
+
+test("static prompts preserve compact ULM operation context rules", async () => {
+  const root = path.join(__dirname, "../..")
+  const defaultPrompt = await fs.readFile(path.join(root, "src", "session", "prompt", "default.txt"), "utf8")
+  const planPrompt = await fs.readFile(path.join(root, "src", "session", "prompt", "plan.txt"), "utf8")
+
+  expect(defaultPrompt).toContain("<ulm_operation_context>")
+  expect(defaultPrompt).toContain("supervised/background execution")
+  expect(planPrompt).toContain("<ulm_operation_context>")
+  expect(planPrompt).toContain("avoid dumping the full tool catalog")
+})
 
 function providerCfg(url: string) {
   return {

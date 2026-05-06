@@ -1,4 +1,6 @@
 import { Context, Effect, Layer } from "effect"
+import fs from "fs/promises"
+import path from "path"
 
 import { InstanceState } from "@/effect/instance-state"
 
@@ -15,6 +17,128 @@ import type { Provider } from "@/provider/provider"
 import type { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
 import { Skill } from "@/skill"
+
+type OperationGoalContext = {
+  operationID: string
+  objective: string
+  targetDurationHours?: number
+  status?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+type SupervisorReviewContext = {
+  generatedAt?: string
+  decisions?: Array<{
+    action?: string
+    reason?: string
+    requiredNextTool?: string
+  }>
+}
+
+type ToolInventoryContext = {
+  counts?: {
+    total?: number
+    installed?: number
+    missing?: number
+    highValueMissing?: number
+  }
+  tools?: Array<{
+    id?: string
+    installed?: boolean
+    highValue?: boolean
+  }>
+  nextActions?: string[]
+}
+
+function short(value: string | undefined, max: number) {
+  const text = value?.trim().replace(/\s+/g, " ")
+  if (!text) return undefined
+  return text.length <= max ? text : `${text.slice(0, max - 1)}…`
+}
+
+async function readJson<T>(file: string): Promise<T | undefined> {
+  try {
+    return JSON.parse(await fs.readFile(file, "utf8")) as T
+  } catch {
+    return undefined
+  }
+}
+
+function parseTime(value: string | undefined) {
+  const time = value ? Date.parse(value) : Number.NaN
+  return Number.isFinite(time) ? time : 0
+}
+
+async function activeOperationGoal(worktree: string) {
+  const root = path.join(worktree, ".ulmcode", "operations")
+  let entries: string[]
+  try {
+    entries = await fs.readdir(root)
+  } catch {
+    return undefined
+  }
+  const goals = (
+    await Promise.all(entries.map((entry) => readJson<OperationGoalContext>(path.join(root, entry, "goals", "operation-goal.json"))))
+  )
+    .filter((goal): goal is OperationGoalContext => !!goal && goal.status === "active")
+    .sort((a, b) => parseTime(b.updatedAt ?? b.createdAt) - parseTime(a.updatedAt ?? a.createdAt))
+  return goals[0]
+}
+
+async function latestSupervisorReview(worktree: string, operationID: string) {
+  const dir = path.join(worktree, ".ulmcode", "operations", operationID, "supervisor")
+  let entries: string[]
+  try {
+    entries = await fs.readdir(dir)
+  } catch {
+    return undefined
+  }
+  const reviews = (
+    await Promise.all(
+      entries
+        .filter((entry) => entry.startsWith("supervisor-review-") && entry.endsWith(".json"))
+        .map((entry) => readJson<SupervisorReviewContext>(path.join(dir, entry))),
+    )
+  )
+    .filter((review): review is SupervisorReviewContext => !!review)
+    .sort((a, b) => parseTime(b.generatedAt) - parseTime(a.generatedAt))
+  return reviews[0]
+}
+
+async function toolInventory(worktree: string, operationID: string) {
+  return readJson<ToolInventoryContext>(path.join(worktree, ".ulmcode", "operations", operationID, "tool-inventory", "tool-inventory.json"))
+}
+
+async function ulmOperationContext(worktree: string) {
+  const goal = await activeOperationGoal(worktree)
+  if (!goal) return undefined
+  const supervisor = await latestSupervisorReview(worktree, goal.operationID)
+  const inventory = await toolInventory(worktree, goal.operationID)
+  const decision = supervisor?.decisions?.[0]
+  const installed = inventory?.tools?.filter((tool) => tool.installed && tool.highValue).map((tool) => tool.id).filter(Boolean).slice(0, 8)
+  const missing = inventory?.tools?.filter((tool) => !tool.installed && tool.highValue).map((tool) => tool.id).filter(Boolean).slice(0, 8)
+  return [
+    "<ulm_operation_context>",
+    `operation: ${goal.operationID}`,
+    `objective: ${short(goal.objective, 220) ?? "unknown"}`,
+    goal.targetDurationHours === undefined ? undefined : `target_duration_hours: ${goal.targetDurationHours}`,
+    `status: ${goal.status ?? "active"}`,
+    decision
+      ? `supervisor: action=${decision.action ?? "unknown"} reason=${short(decision.reason, 160) ?? "none"} next_tool=${decision.requiredNextTool ?? "none"}`
+      : "supervisor: no review yet; use operation_supervise when progress stalls, before compaction, and before handoff",
+    inventory
+      ? `tool_inventory: installed=${inventory.counts?.installed ?? 0}/${inventory.counts?.total ?? 0} high_value_missing=${inventory.counts?.highValueMissing ?? 0}`
+      : "tool_inventory: missing; call tool_inventory before broad discovery",
+    installed?.length ? `installed_high_value: ${installed.join(", ")}` : undefined,
+    missing?.length ? `missing_high_value: ${missing.join(", ")}` : undefined,
+    inventory?.nextActions?.[0] ? `inventory_next: ${short(inventory.nextActions[0], 180)}` : undefined,
+    "foreground_command_policy: commands expected over 2 minutes must use command_supervise, task background=true, runtime_scheduler, or runtime_daemon instead of foreground waiting",
+    "</ulm_operation_context>",
+  ]
+    .filter((line): line is string => line !== undefined)
+    .join("\n")
+}
 
 export function provider(model: Provider.Model) {
   if (model.api.id.includes("gpt-4") || model.api.id.includes("o1") || model.api.id.includes("o3"))
@@ -47,6 +171,7 @@ export const layer = Layer.effect(
     return Service.of({
       environment: Effect.fn("SystemPrompt.environment")(function* (model: Provider.Model) {
         const ctx = yield* InstanceState.context
+        const operationContext = yield* Effect.promise(async () => (await ulmOperationContext(ctx.worktree)) ?? (await ulmOperationContext(ctx.directory)))
         return [
           [
             `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
@@ -59,8 +184,11 @@ export const layer = Layer.effect(
             `  Today's date: ${new Date().toDateString()}`,
             `</env>`,
             ``,
+            operationContext ? `${operationContext}\n` : undefined,
             `System safety: never run broad commands that kill every Node.js process, such as \`pkill node\`, \`killall node\`, \`taskkill /F /IM node.exe\`, or \`Get-Process node | Stop-Process\`. OpenCode itself runs on Node.js, so stop specific PIDs or use project-scoped commands such as \`npm stop\` or \`pm2 stop <name>\`.`,
-          ].join("\n"),
+          ]
+            .filter((line): line is string => line !== undefined)
+            .join("\n"),
         ]
       }),
 
