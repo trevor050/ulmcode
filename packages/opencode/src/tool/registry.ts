@@ -27,6 +27,7 @@ import { OperationRecoverTool } from "./operation_recover"
 import { OperationResumeTool } from "./operation_resume"
 import { OperationRunTool } from "./operation_run"
 import { OperationScheduleTool } from "./operation_schedule"
+import { OperationSuperviseTool } from "./operation_supervise"
 import { OperationStageGateTool } from "./operation_stage_gate"
 import { OperationStatusTool } from "./operation_status"
 import { EvidenceRecordTool } from "./evidence_record"
@@ -161,6 +162,7 @@ export const layer: Layer.Layer<
     const operationResume = yield* OperationResumeTool
     const operationRun = yield* OperationRunTool
     const operationSchedule = yield* OperationScheduleTool
+    const operationSupervise = yield* OperationSuperviseTool
     const operationStageGate = yield* OperationStageGateTool
     const operationStatus = yield* OperationStatusTool
     const evidenceRecord = yield* EvidenceRecordTool
@@ -283,6 +285,7 @@ export const layer: Layer.Layer<
           operationResume: Tool.init(operationResume),
           operationRun: Tool.init(operationRun),
           operationSchedule: Tool.init(operationSchedule),
+          operationSupervise: Tool.init(operationSupervise),
           operationStageGate: Tool.init(operationStageGate),
           operationStatus: Tool.init(operationStatus),
           evidenceRecord: Tool.init(evidenceRecord),
@@ -334,6 +337,7 @@ export const layer: Layer.Layer<
             tool.operationResume,
             tool.operationRun,
             tool.operationSchedule,
+            tool.operationSupervise,
             tool.operationStageGate,
             tool.operationStatus,
             tool.evidenceRecord,

@@ -781,7 +781,7 @@ git commit -m "feat: add duration-aware pentest kickoff"
 - Modify: `packages/opencode/src/tool/operation_schedule.txt`
 - Modify: `packages/opencode/src/tool/operation_run.txt`
 
-- [ ] **Step 1: Write supervisor decision tests**
+- [x] **Step 1: Write supervisor decision tests**
 
 Scenarios:
 
@@ -794,7 +794,7 @@ Scenarios:
 - no tool calls since last continuation: pause continuation and require plan update.
 - completed final artifacts and clean audit: allow operation goal completion.
 
-- [ ] **Step 2: Implement supervisor input reader**
+- [x] **Step 2: Implement supervisor input reader**
 
 Read existing artifacts:
 
@@ -816,7 +816,7 @@ Rules:
 - Parse errors are structured blockers.
 - Supervisor never invents completion.
 
-- [ ] **Step 3: Implement supervisor decisions**
+- [x] **Step 3: Implement supervisor decisions**
 
 Decision values:
 
@@ -842,7 +842,7 @@ operatorMessage
 modelPrompt
 ```
 
-- [ ] **Step 4: Implement `operation_supervise` tool**
+- [x] **Step 4: Implement `operation_supervise` tool**
 
 Inputs:
 
@@ -871,7 +871,7 @@ Artifact paths:
 .ulmcode/operations/<operation-id>/supervisor/latest.md
 ```
 
-- [ ] **Step 5: Wire long-run lane graph expectations**
+- [x] **Step 5: Wire long-run lane graph expectations**
 
 Update `operation_schedule.txt` and `operation_run.txt` so long/overnight operations require:
 
@@ -883,15 +883,18 @@ Update `operation_schedule.txt` and `operation_run.txt` so long/overnight operat
 - reporting lanes.
 - runtime summary/audit closeout.
 
-- [ ] **Step 6: Run tests**
+- [x] **Step 6: Run tests**
 
 ```bash
-bun test packages/opencode/test/ulm/operation-supervisor.test.ts packages/opencode/test/tool/operation_supervise.test.ts
+cd packages/opencode
+bun test test/ulm/operation-supervisor.test.ts test/tool/operation_supervise.test.ts
+bun run typecheck
+bun test test/tool/registry.test.ts
 ```
 
 Expected: pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add packages/opencode/src/ulm/operation-supervisor.ts packages/opencode/src/tool/operation_supervise.ts packages/opencode/src/tool/operation_supervise.txt packages/opencode/src/tool/registry.ts packages/opencode/test/ulm/operation-supervisor.test.ts packages/opencode/test/tool/operation_supervise.test.ts packages/opencode/src/tool/operation_schedule.txt packages/opencode/src/tool/operation_run.txt
@@ -1486,7 +1489,7 @@ Below is the checklist to update as work progresses. The goal is not complete un
 - [x] Task 2: Add persistent operation goals.
 - [x] Task 3: Add local cybersecurity tool inventory and acquisition guidance.
 - [x] Task 4: Add duration-aware pentest kickoff and adaptive planning.
-- [ ] Task 5: Add supervisor review engine.
+- [x] Task 5: Add supervisor review engine.
 - [ ] Task 6: Enforce foreground command discipline for commands expected to exceed two minutes.
 - [ ] Task 7: Expand supervised command profiles for overnight discovery.
 - [ ] Task 8: Wire supervisor reviews into runtime scheduler/daemon.

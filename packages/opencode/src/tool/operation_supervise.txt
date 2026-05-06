@@ -1,0 +1,14 @@
+Run a durable ULM operation supervisor review.
+
+Use this in long or unattended operations when the orchestrator needs an independent health check. The supervisor reads the operation goal, operation status, lane graph, runtime summary, findings, evidence, and final-report artifacts, then returns concrete decisions such as continue, recover, schedule, queue_work, blocked, or handoff_ready.
+
+Use review kinds:
+
+- `startup`: before launching broad work
+- `heartbeat`: during unattended progress
+- `pre_compaction`: before context compaction or handoff
+- `post_compaction`: after resume
+- `pre_handoff`: before claiming final readiness
+- `manual`: operator-requested review
+
+The tool writes supervisor artifacts under `.ulmcode/operations/<operation-id>/supervisor/`. Treat these artifacts as durable state. Do not rely on a chat summary as the supervisor record.
