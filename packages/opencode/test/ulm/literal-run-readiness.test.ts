@@ -104,6 +104,34 @@ describe("ULM literal run readiness audit", () => {
     expect(result.checks.find((item) => item.id === "literal-work-proof")?.status).toBe("fail")
   })
 
+  test("accepts tool-owned daemon proof without requiring service-manager setup", async () => {
+    await using dir = await tmpdir({ git: true })
+    const operationID = "Tool Owned Daemon"
+    await writeOperationGraph(dir.path, { operationID, budgetUSD: 20 })
+
+    const schedulerDir = path.join(operationPath(dir.path, operationID), "scheduler")
+    await fs.mkdir(schedulerDir, { recursive: true })
+    await fs.writeFile(
+      path.join(schedulerDir, "daemon-heartbeat.json"),
+      JSON.stringify(
+        {
+          operationID: "tool-owned-daemon",
+          elapsedSeconds: 20 * 60 * 60,
+          reason: "runtime window elapsed",
+          cycles: [{ launchedJobs: ["job-recon"], run: { syncedJobs: ["job-recon"] } }],
+        },
+        null,
+        2,
+      ) + "\n",
+    )
+    await fs.writeFile(path.join(schedulerDir, "daemon.jsonl"), JSON.stringify({ tick: 1 }) + "\n")
+
+    const result = await auditLiteralRunReadiness(dir.path, { operationID })
+    expect(result.status).toBe("passed")
+    expect(result.checks.find((item) => item.id === "service-supervisor")?.status).toBe("fail")
+    expect(result.checks.find((item) => item.id === "service-supervisor")?.required).toBe(false)
+  })
+
   test("runs through the operator script and supports strict mode", async () => {
     await using dir = await tmpdir({ git: true })
     const script = path.join(__dirname, "..", "..", "script", "ulm-literal-run-readiness.ts")

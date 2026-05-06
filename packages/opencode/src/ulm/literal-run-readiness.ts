@@ -203,7 +203,7 @@ export async function auditLiteralRunReadiness(
       id: "service-supervisor",
       status:
         supervisor && supervisorDurationSeconds !== undefined && supervisorDurationSeconds >= targetElapsedSeconds ? "ok" : "fail",
-      required: true,
+      required: false,
       detail: supervisor
         ? `duration_seconds=${supervisorDurationSeconds ?? "missing"}; launchd=${supervisor.files?.launchdPlist ? "yes" : "no"}; systemd=${supervisor.files?.systemdService ? "yes" : "no"}`
         : "launchd/systemd supervisor manifest is missing",
