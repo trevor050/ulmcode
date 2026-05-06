@@ -1,3 +1,24 @@
 Write the execution-ready ULMCode operation plan.
 
 Use this before broad execution. The plan must define ordered phases, concrete actions, success criteria, where subagents will be used, where they will not be used, assumptions, and the reporting closeout sequence. This is the durable operation order, not a vague checklist.
+
+For pentest operations, plan depth must match the time budget:
+
+- Under 2 hours: write a compact operation plan. Do not spend a large share of the budget on multi-layer planning.
+- 2-8 hours: write a plan-plan first, run bounded discovery, then write the full operation plan.
+- 8-20 hours: use plan-plan plus staged discovery/research lanes and explicit supervisor checkpoints.
+- 20-36 hours: write a full duration-aware overnight plan with supervisor handoff, orchestrator lane, recovery cadence, reporting closeout, and runtime daemon/scheduler strategy.
+- More than 36 hours: require explicit operator confirmation that the run should continue beyond an overnight window.
+
+Pentest plans should include these fields in the plan text even if the JSON schema is still represented as ordered phases:
+
+- `planningMode`: `compact`, `plan-plan`, or `full-duration`
+- `durationBand`: `quick`, `standard`, `long`, `overnight`, or `extended`
+- `questionsAsked`: the scope, authorization, safety, credential, duration, and reporting questions already answered
+- `questionsDeferred`: questions intentionally delayed until discovery makes them useful
+- `planPlan`: what must be learned before the full plan is trustworthy
+- `supervisorHandoff`: when the supervisor reviews progress and what it is allowed to block
+- `foregroundCommandPolicy`: confirmation that expected >2 minute commands go to supervised/background execution
+- `reportCloseout`: report writer, report reviewer, report lint, report render, runtime summary, and operation audit sequence
+
+Do not use chat todos as the plan of record. The durable plan must be written here, then scheduled through `operation_schedule` before broad execution.

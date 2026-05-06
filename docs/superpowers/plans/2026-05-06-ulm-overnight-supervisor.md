@@ -680,7 +680,7 @@ git commit -m "feat: add durable local cyber tool inventory"
 - Modify: `packages/opencode/src/tool/operation_plan.txt`
 - Modify: `packages/opencode/src/tool/question.txt`
 
-- [ ] **Step 1: Write kickoff policy tests**
+- [x] **Step 1: Write kickoff policy tests**
 
 Required scenarios:
 
@@ -691,7 +691,7 @@ Required scenarios:
 - missing authorization blocks execution and asks scope/authorization question.
 - discovery findings can add follow-up questions.
 
-- [ ] **Step 2: Implement `PentestKickoff.classifyDuration`**
+- [x] **Step 2: Implement `PentestKickoff.classifyDuration`**
 
 Duration bands:
 
@@ -703,7 +703,7 @@ overnight: 20 to 36 hours
 extended: more than 36 hours
 ```
 
-- [ ] **Step 3: Implement required question selection**
+- [x] **Step 3: Implement required question selection**
 
 Initial questions:
 
@@ -722,7 +722,7 @@ Rules:
 - Ask more questions when duration is long enough for the answer to change the plan.
 - Add follow-ups after passive discovery only when the answer affects lane graph or safety.
 
-- [ ] **Step 4: Update pentest prompt**
+- [x] **Step 4: Update pentest prompt**
 
 Required prompt behavior:
 
@@ -734,7 +734,7 @@ Required prompt behavior:
 - call `operation_schedule` before broad execution.
 - hand off to `operation_supervise` for overnight runs.
 
-- [ ] **Step 5: Update `operation_plan.txt`**
+- [x] **Step 5: Update `operation_plan.txt`**
 
 Add required plan fields:
 
@@ -749,16 +749,18 @@ foregroundCommandPolicy
 reportCloseout
 ```
 
-- [ ] **Step 6: Run tests**
+- [x] **Step 6: Run tests**
 
 ```bash
-bun test packages/opencode/test/ulm/pentest-kickoff.test.ts
-bun run --cwd packages/opencode test:ulm-skills
+cd packages/opencode
+bun test test/ulm/pentest-kickoff.test.ts
+bun run test:ulm-skills
+bun run typecheck
 ```
 
-Expected: pass.
+Expected: pass. Current profile validator output in this branch reports `skills: 11` and `commands: 11`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add packages/opencode/src/ulm/pentest-kickoff.ts packages/opencode/test/ulm/pentest-kickoff.test.ts packages/opencode/src/agent/prompt/pentest.txt packages/opencode/src/tool/operation_plan.txt packages/opencode/src/tool/question.txt
@@ -1483,7 +1485,7 @@ Below is the checklist to update as work progresses. The goal is not complete un
 - [x] Task 1: Fix AI SDK `other` finish-reason handling for tool-loop continuation and TUI final-state rendering.
 - [x] Task 2: Add persistent operation goals.
 - [x] Task 3: Add local cybersecurity tool inventory and acquisition guidance.
-- [ ] Task 4: Add duration-aware pentest kickoff and adaptive planning.
+- [x] Task 4: Add duration-aware pentest kickoff and adaptive planning.
 - [ ] Task 5: Add supervisor review engine.
 - [ ] Task 6: Enforce foreground command discipline for commands expected to exceed two minutes.
 - [ ] Task 7: Expand supervised command profiles for overnight discovery.
