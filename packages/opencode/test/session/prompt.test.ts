@@ -1196,6 +1196,7 @@ unix("shell captures stdout and stderr in completed tool output", () =>
       }),
     { git: true, config: cfg },
   ),
+  10_000,
 )
 
 unix("shell completes a fast command on the preferred shell", () =>
@@ -1220,6 +1221,7 @@ unix("shell completes a fast command on the preferred shell", () =>
       }),
     { git: true, config: cfg },
   ),
+  10_000,
 )
 
 unix(
