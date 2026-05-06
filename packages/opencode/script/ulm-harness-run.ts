@@ -286,8 +286,9 @@ const scenarios: HarnessScenario[] = [
         },
         {
           id: "operation-run-starts-lane",
-          status: scheduler.cycles[0]?.run.action === "launch_lane" && scheduler.cycles[0]?.run.laneID === "recon" ? "passed" : "failed",
-          detail: `${scheduler.cycles[0]?.run.action} ${scheduler.cycles[0]?.run.laneID ?? "none"}`,
+          status:
+            scheduler.cycles[0]?.run?.action === "launch_lane" && scheduler.cycles[0]?.run?.laneID === "recon" ? "passed" : "failed",
+          detail: `${scheduler.cycles[0]?.run?.action ?? "none"} ${scheduler.cycles[0]?.run?.laneID ?? "none"}`,
         },
         {
           id: "runtime-scheduler-heartbeat",

@@ -47,6 +47,24 @@ export type OperationRunResult = {
   blockers: string[]
 }
 
+export type OperationRuntimeSyncInput = {
+  operationID: string
+  backgroundJobs?: BackgroundJob.Info[]
+  autoComplete?: boolean
+}
+
+export type OperationRuntimeSyncResult = {
+  operationID: string
+  graph: OperationGraphRecord
+  graphPath: string
+  completedLanes: string[]
+  failedLanes: string[]
+  syncedJobs: string[]
+  syncedWorkUnits: string[]
+  completedWorkUnits: string[]
+  failedWorkUnits: string[]
+}
+
 export type LaneCompletionProof = {
   operationID: string
   laneID: string
@@ -292,26 +310,20 @@ async function persistRun(worktree: string, graph: OperationGraphRecord, record:
 export async function runOperationStep(worktree: string, input: OperationRunInput): Promise<OperationRunResult> {
   const operationID = slug(input.operationID, "operation")
   const mode = input.mode ?? "advance"
-  const { root, graphPath } = graphPaths(worktree, operationID)
-  const graph = await readJson<OperationGraphRecord>(graphPath)
-  if (!graph) throw new Error("operation graph is missing; run operation_schedule first")
-  const completedLanes: string[] = []
-  const failedLanes: string[] = []
-  const syncedJobs: string[] = []
-  const syncedWorkUnits: string[] = []
-  const completedWorkUnits: string[] = []
-  const failedWorkUnits: string[] = []
+  const { root } = graphPaths(worktree, operationID)
+  const synced = await syncOperationRuntimeState(worktree, {
+    operationID,
+    backgroundJobs: input.backgroundJobs,
+    autoComplete: input.autoComplete,
+  })
+  const graph = synced.graph
+  const completedLanes = [...synced.completedLanes]
+  const failedLanes = [...synced.failedLanes]
+  const syncedJobs = [...synced.syncedJobs]
+  const syncedWorkUnits = [...synced.syncedWorkUnits]
+  const completedWorkUnits = [...synced.completedWorkUnits]
+  const failedWorkUnits = [...synced.failedWorkUnits]
   const blockers: string[] = []
-
-  if (input.autoComplete ?? true) completedLanes.push(...(await autoCompleteLanes(root, graph)))
-  const jobSync = await syncBackgroundJobs(root, graph, operationID, input.backgroundJobs)
-  completedLanes.push(...jobSync.completed.filter((lane) => !completedLanes.includes(lane)))
-  failedLanes.push(...jobSync.failed.filter((lane) => !failedLanes.includes(lane)))
-  syncedJobs.push(...jobSync.synced)
-  const queueSync = await syncWorkQueueJobs(worktree, { operationID, backgroundJobs: input.backgroundJobs })
-  syncedWorkUnits.push(...queueSync.syncedUnits)
-  completedWorkUnits.push(...queueSync.completedUnits)
-  failedWorkUnits.push(...queueSync.failedUnits)
 
   if (mode === "complete_lane" || mode === "fail_lane") {
     if (!input.laneID) throw new Error(`${mode} requires laneID`)
@@ -334,7 +346,7 @@ export async function runOperationStep(worktree: string, input: OperationRunInpu
 
   if (completedLanes.length || failedLanes.length) {
     graph.updatedAt = new Date().toISOString()
-    await writeJson(graphPath, graph)
+    await writeJson(synced.graphPath, graph)
   }
 
   const next = await decideOperationNext(worktree, { operationID })
@@ -381,6 +393,41 @@ export async function runOperationStep(worktree: string, input: OperationRunInpu
     completedWorkUnits,
     failedWorkUnits,
     blockers: [...blockers, ...next.action.blockers],
+  }
+}
+
+export async function syncOperationRuntimeState(
+  worktree: string,
+  input: OperationRuntimeSyncInput,
+): Promise<OperationRuntimeSyncResult> {
+  const operationID = slug(input.operationID, "operation")
+  const { root, graphPath } = graphPaths(worktree, operationID)
+  const graph = await readJson<OperationGraphRecord>(graphPath)
+  if (!graph) throw new Error("operation graph is missing; run operation_schedule first")
+  const completedLanes: string[] = []
+  const failedLanes: string[] = []
+
+  if (input.autoComplete ?? true) completedLanes.push(...(await autoCompleteLanes(root, graph)))
+  const jobSync = await syncBackgroundJobs(root, graph, operationID, input.backgroundJobs)
+  completedLanes.push(...jobSync.completed.filter((lane) => !completedLanes.includes(lane)))
+  failedLanes.push(...jobSync.failed.filter((lane) => !failedLanes.includes(lane)))
+  const queueSync = await syncWorkQueueJobs(worktree, { operationID, backgroundJobs: input.backgroundJobs })
+
+  if (completedLanes.length || failedLanes.length || jobSync.synced.length) {
+    graph.updatedAt = new Date().toISOString()
+    await writeJson(graphPath, graph)
+  }
+
+  return {
+    operationID,
+    graph,
+    graphPath,
+    completedLanes,
+    failedLanes,
+    syncedJobs: jobSync.synced,
+    syncedWorkUnits: queueSync.syncedUnits,
+    completedWorkUnits: queueSync.completedUnits,
+    failedWorkUnits: queueSync.failedUnits,
   }
 }
 

@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { operationPath, writeRuntimeSummary } from "@/ulm/artifact"
+import { createOperationGoal } from "@/ulm/operation-goal"
+import { operationPath, writeOperationPlan, writeRuntimeSummary } from "@/ulm/artifact"
 import { writeOperationGraph } from "@/ulm/operation-graph"
 import { runRuntimeDaemon } from "@/ulm/runtime-daemon"
 import { tmpdir } from "../fixture/fixture"
@@ -11,6 +12,52 @@ const packageRoot = path.join(__dirname, "../..")
 function fakeClock(start: string, stepSeconds: number) {
   let tick = 0
   return () => new Date(Date.parse(start) + tick++ * stepSeconds * 1000)
+}
+
+async function writeDaemonSupervisorFixture(worktree: string) {
+  await createOperationGoal(worktree, {
+    operationID: "School",
+    objective: "Authorized overnight internal assessment.",
+    targetDurationHours: 20,
+  })
+  await writeOperationPlan(worktree, {
+    operationID: "School",
+    phases: [
+      {
+        stage: "recon",
+        objective: "Build a bounded inventory.",
+        actions: ["Run passive discovery."],
+        successCriteria: ["Inventory is recorded."],
+        subagents: ["recon"],
+        noSubagents: [],
+      },
+    ],
+    reportingCloseout: ["report_lint before handoff", "report_render final package", "runtime_summary final accounting"],
+  })
+  await writeOperationGraph(worktree, { operationID: "School", budgetUSD: 10 })
+  const root = operationPath(worktree, "School")
+  const graphPath = path.join(root, "plans", "operation-graph.json")
+  const graph = JSON.parse(await fs.readFile(graphPath, "utf8"))
+  graph.lanes.push({
+    id: "supervisor",
+    title: "Supervisor heartbeat",
+    agent: "pentest",
+    status: "complete",
+    dependsOn: [],
+    modelRoute: "openai/gpt-5.5-fast",
+    fallbackModelRoutes: ["openai/gpt-5.4-mini-fast"],
+    allowedTools: ["operation_supervise", "operation_resume", "operation_status"],
+    expectedArtifacts: ["supervisor/latest.md"],
+    budget: {},
+    restartPolicy: { restartable: true, maxAttempts: 2, staleAfterMinutes: 30 },
+    operationID: "school",
+  })
+  await fs.writeFile(graphPath, JSON.stringify(graph, null, 2) + "\n")
+  await writeRuntimeSummary(worktree, {
+    operationID: "School",
+    usage: { costUSD: 1, budgetUSD: 10 },
+    compaction: { pressure: "low" },
+  })
 }
 
 describe("ULM runtime daemon", () => {
@@ -168,6 +215,28 @@ describe("ULM runtime daemon", () => {
 
     expect(launched).toEqual(["work-unit-http"])
     expect(result.cycles[0]?.launchedCommandJobs).toEqual(["cmd-work-unit-http"])
+  })
+
+  test("passes supervisor cadence through daemon ticks", async () => {
+    await using dir = await tmpdir({ git: true })
+    await writeDaemonSupervisorFixture(dir.path)
+
+    const result = await runRuntimeDaemon(dir.path, {
+      operationID: "School",
+      maxRuntimeSeconds: 3600,
+      cycleIntervalSeconds: 0,
+      maxCycles: 2,
+      supervisorIntervalMinutes: 30,
+      now: fakeClock("2026-05-05T00:00:00.000Z", 600),
+      sleep: async () => {},
+    })
+
+    expect(result.cycles).toHaveLength(2)
+    expect(result.cycles[0]?.supervisor?.ran).toBe(true)
+    expect(result.cycles[1]?.supervisor?.ran).toBe(false)
+    const heartbeat = JSON.parse(await fs.readFile(result.heartbeatPath, "utf8"))
+    expect(heartbeat.cycles[0].supervisor.ran).toBe(true)
+    expect(heartbeat.cycles[1].supervisor.ran).toBe(false)
   })
 
   test("refuses an active daemon lock and replaces a stale lock", async () => {

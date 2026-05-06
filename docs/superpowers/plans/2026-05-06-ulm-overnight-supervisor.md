@@ -1034,10 +1034,13 @@ git commit -m "feat: expand supervised command profile catalog"
 **Files:**
 - Modify: `packages/opencode/src/ulm/runtime-scheduler.ts`
 - Modify: `packages/opencode/src/ulm/runtime-daemon.ts`
+- Modify: `packages/opencode/src/ulm/operation-run.ts`
+- Modify: `packages/opencode/script/ulm-harness-run.ts`
+- Modify: `packages/opencode/script/ulm-runtime-daemon.ts`
 - Modify: `packages/opencode/test/ulm/runtime-scheduler.test.ts`
 - Modify: `packages/opencode/test/ulm/runtime-daemon.test.ts`
 
-- [ ] **Step 1: Add scheduler tests**
+- [x] **Step 1: Add scheduler tests**
 
 Scenarios:
 
@@ -1046,7 +1049,7 @@ Scenarios:
 - supervisor recover decision triggers recovery path.
 - supervisor handoff-ready decision lets final audit proceed.
 
-- [ ] **Step 2: Add scheduler config fields**
+- [x] **Step 2: Add scheduler config fields**
 
 Fields:
 
@@ -1064,7 +1067,7 @@ supervisorEnabled=true for long/overnight operations
 supervisorIntervalMinutes=30
 ```
 
-- [ ] **Step 3: Invoke supervisor review**
+- [x] **Step 3: Invoke supervisor review**
 
 Runtime scheduler cycle order:
 
@@ -1076,7 +1079,7 @@ Runtime scheduler cycle order:
 6. launch command/model lanes.
 7. write heartbeat.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 bun test packages/opencode/test/ulm/runtime-scheduler.test.ts packages/opencode/test/ulm/runtime-daemon.test.ts
@@ -1084,10 +1087,20 @@ bun test packages/opencode/test/ulm/runtime-scheduler.test.ts packages/opencode/
 
 Expected: pass.
 
-- [ ] **Step 5: Commit**
+Actual:
 
 ```bash
-git add packages/opencode/src/ulm/runtime-scheduler.ts packages/opencode/src/ulm/runtime-daemon.ts packages/opencode/test/ulm/runtime-scheduler.test.ts packages/opencode/test/ulm/runtime-daemon.test.ts
+cd packages/opencode
+bun run typecheck
+bun test test/ulm/runtime-scheduler.test.ts test/ulm/runtime-daemon.test.ts
+```
+
+Result: pass, 18 tests.
+
+- [x] **Step 5: Commit**
+
+```bash
+git add packages/opencode/src/ulm/runtime-scheduler.ts packages/opencode/src/ulm/runtime-daemon.ts packages/opencode/src/ulm/operation-run.ts packages/opencode/script/ulm-harness-run.ts packages/opencode/script/ulm-runtime-daemon.ts packages/opencode/test/ulm/runtime-scheduler.test.ts packages/opencode/test/ulm/runtime-daemon.test.ts docs/superpowers/plans/2026-05-06-ulm-overnight-supervisor.md
 git commit -m "feat: run supervisor reviews from ULM scheduler"
 ```
 
@@ -1495,7 +1508,7 @@ Below is the checklist to update as work progresses. The goal is not complete un
 - [x] Task 5: Add supervisor review engine.
 - [x] Task 6: Enforce foreground command discipline for commands expected to exceed two minutes.
 - [x] Task 7: Expand supervised command profiles for overnight discovery.
-- [ ] Task 8: Wire supervisor reviews into runtime scheduler/daemon.
+- [x] Task 8: Wire supervisor reviews into runtime scheduler/daemon.
 - [ ] Task 9: Integrate Plannotator as plan critic.
 - [ ] Task 10: Add compact supervisor/goal/tool-inventory prompt context.
 - [ ] Task 11: Expose supervisor state in CLI/TUI/API surfaces.
