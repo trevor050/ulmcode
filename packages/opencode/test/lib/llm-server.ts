@@ -501,6 +501,14 @@ export class Reply {
     return this
   }
 
+  finish(reason: string) {
+    this.#finish = reason
+    this.#hang = false
+    this.#error = undefined
+    this.#reset = false
+    return this
+  }
+
   tool(name: string, input: unknown) {
     const id = this.#id()
     const args = JSON.stringify(input)

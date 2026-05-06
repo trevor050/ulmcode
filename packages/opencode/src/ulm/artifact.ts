@@ -190,6 +190,33 @@ export type OperationStatusSummary = {
   operationID: string
   root: string
   operation?: OperationRecord
+  goal?: {
+    status: string
+    objective: string
+    targetDurationHours?: number
+    updatedAt?: string
+    completedAt?: string
+  }
+  supervisor?: {
+    generatedAt?: string
+    action?: string
+    reason?: string
+    requiredNextTool?: string
+    blockers: string[]
+    nextTools: string[]
+  }
+  toolInventory?: {
+    generatedAt?: string
+    total: number
+    installed: number
+    missing: number
+    highValueMissing: number
+    installedHighValue: string[]
+    missingHighValue: string[]
+  }
+  policies: {
+    foregroundCommand: string
+  }
   plans: {
     operation: boolean
   }
@@ -249,6 +276,38 @@ type LaneProofRecord = {
   status?: string
   artifacts?: string[]
   evidenceRefs?: string[]
+}
+
+type OperationGoalStatusRecord = {
+  status?: string
+  objective?: string
+  targetDurationHours?: number
+  updatedAt?: string
+  completedAt?: string
+}
+
+type SupervisorReviewStatusRecord = {
+  generatedAt?: string
+  decisions?: Array<{
+    action?: string
+    reason?: string
+    requiredNextTool?: string
+  }>
+}
+
+type ToolInventoryStatusRecord = {
+  generatedAt?: string
+  counts?: {
+    total?: number
+    installed?: number
+    missing?: number
+    highValueMissing?: number
+  }
+  tools?: Array<{
+    id?: string
+    installed?: boolean
+    highValue?: boolean
+  }>
 }
 
 export type OperationResumeBrief = {
@@ -624,6 +683,73 @@ async function laneProofIsValid(root: string, operationID: string, lane: NonNull
   return true
 }
 
+function statusTime(value: string | undefined) {
+  const time = value ? Date.parse(value) : Number.NaN
+  return Number.isFinite(time) ? time : 0
+}
+
+async function readLatestSupervisorStatus(root: string): Promise<OperationStatusSummary["supervisor"] | undefined> {
+  let entries: string[]
+  try {
+    entries = await fs.readdir(path.join(root, "supervisor"))
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined
+    throw error
+  }
+  const reviews = (
+    await Promise.all(
+      entries
+        .filter((entry) => entry.startsWith("supervisor-review-") && entry.endsWith(".json"))
+        .map((entry) => readJson<SupervisorReviewStatusRecord>(path.join(root, "supervisor", entry))),
+    )
+  )
+    .filter((review): review is SupervisorReviewStatusRecord => !!review)
+    .sort((a, b) => statusTime(b.generatedAt) - statusTime(a.generatedAt))
+  const review = reviews[0]
+  if (!review) return undefined
+  const decision = review.decisions?.[0]
+  return {
+    generatedAt: review.generatedAt,
+    action: decision?.action,
+    reason: decision?.reason,
+    requiredNextTool: decision?.requiredNextTool,
+    blockers: (review.decisions ?? [])
+      .filter((item) => item.action && item.action !== "continue" && item.action !== "handoff_ready")
+      .map((item) => item.reason)
+      .filter((item): item is string => !!item),
+    nextTools: [
+      ...new Set(
+        (review.decisions ?? [])
+          .map((item) => item.requiredNextTool)
+          .filter((item): item is string => !!item),
+      ),
+    ],
+  }
+}
+
+async function readToolInventoryStatus(root: string): Promise<OperationStatusSummary["toolInventory"] | undefined> {
+  const inventory = await readJson<ToolInventoryStatusRecord>(path.join(root, "tool-inventory", "tool-inventory.json"))
+  if (!inventory) return undefined
+  const highValue = (inventory.tools ?? []).filter((tool) => tool.highValue)
+  return {
+    generatedAt: inventory.generatedAt,
+    total: inventory.counts?.total ?? inventory.tools?.length ?? 0,
+    installed: inventory.counts?.installed ?? inventory.tools?.filter((tool) => tool.installed).length ?? 0,
+    missing: inventory.counts?.missing ?? inventory.tools?.filter((tool) => !tool.installed).length ?? 0,
+    highValueMissing: inventory.counts?.highValueMissing ?? highValue.filter((tool) => !tool.installed).length,
+    installedHighValue: highValue
+      .filter((tool) => tool.installed)
+      .map((tool) => tool.id)
+      .filter((item): item is string => !!item)
+      .slice(0, 8),
+    missingHighValue: highValue
+      .filter((tool) => !tool.installed)
+      .map((tool) => tool.id)
+      .filter((item): item is string => !!item)
+      .slice(0, 8),
+  }
+}
+
 async function readGraphStatus(root: string, operationID: string): Promise<OperationStatusSummary["graph"]> {
   const graph = await readJson<OperationGraphStatusRecord>(path.join(root, "plans", "operation-graph.json"))
   if (!graph?.lanes) return undefined
@@ -830,6 +956,18 @@ export function formatOperationStatusDashboard(status: OperationStatusSummary) {
     `root: ${status.root}`,
     `risk: ${operation?.riskLevel ?? "unknown"}`,
     `summary: ${operation?.summary ?? "No checkpoint recorded."}`,
+    `goal: ${status.goal?.status ?? "missing"}${
+      status.goal?.targetDurationHours !== undefined ? `, ${status.goal.targetDurationHours}h` : ""
+    }${status.goal?.objective ? ` - ${status.goal.objective}` : ""}`,
+    `supervisor: ${status.supervisor?.action ?? "none"}${
+      status.supervisor?.reason ? ` - ${status.supervisor.reason}` : ""
+    }${status.supervisor?.requiredNextTool ? `; next_tool ${status.supervisor.requiredNextTool}` : ""}`,
+    `tools: ${
+      status.toolInventory
+        ? `${status.toolInventory.installed}/${status.toolInventory.total} installed, ${status.toolInventory.highValueMissing} high-value missing`
+        : "inventory missing; run tool_inventory"
+    }`,
+    `policy: ${status.policies.foregroundCommand}`,
     "",
     `findings: ${status.findings.total} total${stateSplit ? ` (${stateSplit})` : ""}${
       severitySplit ? `; severity ${severitySplit}` : ""
@@ -845,7 +983,7 @@ export function formatOperationStatusDashboard(status: OperationStatusSummary) {
     ...listLines(operation?.nextActions, "none recorded"),
     "",
     "blockers:",
-    ...listLines(operation?.blockers, "none recorded"),
+    ...listLines([...(operation?.blockers ?? []), ...(status.supervisor?.blockers ?? [])], "none recorded"),
     "",
     "active_tasks:",
     ...listLines(operation?.activeTasks, "none recorded"),
@@ -2258,6 +2396,23 @@ export async function readOperationStatus(
     operationID: id,
     root,
     operation: await readJson<OperationRecord>(path.join(root, "operation.json")),
+    goal: await readJson<OperationGoalStatusRecord>(path.join(root, "goals", "operation-goal.json")).then((goal) =>
+      goal?.status && goal.objective
+        ? {
+            status: goal.status,
+            objective: goal.objective,
+            targetDurationHours: goal.targetDurationHours,
+            updatedAt: goal.updatedAt,
+            completedAt: goal.completedAt,
+          }
+        : undefined,
+    ),
+    supervisor: await readLatestSupervisorStatus(root),
+    toolInventory: await readToolInventoryStatus(root),
+    policies: {
+      foregroundCommand:
+        "Commands expected to exceed two minutes must run through command_supervise, task background=true, runtime_scheduler, or runtime_daemon.",
+    },
     plans: {
       operation: await exists(path.join(root, "plans", "operation-plan.json")),
     },

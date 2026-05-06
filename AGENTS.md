@@ -104,6 +104,7 @@ const table = sqliteTable("session", {
 
 ## ULMCode Rebuild Notes
 
+- For overnight-supervisor work, read `docs/ulm-autonomy/overnight-supervisor.md` and `docs/superpowers/plans/2026-05-06-ulm-overnight-supervisor.md` before editing; the design doc explains the supervisor runtime, and the plan tracks the supervisor/goal/tool-inventory rebuild checklist.
 - The rebuild branch starts from current `upstream/dev`; old fork cyber code should be mined for requirements, not ported wholesale.
 - Native ULM operation artifacts are written under `.ulmcode/operations/<operation-id>/`.
 - `operation_checkpoint` is the durable heartbeat/stage ledger tool.

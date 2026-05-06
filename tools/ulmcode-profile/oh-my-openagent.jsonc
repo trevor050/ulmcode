@@ -71,6 +71,14 @@
       "textVerbosity": "medium",
       "description": "Operation planning, scope control, task routing, and final handoff ownership."
     },
+    "plan-critic": {
+      "model": "openai/gpt-5.5-fast",
+      "variant": "high",
+      "reasoningEffort": "high",
+      "temperature": 0.02,
+      "textVerbosity": "medium",
+      "description": "Plannotator-style critique lane for long ULM plans. It finds missing questions, lane gaps, report gaps, and ROE/safety concerns without replacing native Build, Plan, or operation_plan."
+    },
     "recon": {
       "model": "openai/gpt-5.4-mini-fast",
       "reasoningEffort": "medium",

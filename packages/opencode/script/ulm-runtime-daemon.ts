@@ -17,6 +17,9 @@ type Args = {
   errorBackoffSeconds?: number
   maxConsecutiveErrors?: number
   staleLockSeconds?: number
+  supervisorEnabled?: boolean
+  supervisorIntervalMinutes?: number
+  supervisorReviewKind?: "startup" | "heartbeat" | "pre_compaction" | "post_compaction" | "pre_handoff" | "manual"
   detach: boolean
   detachLog?: string
   supervisor?: RuntimeSupervisorKind
@@ -37,6 +40,9 @@ function usage() {
     "  --error-backoff-seconds <n> Sleep after a failed scheduler tick. Defaults to 30.",
     "  --max-consecutive-errors <n> Stop after this many scheduler failures. Defaults to 3.",
     "  --stale-lock-seconds <n>    Replace daemon locks older than this. Defaults to 900.",
+    "  --supervisor-interval-minutes <n>  Supervisor review cadence for long operations. Defaults to 30.",
+    "  --supervisor-review-kind <kind>    startup, heartbeat, pre_compaction, post_compaction, pre_handoff, or manual.",
+    "  --disable-operation-supervisor     Disable scheduler supervisor reviews even for long operations.",
     "  --detach                    Launch the 20-hour daemon in the background and return pid/log paths.",
     "  --detach-log <path>          Log file for detached stdout/stderr. Defaults under the operation scheduler dir.",
     "  --supervisor <kind>          Write OS supervisor artifacts: launchd, systemd, or all. Does not start the daemon.",
@@ -67,6 +73,9 @@ function parseArgs(argv: string[]): Args {
   let errorBackoffSeconds: number | undefined
   let maxConsecutiveErrors: number | undefined
   let staleLockSeconds: number | undefined
+  let supervisorEnabled: boolean | undefined
+  let supervisorIntervalMinutes: number | undefined
+  let supervisorReviewKind: Args["supervisorReviewKind"]
   let detach = false
   let detachLog: string | undefined
   let supervisor: RuntimeSupervisorKind | undefined
@@ -87,6 +96,23 @@ function parseArgs(argv: string[]): Args {
         throw new Error(`${arg} must be launchd, systemd, or all`)
       }
       supervisor = value
+    } else if (arg === "--disable-operation-supervisor") {
+      supervisorEnabled = false
+    } else if (arg === "--supervisor-interval-minutes") {
+      supervisorIntervalMinutes = numberOption(arg, args[++index])
+    } else if (arg === "--supervisor-review-kind") {
+      const value = args[++index]
+      if (
+        value !== "startup" &&
+        value !== "heartbeat" &&
+        value !== "pre_compaction" &&
+        value !== "post_compaction" &&
+        value !== "pre_handoff" &&
+        value !== "manual"
+      ) {
+        throw new Error(`${arg} must be startup, heartbeat, pre_compaction, post_compaction, pre_handoff, or manual`)
+      }
+      supervisorReviewKind = value
     } else if (arg === "--duration-hours") {
       durationSeconds = numberOption(arg, args[++index]) * 60 * 60
     } else if (arg === "--duration-seconds") {
@@ -120,6 +146,9 @@ function parseArgs(argv: string[]): Args {
     errorBackoffSeconds,
     maxConsecutiveErrors,
     staleLockSeconds,
+    supervisorEnabled,
+    supervisorIntervalMinutes,
+    supervisorReviewKind,
     detach,
     detachLog,
     supervisor,
@@ -243,6 +272,9 @@ try {
     errorBackoffSeconds: args.errorBackoffSeconds,
     maxConsecutiveErrors: args.maxConsecutiveErrors,
     staleLockSeconds: args.staleLockSeconds,
+    supervisorEnabled: args.supervisorEnabled,
+    supervisorIntervalMinutes: args.supervisorIntervalMinutes,
+    supervisorReviewKind: args.supervisorReviewKind,
     signal: controller.signal,
   })
   console.log(args.json ? JSON.stringify(result, null, 2) : formatRuntimeDaemon(result))

@@ -17,6 +17,7 @@ import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
 import { OperationAuditTool } from "./operation_audit"
 import { OperationCheckpointTool } from "./operation_checkpoint"
+import { OperationGoalTool } from "./operation_goal"
 import { OperationGovernorTool } from "./operation_governor"
 import { OperationNextTool } from "./operation_next"
 import { OperationPlanTool } from "./operation_plan"
@@ -26,6 +27,7 @@ import { OperationRecoverTool } from "./operation_recover"
 import { OperationResumeTool } from "./operation_resume"
 import { OperationRunTool } from "./operation_run"
 import { OperationScheduleTool } from "./operation_schedule"
+import { OperationSuperviseTool } from "./operation_supervise"
 import { OperationStageGateTool } from "./operation_stage_gate"
 import { OperationStatusTool } from "./operation_status"
 import { EvidenceRecordTool } from "./evidence_record"
@@ -39,6 +41,7 @@ import { RuntimeSchedulerTool } from "./runtime_scheduler"
 import { RuntimeDaemonTool } from "./runtime_daemon"
 import { CommandSuperviseTool } from "./command_supervise"
 import { ToolAcquireTool } from "./tool_acquire"
+import { ToolInventoryTool } from "./tool_inventory"
 import * as Tool from "./tool"
 import { Config } from "@/config/config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
@@ -149,6 +152,7 @@ export const layer: Layer.Layer<
     const skilltool = yield* SkillTool
     const operationAudit = yield* OperationAuditTool
     const operationCheckpoint = yield* OperationCheckpointTool
+    const operationGoal = yield* OperationGoalTool
     const operationGovernor = yield* OperationGovernorTool
     const operationNext = yield* OperationNextTool
     const operationPlan = yield* OperationPlanTool
@@ -158,6 +162,7 @@ export const layer: Layer.Layer<
     const operationResume = yield* OperationResumeTool
     const operationRun = yield* OperationRunTool
     const operationSchedule = yield* OperationScheduleTool
+    const operationSupervise = yield* OperationSuperviseTool
     const operationStageGate = yield* OperationStageGateTool
     const operationStatus = yield* OperationStatusTool
     const evidenceRecord = yield* EvidenceRecordTool
@@ -171,6 +176,7 @@ export const layer: Layer.Layer<
     const runtimeDaemon = yield* RuntimeDaemonTool
     const commandSupervise = yield* CommandSuperviseTool
     const toolAcquire = yield* ToolAcquireTool
+    const toolInventory = yield* ToolInventoryTool
     const agent = yield* Agent.Service
 
     const state = yield* InstanceState.make<State>(
@@ -269,6 +275,7 @@ export const layer: Layer.Layer<
           skill: Tool.init(skilltool),
           operationAudit: Tool.init(operationAudit),
           operationCheckpoint: Tool.init(operationCheckpoint),
+          operationGoal: Tool.init(operationGoal),
           operationGovernor: Tool.init(operationGovernor),
           operationNext: Tool.init(operationNext),
           operationPlan: Tool.init(operationPlan),
@@ -278,6 +285,7 @@ export const layer: Layer.Layer<
           operationResume: Tool.init(operationResume),
           operationRun: Tool.init(operationRun),
           operationSchedule: Tool.init(operationSchedule),
+          operationSupervise: Tool.init(operationSupervise),
           operationStageGate: Tool.init(operationStageGate),
           operationStatus: Tool.init(operationStatus),
           evidenceRecord: Tool.init(evidenceRecord),
@@ -291,6 +299,7 @@ export const layer: Layer.Layer<
           runtimeDaemon: Tool.init(runtimeDaemon),
           commandSupervise: Tool.init(commandSupervise),
           toolAcquire: Tool.init(toolAcquire),
+          toolInventory: Tool.init(toolInventory),
           patch: Tool.init(patchtool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
@@ -318,6 +327,7 @@ export const layer: Layer.Layer<
             tool.skill,
             tool.operationAudit,
             tool.operationCheckpoint,
+            tool.operationGoal,
             tool.operationGovernor,
             tool.operationNext,
             tool.operationPlan,
@@ -327,6 +337,7 @@ export const layer: Layer.Layer<
             tool.operationResume,
             tool.operationRun,
             tool.operationSchedule,
+            tool.operationSupervise,
             tool.operationStageGate,
             tool.operationStatus,
             tool.evidenceRecord,
@@ -340,6 +351,7 @@ export const layer: Layer.Layer<
             tool.runtimeDaemon,
             tool.commandSupervise,
             tool.toolAcquire,
+            tool.toolInventory,
             tool.patch,
             ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [tool.lsp] : []),
             ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [tool.plan] : []),

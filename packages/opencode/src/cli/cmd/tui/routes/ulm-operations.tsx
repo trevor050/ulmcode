@@ -17,6 +17,29 @@ type OperationStatus = {
     nextActions?: string[]
     blockers?: string[]
   }
+  goal?: {
+    status?: string
+    objective?: string
+    targetDurationHours?: number
+  }
+  supervisor?: {
+    action?: string
+    reason?: string
+    requiredNextTool?: string
+    blockers?: string[]
+    nextTools?: string[]
+  }
+  toolInventory?: {
+    total?: number
+    installed?: number
+    missing?: number
+    highValueMissing?: number
+    installedHighValue?: string[]
+    missingHighValue?: string[]
+  }
+  policies?: {
+    foregroundCommand?: string
+  }
   findings?: {
     total?: number
   }
@@ -49,6 +72,10 @@ function operationStatus(value: unknown): OperationStatus | undefined {
   const findings = record(item.findings)
   const evidence = record(item.evidence)
   const reports = record(item.reports)
+  const goal = record(item.goal)
+  const supervisor = record(item.supervisor)
+  const toolInventory = record(item.toolInventory)
+  const policies = record(item.policies)
   return {
     operationID: item.operationID,
     operation: operation
@@ -60,6 +87,37 @@ function operationStatus(value: unknown): OperationStatus | undefined {
           riskLevel: typeof operation.riskLevel === "string" ? operation.riskLevel : undefined,
           nextActions: strings(operation.nextActions),
           blockers: strings(operation.blockers),
+        }
+      : undefined,
+    goal: goal
+      ? {
+          status: typeof goal.status === "string" ? goal.status : undefined,
+          objective: typeof goal.objective === "string" ? goal.objective : undefined,
+          targetDurationHours: typeof goal.targetDurationHours === "number" ? goal.targetDurationHours : undefined,
+        }
+      : undefined,
+    supervisor: supervisor
+      ? {
+          action: typeof supervisor.action === "string" ? supervisor.action : undefined,
+          reason: typeof supervisor.reason === "string" ? supervisor.reason : undefined,
+          requiredNextTool: typeof supervisor.requiredNextTool === "string" ? supervisor.requiredNextTool : undefined,
+          blockers: strings(supervisor.blockers),
+          nextTools: strings(supervisor.nextTools),
+        }
+      : undefined,
+    toolInventory: toolInventory
+      ? {
+          total: typeof toolInventory.total === "number" ? toolInventory.total : undefined,
+          installed: typeof toolInventory.installed === "number" ? toolInventory.installed : undefined,
+          missing: typeof toolInventory.missing === "number" ? toolInventory.missing : undefined,
+          highValueMissing: typeof toolInventory.highValueMissing === "number" ? toolInventory.highValueMissing : undefined,
+          installedHighValue: strings(toolInventory.installedHighValue),
+          missingHighValue: strings(toolInventory.missingHighValue),
+        }
+      : undefined,
+    policies: policies
+      ? {
+          foregroundCommand: typeof policies.foregroundCommand === "string" ? policies.foregroundCommand : undefined,
         }
       : undefined,
     findings: findings && typeof findings.total === "number" ? { total: findings.total } : undefined,
@@ -102,6 +160,10 @@ function mergeOperationUpdate(
   update: {
     operationID: string
     operation?: OperationStatus["operation"]
+    goal?: OperationStatus["goal"]
+    supervisor?: OperationStatus["supervisor"]
+    toolInventory?: OperationStatus["toolInventory"]
+    policies?: OperationStatus["policies"]
     findings?: OperationStatus["findings"]
     evidence?: OperationStatus["evidence"]
     reports?: OperationStatus["reports"]
@@ -111,6 +173,10 @@ function mergeOperationUpdate(
   return {
     operationID: update.operationID,
     operation: update.operation ? { ...previous?.operation, ...update.operation } : previous?.operation,
+    goal: update.goal ?? previous?.goal,
+    supervisor: update.supervisor ?? previous?.supervisor,
+    toolInventory: update.toolInventory ?? previous?.toolInventory,
+    policies: update.policies ?? previous?.policies,
     findings: update.findings ?? previous?.findings,
     evidence: update.evidence ?? previous?.evidence,
     reports: update.reports ?? previous?.reports,
@@ -278,6 +344,25 @@ export function UlmOperations() {
                 </box>
                 <box>
                   <text fg={theme.text}>
+                    goal: {status().goal?.status ?? "missing"}
+                    <span style={{ fg: theme.textMuted }}>
+                      {status().goal?.targetDurationHours !== undefined ? ` / ${status().goal?.targetDurationHours}h` : ""}
+                    </span>
+                  </text>
+                  <text fg={theme.textMuted} wrapMode="word">
+                    supervisor: {status().supervisor?.action ?? "none"}
+                    {status().supervisor?.reason ? ` - ${status().supervisor?.reason}` : ""}
+                    {status().supervisor?.requiredNextTool ? ` / next ${status().supervisor?.requiredNextTool}` : ""}
+                  </text>
+                  <text fg={theme.textMuted} wrapMode="word">
+                    tools:{" "}
+                    {status().toolInventory
+                      ? `${status().toolInventory?.installed ?? 0}/${status().toolInventory?.total ?? 0} installed, ${status().toolInventory?.highValueMissing ?? 0} high-value missing`
+                      : "inventory missing; run tool_inventory"}
+                  </text>
+                </box>
+                <box>
+                  <text fg={theme.text}>
                     {countLabel(status())}
                     <span style={{ fg: theme.textMuted }}>
                       {" "}
@@ -285,6 +370,9 @@ export function UlmOperations() {
                     </span>
                   </text>
                   <text fg={theme.textMuted}>reports: {reports().length ? reports().join(", ") : "none"}</text>
+                  <text fg={theme.textMuted} wrapMode="word">
+                    {status().policies?.foregroundCommand ?? "commands expected over two minutes must run supervised/background"}
+                  </text>
                 </box>
                 <Show when={status().operation?.nextActions?.length}>
                   <box>
@@ -294,10 +382,10 @@ export function UlmOperations() {
                     </For>
                   </box>
                 </Show>
-                <Show when={status().operation?.blockers?.length}>
+                <Show when={(status().operation?.blockers?.length ?? 0) + (status().supervisor?.blockers?.length ?? 0)}>
                   <box>
                     <text fg={theme.warning}>blockers</text>
-                    <For each={status().operation?.blockers ?? []}>
+                    <For each={[...(status().operation?.blockers ?? []), ...(status().supervisor?.blockers ?? [])]}>
                       {(blocker) => <text fg={theme.textMuted} wrapMode="word">- {blocker}</text>}
                     </For>
                   </box>

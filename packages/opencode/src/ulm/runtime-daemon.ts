@@ -21,6 +21,10 @@ export type RuntimeDaemonInput = {
   launchModelLane?: (params: NonNullable<OperationRunResult["taskParams"]>) => Promise<{ jobID?: string | undefined } | undefined>
   launchCommandWorkUnit?: Parameters<typeof runRuntimeScheduler>[1]["launchCommandWorkUnit"]
   commandWorkUnitLimit?: number
+  supervisorEnabled?: Parameters<typeof runRuntimeScheduler>[1]["supervisorEnabled"]
+  supervisorIntervalMinutes?: Parameters<typeof runRuntimeScheduler>[1]["supervisorIntervalMinutes"]
+  lastSupervisorReviewAt?: Parameters<typeof runRuntimeScheduler>[1]["lastSupervisorReviewAt"]
+  supervisorReviewKind?: Parameters<typeof runRuntimeScheduler>[1]["supervisorReviewKind"]
   recoverBackgroundJob?: (job: BackgroundJob.Info) => Promise<{ jobID?: string | undefined } | undefined>
   maxRecoveriesPerTick?: number
   now?: () => Date
@@ -123,6 +127,7 @@ export async function runRuntimeDaemon(worktree: string, input: RuntimeDaemonInp
   const started = now()
   const cycles: RuntimeSchedulerCycle[] = []
   const recoveredJobs: string[] = []
+  let lastSupervisorReviewAt = input.lastSupervisorReviewAt
   let stopped = false
   let reason = "runtime window elapsed"
   let consecutiveErrors = 0
@@ -164,6 +169,10 @@ export async function runRuntimeDaemon(worktree: string, input: RuntimeDaemonInp
         launchModelLane: input.launchModelLane,
         launchCommandWorkUnit: input.launchCommandWorkUnit,
         commandWorkUnitLimit: input.commandWorkUnitLimit,
+        supervisorEnabled: input.supervisorEnabled,
+        supervisorIntervalMinutes: input.supervisorIntervalMinutes,
+        lastSupervisorReviewAt,
+        supervisorReviewKind: input.supervisorReviewKind,
         now: tickTime,
       }).catch(async (error) => {
         consecutiveErrors += 1
@@ -200,6 +209,8 @@ export async function runRuntimeDaemon(worktree: string, input: RuntimeDaemonInp
       }
       consecutiveErrors = 0
       cycles.push(...scheduler.cycles)
+      const latestSupervisor = [...scheduler.cycles].reverse().find((cycle) => cycle.supervisor?.generatedAt)?.supervisor
+      if (latestSupervisor?.generatedAt) lastSupervisorReviewAt = latestSupervisor.generatedAt
       stopped = scheduler.stopped
       reason = scheduler.reason
       const heartbeat = {
@@ -215,6 +226,9 @@ export async function runRuntimeDaemon(worktree: string, input: RuntimeDaemonInp
         reason,
         lockPath,
         recoveredJobs: recoveredThisTick,
+        supervisorAction: scheduler.cycles.at(-1)?.supervisor?.action,
+        supervisorReason: scheduler.cycles.at(-1)?.supervisor?.reason,
+        supervisorRan: scheduler.cycles.at(-1)?.supervisor?.ran ?? false,
       }
       await writeJson(lockPath, { pid: process.pid, createdAt: started.toISOString(), updatedAt: tickTime.toISOString() })
       await writeJson(heartbeatPath, heartbeat)

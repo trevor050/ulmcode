@@ -286,8 +286,9 @@ const scenarios: HarnessScenario[] = [
         },
         {
           id: "operation-run-starts-lane",
-          status: scheduler.cycles[0]?.run.action === "launch_lane" && scheduler.cycles[0]?.run.laneID === "recon" ? "passed" : "failed",
-          detail: `${scheduler.cycles[0]?.run.action} ${scheduler.cycles[0]?.run.laneID ?? "none"}`,
+          status:
+            scheduler.cycles[0]?.run?.action === "launch_lane" && scheduler.cycles[0]?.run?.laneID === "recon" ? "passed" : "failed",
+          detail: `${scheduler.cycles[0]?.run?.action ?? "none"} ${scheduler.cycles[0]?.run?.laneID ?? "none"}`,
         },
         {
           id: "runtime-scheduler-heartbeat",
@@ -497,8 +498,12 @@ const scenarios: HarnessScenario[] = [
         ...(await fileIncludes("packages/opencode/script/ulm-burnin.ts", ["--target-hours", "runBurnInHarness"])),
         ...(await fileIncludes("packages/opencode/src/ulm/burnin-harness.ts", [
           "burnin-proof.json",
+          "burnin-supervisor-scenario.json",
           "simulatedElapsedSeconds",
           "restartCount",
+          "completionBlockedBeforeAudit",
+          "goalCompletedAfterAudit",
+          "writeSupervisorScenario",
         ])),
         ...(await fileIncludes("packages/opencode/src/ulm/operation-run.ts", [
           "validateLaneCompletionProof",
@@ -511,6 +516,11 @@ const scenarios: HarnessScenario[] = [
           "detaches the operator CLI wrapper",
           "passes command work-unit launch hooks",
           "writes launchd and systemd supervisor artifacts",
+        ])),
+        ...(await fileIncludes("tools/ulmcode-evals/scenarios/overnight_supervisor.json", [
+          "overnight-supervisor-contract",
+          "goal completion is blocked before operation-audit.json",
+          "burnin-supervisor-scenario.json",
         ])),
       ]
       return {

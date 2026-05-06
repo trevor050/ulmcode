@@ -22,6 +22,33 @@ function status(input: Partial<OperationStatusSummary> = {}): OperationStatusSum
         updated: "2026-05-05T10:05:00.000Z",
       },
     },
+    goal: {
+      status: "active",
+      objective: "Authorized school assessment",
+      targetDurationHours: 20,
+      updatedAt: "2026-05-05T10:05:00.000Z",
+    },
+    supervisor: {
+      generatedAt: "2026-05-05T10:06:00.000Z",
+      action: "blocked",
+      reason: "operation plan is missing",
+      requiredNextTool: "operation_plan",
+      blockers: ["operation plan is missing"],
+      nextTools: ["operation_plan"],
+    },
+    toolInventory: {
+      generatedAt: "2026-05-05T10:07:00.000Z",
+      total: 20,
+      installed: 12,
+      missing: 8,
+      highValueMissing: 2,
+      installedHighValue: ["nmap", "httpx"],
+      missingHighValue: ["nuclei", "ffuf"],
+    },
+    policies: {
+      foregroundCommand:
+        "Commands expected to exceed two minutes must run through command_supervise, task background=true, runtime_scheduler, or runtime_daemon.",
+    },
     plans: { operation: true },
     findings: {
       total: 2,
@@ -58,6 +85,9 @@ describe("ulm cli formatting", () => {
   test("formats status as dashboard or json", () => {
     const item = status()
     expect(formatOperationStatusOutput(item, "dashboard")).toContain("# school - validation/running")
+    expect(formatOperationStatusOutput(item, "dashboard")).toContain("goal: active, 20h")
+    expect(formatOperationStatusOutput(item, "dashboard")).toContain("supervisor: blocked - operation plan is missing")
+    expect(formatOperationStatusOutput(item, "dashboard")).toContain("tools: 12/20 installed, 2 high-value missing")
     expect(JSON.parse(formatOperationStatusOutput(item, "json")).operationID).toBe("school")
   })
 })

@@ -190,6 +190,11 @@ function validateRouting() {
     variant: "xhigh",
     reasoningEffort: "xhigh",
   })
+  assertRoute("oh-my-openagent.jsonc", "plan-critic", omoConfig.categories?.["plan-critic"], {
+    model: "openai/gpt-5.5-fast",
+    variant: "high",
+    reasoningEffort: "high",
+  })
   assertRoute("oh-my-openagent.jsonc", "report-reviewer", omoConfig.categories?.["report-reviewer"], {
     model: "openai/gpt-5.5-fast",
     variant: "xhigh",
@@ -207,8 +212,18 @@ if (!opencodeConfig.instructions?.includes("__ULMCODE_PROFILE_DIR__/plugins/shel
 }
 
 const shellStrategy = await fs.readFile(path.join(profileRoot, "plugins", "shell-strategy", "shell_strategy.md"), "utf8")
-for (const needle of ["Shell Non-Interactive Strategy", "GIT_TERMINAL_PROMPT", "Process Continuity"]) {
+for (const needle of ["Shell Non-Interactive Strategy", "GIT_TERMINAL_PROMPT", "Process Continuity", "Long Command Handoff"]) {
   if (!shellStrategy.includes(needle)) throw new Error(`shell strategy is missing ${needle}`)
+}
+
+const operationPlanPrompt = await fs.readFile(path.join(repoRoot, "packages", "opencode", "src", "tool", "operation_plan.txt"), "utf8")
+for (const needle of ["Plannotator-style critique lane", "critic only", "does not replace native Build/Plan", "operation audit"]) {
+  if (!operationPlanPrompt.includes(needle)) throw new Error(`operation_plan prompt is missing Plannotator guardrail: ${needle}`)
+}
+
+const profileReadme = await fs.readFile(path.join(profileRoot, "README.md"), "utf8")
+for (const needle of ["plan-critic", "replace_plan=false", "ROE/safety concerns"]) {
+  if (!profileReadme.includes(needle)) throw new Error(`profile README is missing Plannotator note: ${needle}`)
 }
 
 for (const command of [

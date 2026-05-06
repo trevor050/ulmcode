@@ -29,5 +29,33 @@ It also runs the bundled lab replay catalog, proving the manifest-driven replay 
 - Third-party plugin source is vendored for audit/fork work under `plugins/vendor/`; currently this includes `@khalilgharbaoui/opencode-claude-code-plugin@0.2.2` and `oh-my-openagent@3.17.12`. The profile npm manifest points OMO dependencies at the vendored package directory so installs are tied to the audited copy.
 - The profile vendors the current local OMO markdown layer under `local-opencode/`: 12 agents, 16 prompts, Feature Forge, and 8 root commands. The installer copies those into the isolated ULMCode config so category routing and manual commands survive a fresh install.
 - The OMO profile preserves the user routing doctrine: 5.4 Mini Fast for quick/recon/docs/evidence lanes, GPT-5.5 high/xhigh for operation control, validation, backend architecture/build, report writing, and final review; Kimi handles frontend taste/build; Gemini handles semantic product taste; Claude Sonnet is sparse human-feel review only.
+- Plannotator is integrated as the optional `plan-critic` category, not as a replacement for native Build/Plan or the durable `operation_plan` tool. For 8+ hour operations, invoke it after the plan-plan and before the full operation plan is approved so it can flag missing questions, lane gaps, report gaps, and ROE/safety concerns. Disable it by omitting the `plan-critic` lane; keep `sisyphus_agent.replace_plan=false` so OMO augments native planning instead of owning the plan of record.
 - Background-task concurrency, runtime fallback, auto-resume, aggressive truncation, and tmux layout settings are carried over from the current local OpenCode profile.
 - Bundled commands include `ulm-resume`, `ulm-final-handoff`, `ulm-test-plan`, plus the useful local workflow commands `btw`, `commit-msg`, `explain-diff`, `frontend-polish`, `handoff`, `review`, `ship`, and `test-plan`.
+
+## Overnight Operation Flow
+
+Start long work by creating an operation goal, running `tool_inventory`, writing the duration-aware `operation_plan`, and scheduling lanes with `operation_schedule`. For a real overnight run, hand off to the daemon instead of keeping a foreground chat command alive:
+
+```sh
+bun run --cwd packages/opencode ulm:runtime-daemon <operationID> --duration-hours 20 --detach --json
+```
+
+Inspect and recover with:
+
+```sh
+opencode ulm status <operationID>
+opencode ulm resume <operationID> --stale-after-minutes 30
+opencode ulm audit <operationID> --format json
+```
+
+Use `runtime_scheduler` for short local cycles, `runtime_daemon` for wall-clock ownership, and `operation_supervise` whenever progress stalls, before compaction, and before final handoff.
+
+Readiness commands:
+
+```sh
+bun run --cwd packages/opencode ulm:burnin <operationID> --target-hours 20 --json
+bun run --cwd packages/opencode ulm:literal-run-readiness <operationID> --strict --json
+```
+
+Burn-in is accelerated readiness evidence. Literal readiness only passes with actual daemon heartbeat/log proof.

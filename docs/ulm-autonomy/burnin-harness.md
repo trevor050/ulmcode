@@ -22,3 +22,19 @@ Each run writes:
 - `burnin-audit.md`: human-readable audit summary.
 
 The audit passes only when simulated elapsed seconds reaches the requested target, daemon heartbeats equal ticks, scheduler heartbeats equal ticks, and the checkpoint is marked complete.
+
+## Overnight Supervisor Scenario
+
+The harness also writes `burnin-supervisor-scenario.json` and embeds the same proof into `burnin-proof.json`.
+
+The accelerated scenario proves:
+
+- a 20-hour operation goal is created.
+- a plan-plan and durable operation plan exist before broad execution.
+- the operation graph includes a supervisor lane.
+- a stale command lane is simulated and recovered on resume.
+- tool inventory and runtime summary artifacts are written.
+- goal completion is blocked until `deliverables/operation-audit.json` exists.
+- final audit artifacts allow the operation goal to complete after the simulated overnight window.
+
+This remains accelerated readiness evidence. It is not literal wall-clock proof; use `ulm:literal-run-readiness` against an actual daemon run for that.

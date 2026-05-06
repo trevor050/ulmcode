@@ -6,6 +6,8 @@ proof references real non-empty expected artifacts, syncs completed/failed backg
 metadata, calls the next-action logic, marks launchable lanes as running, and
 writes `plans/operation-run.jsonl`.
 
+For long and overnight operations, run `operation_supervise` on startup, heartbeat, post-compaction, and pre-handoff cycles. If the supervisor returns `blocked`, `recover`, `schedule`, or `queue_work`, resolve that decision before blindly advancing the graph. `operation_run` advances lanes; it is not a substitute for supervisor review.
+
 Modes:
 - `advance`: pick and mark the next lane running when the governor allows it.
 - `complete_lane`: mark a lane complete and unlock dependent lanes.

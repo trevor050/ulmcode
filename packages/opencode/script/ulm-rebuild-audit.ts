@@ -584,6 +584,7 @@ async function auditProfileRouting() {
     "Shell Non-Interactive Strategy",
     "GIT_TERMINAL_PROMPT",
     "Process Continuity",
+    "Long Command Handoff",
   ])
   for (const command of [
     "btw.md",
@@ -619,9 +620,11 @@ async function auditProfileRuntime() {
   assert(!opencodeConfig.includes("oh-my-openagent@latest"), "profile must not use oh-my-openagent@latest")
   requireText("tools/ulmcode-profile/plugins/ulmcode-runtime-guard.js", guard, [
     "operation_resume",
+    "operation_supervise",
     "runtime_summary",
     "operation_recover",
     "report_lint",
+    "exceed two minutes",
   ])
   requireText("tools/ulmcode-profile/scripts/install-profile.sh", installer, [
     "ulmcode-launch.sh",
