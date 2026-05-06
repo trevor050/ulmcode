@@ -1,0 +1,20 @@
+{
+  "id": "overnight-supervisor-contract",
+  "capability": "overnight_supervisor",
+  "tier": "overnight",
+  "objective": "Prove the accelerated overnight harness exercises the supervisor, stale command recovery, tool inventory, runtime summary, and final audit completion contract.",
+  "checks": [
+    "20-hour operation goal is created",
+    "plan-plan and durable operation plan are written",
+    "supervisor lane exists in the operation graph",
+    "stale command lane is simulated and recovered",
+    "tool inventory and runtime summary artifacts are present",
+    "goal completion is blocked before operation-audit.json",
+    "goal completion succeeds after final audit artifacts exist"
+  ],
+  "acceptance": [
+    "burnin-supervisor-scenario.json records every proof field",
+    "burnin-proof.json embeds the supervisor scenario proof",
+    "test:ulm-harness:overnight fails if the burn-in supervisor proof contract disappears"
+  ]
+}

@@ -1318,11 +1318,12 @@ git commit -m "feat: expose ULM supervisor state"
 
 **Files:**
 - Modify: `packages/opencode/test/ulm/burnin-harness.test.ts`
-- Modify: `packages/opencode/test/ulm/harness.test.ts`
-- Modify: `tools/ulmcode-evals/scenarios/*` after inspection
+- Modify: `packages/opencode/src/ulm/burnin-harness.ts`
+- Modify: `packages/opencode/script/ulm-harness-run.ts`
+- Create: `tools/ulmcode-evals/scenarios/overnight_supervisor.json`
 - Modify: `docs/ulm-autonomy/burnin-harness.md`
 
-- [ ] **Step 1: Inspect current harness scenarios**
+- [x] **Step 1: Inspect current harness scenarios**
 
 ```bash
 find tools/ulmcode-evals -maxdepth 3 -type f | sort
@@ -1331,7 +1332,7 @@ sed -n '1,220p' docs/ulm-autonomy/burnin-harness.md
 
 Expected: identify existing overnight readiness contract.
 
-- [ ] **Step 2: Add accelerated supervisor scenario**
+- [x] **Step 2: Add accelerated supervisor scenario**
 
 Scenario requirements:
 
@@ -1345,7 +1346,7 @@ Scenario requirements:
 - block completion until final audit exists.
 - pass after final render/audit.
 
-- [ ] **Step 3: Run fast harness**
+- [x] **Step 3: Run fast harness**
 
 ```bash
 bun run --cwd packages/opencode test:ulm-harness:fast
@@ -1353,7 +1354,9 @@ bun run --cwd packages/opencode test:ulm-harness:fast
 
 Expected: pass.
 
-- [ ] **Step 4: Run overnight readiness harness**
+Actual: pass.
+
+- [x] **Step 4: Run overnight readiness harness**
 
 ```bash
 bun run --cwd packages/opencode test:ulm-harness:overnight
@@ -1361,10 +1364,22 @@ bun run --cwd packages/opencode test:ulm-harness:overnight
 
 Expected: pass. This is not a literal 20-hour proof.
 
-- [ ] **Step 5: Commit**
+Actual:
 
 ```bash
-git add packages/opencode/test/ulm tools/ulmcode-evals docs/ulm-autonomy/burnin-harness.md
+cd packages/opencode
+bun test test/ulm/burnin-harness.test.ts
+bun run test:ulm-harness:fast
+bun run test:ulm-harness:overnight
+bun run typecheck
+```
+
+Result: pass.
+
+- [x] **Step 5: Commit**
+
+```bash
+git add packages/opencode/src/ulm/burnin-harness.ts packages/opencode/test/ulm/burnin-harness.test.ts packages/opencode/script/ulm-harness-run.ts tools/ulmcode-evals/scenarios/overnight_supervisor.json docs/ulm-autonomy/burnin-harness.md docs/superpowers/plans/2026-05-06-ulm-overnight-supervisor.md
 git commit -m "test: add overnight supervisor harness coverage"
 ```
 
@@ -1548,6 +1563,6 @@ Below is the checklist to update as work progresses. The goal is not complete un
 - [x] Task 9: Integrate Plannotator as plan critic.
 - [x] Task 10: Add compact supervisor/goal/tool-inventory prompt context.
 - [x] Task 11: Expose supervisor state in CLI/TUI/API surfaces.
-- [ ] Task 12: Add overnight supervisor harness scenario.
+- [x] Task 12: Add overnight supervisor harness scenario.
 - [ ] Task 13: Update autonomy/profile/agent documentation.
 - [ ] Task 14: Run final verification ladder and completion audit.

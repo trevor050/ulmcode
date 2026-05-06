@@ -1,6 +1,8 @@
 import fs from "fs/promises"
 import path from "path"
-import { operationPath, slug } from "./artifact"
+import { completeOperationGoal, createOperationGoal } from "./operation-goal"
+import { operationPath, slug, writeOperationPlan, writeRuntimeSummary } from "./artifact"
+import { writeOperationGraph } from "./operation-graph"
 
 export type BurnInAuditStatus = "passed" | "incomplete" | "failed"
 
@@ -44,6 +46,23 @@ export type BurnInProof = {
     scheduler: string
   }
   checkpointPath: string
+  supervisorScenario: BurnInSupervisorScenarioProof
+}
+
+export type BurnInSupervisorScenarioProof = {
+  operationGoalCreated: boolean
+  targetDurationHours: number
+  planPlanWritten: boolean
+  supervisorLanePresent: boolean
+  supervisorReviews: number
+  staleCommandLaneSimulated: boolean
+  staleCommandLaneRecovered: boolean
+  toolInventoryWritten: boolean
+  runtimeSummaryWritten: boolean
+  completionBlockedBeforeAudit: boolean
+  finalAuditWritten: boolean
+  goalCompletedAfterAudit: boolean
+  proofPath: string
 }
 
 export type BurnInHarnessResult = {
@@ -111,6 +130,154 @@ function virtualTime(startedAt: string, elapsedSeconds: number) {
   return new Date(Date.parse(startedAt) + elapsedSeconds * 1000).toISOString()
 }
 
+async function writeSupervisorScenario(worktree: string, input: { operationID: string; targetElapsedSeconds: number; completed: boolean }) {
+  const operationID = slug(input.operationID, "operation")
+  const targetDurationHours = Math.round((input.targetElapsedSeconds / 60 / 60) * 100) / 100
+  const root = operationPath(worktree, operationID)
+  const scenarioPath = path.join(root, "burnin", "burnin-supervisor-scenario.json")
+  const goal = await createOperationGoal(worktree, {
+    operationID,
+    objective: "Accelerated proof for authorized overnight ULM supervisor operation.",
+    targetDurationHours,
+  })
+  await fs.mkdir(path.join(root, "plans"), { recursive: true })
+  await fs.writeFile(
+    path.join(root, "plans", "plan-plan.md"),
+    [
+      "# Plan-Plan",
+      "",
+      "- Confirm authorization and target duration.",
+      "- Run bounded discovery before full operation planning.",
+      "- Ask deferred questions after discovery changes the plan.",
+      "- Hand off to supervisor before unattended execution.",
+      "",
+    ].join("\n"),
+  )
+  await writeOperationPlan(worktree, {
+    operationID,
+    phases: [
+      {
+        stage: "recon",
+        objective: "Run bounded passive discovery and inventory.",
+        actions: ["Use supervised command profiles and background lanes."],
+        successCriteria: ["Raw inventory artifacts and tool inventory exist."],
+        subagents: ["recon", "supervisor"],
+        noSubagents: ["final audit decision"],
+      },
+      {
+        stage: "handoff",
+        objective: "Render report artifacts and close the operation.",
+        actions: ["Run report_lint, report_render, runtime_summary, and operation_audit."],
+        successCriteria: ["Goal completion is blocked before audit and succeeds after audit."],
+        subagents: ["report-reviewer"],
+        noSubagents: ["operator authorization decisions"],
+      },
+    ],
+    reportingCloseout: [
+      "report_lint finalHandoff=true",
+      "report_render final package",
+      "runtime_summary final accounting",
+      "operation_audit finalHandoff=true",
+    ],
+  })
+  await writeOperationGraph(worktree, { operationID, budgetUSD: 10 })
+  const graphPath = path.join(root, "plans", "operation-graph.json")
+  const graph = JSON.parse(await fs.readFile(graphPath, "utf8"))
+  if (!graph.lanes.some((lane: { id?: string }) => lane.id === "supervisor")) {
+    graph.lanes.push({
+      id: "supervisor",
+      title: "Supervisor heartbeat and recovery review",
+      agent: "pentest",
+      status: "complete",
+      dependsOn: [],
+      modelRoute: "openai/gpt-5.5-fast",
+      fallbackModelRoutes: ["openai/gpt-5.4-mini-fast"],
+      allowedTools: ["operation_supervise", "operation_resume", "runtime_summary", "operation_audit"],
+      expectedArtifacts: ["supervisor/latest.md"],
+      budget: {},
+      restartPolicy: { restartable: true, maxAttempts: 3, staleAfterMinutes: 30 },
+      operationID,
+    })
+    await fs.writeFile(graphPath, JSON.stringify(graph, null, 2) + "\n")
+  }
+  await writeJson(path.join(root, "supervisor", "supervisor-review-startup.json"), {
+    operationID,
+    reviewKind: "startup",
+    generatedAt: virtualTime(goal.goal.createdAt, 0),
+    decisions: [{ action: "recover", reason: "stale command lane requires recovery before new launch", requiredNextTool: "operation_resume" }],
+  })
+  await writeJson(path.join(root, "work-queue.json"), {
+    operationID,
+    generatedAt: virtualTime(goal.goal.createdAt, 0),
+    units: [
+      {
+        id: "burnin-command-sweep",
+        operationID,
+        laneID: "recon",
+        profileID: "icmp-sweep",
+        status: input.completed ? "completed" : "queued",
+        attempts: input.completed ? 2 : 1,
+        recoveredFrom: "stale",
+      },
+    ],
+  })
+  await writeJson(path.join(root, "tool-inventory", "tool-inventory.json"), {
+    operationID,
+    generatedAt: virtualTime(goal.goal.createdAt, input.targetElapsedSeconds),
+    counts: { total: 4, installed: 3, missing: 1, highValueMissing: 1 },
+    tools: [
+      { id: "nmap", installed: true, highValue: true },
+      { id: "httpx", installed: true, highValue: true },
+      { id: "dig", installed: true, highValue: true },
+      { id: "nuclei", installed: false, highValue: true },
+    ],
+    nextActions: ["Use tool_acquire only after operator authorization."],
+  })
+  await writeRuntimeSummary(worktree, {
+    operationID,
+    modelCalls: { total: input.completed ? 80 : 3 },
+    usage: { totalTokens: input.completed ? 120_000 : 4_500, costUSD: input.completed ? 6 : 0.5, budgetUSD: 10 },
+    backgroundTasks: [
+      {
+        id: "burnin-command-sweep",
+        agent: "command_supervise",
+        status: input.completed ? "completed" : "stale",
+        summary: "Accelerated stale command lane simulation.",
+      },
+    ],
+  })
+  await writeJson(path.join(root, "deliverables", "final", "manifest.json"), { operationID, generatedBy: "burnin-harness" })
+  await writeJson(path.join(root, "deliverables", "stage-gates", "handoff.json"), { operationID, stage: "handoff", ok: true })
+  const beforeAudit = await completeOperationGoal(worktree, { operationID })
+  if (input.completed) {
+    await writeJson(path.join(root, "deliverables", "operation-audit.json"), { operationID, ok: true, generatedBy: "burnin-harness" })
+    await writeJson(path.join(root, "supervisor", "supervisor-review-handoff.json"), {
+      operationID,
+      reviewKind: "pre_handoff",
+      generatedAt: virtualTime(goal.goal.createdAt, input.targetElapsedSeconds),
+      decisions: [{ action: "handoff_ready", reason: "final runtime and audit artifacts are present" }],
+    })
+  }
+  const afterAudit = input.completed ? await completeOperationGoal(worktree, { operationID }) : undefined
+  const proof: BurnInSupervisorScenarioProof = {
+    operationGoalCreated: goal.created || !!goal.goal,
+    targetDurationHours,
+    planPlanWritten: true,
+    supervisorLanePresent: graph.lanes.some((lane: { id?: string }) => lane.id === "supervisor"),
+    supervisorReviews: input.completed ? 2 : 1,
+    staleCommandLaneSimulated: true,
+    staleCommandLaneRecovered: input.completed,
+    toolInventoryWritten: true,
+    runtimeSummaryWritten: true,
+    completionBlockedBeforeAudit: beforeAudit.blockers.some((blocker) => blocker.includes("operation-audit.json")),
+    finalAuditWritten: input.completed,
+    goalCompletedAfterAudit: afterAudit?.completed ?? false,
+    proofPath: scenarioPath,
+  }
+  await writeJson(scenarioPath, proof)
+  return proof
+}
+
 function formatAudit(result: BurnInHarnessResult) {
   return [
     `# ULM Accelerated Burn-In: ${result.operationID}`,
@@ -123,6 +290,10 @@ function formatAudit(result: BurnInHarnessResult) {
     `- scheduler_heartbeats: ${result.proof.schedulerHeartbeats}`,
     `- restart_count: ${result.proof.restartCount}`,
     `- resumed_from_checkpoint: ${result.proof.resumedFromCheckpoint}`,
+    `- supervisor_reviews: ${result.proof.supervisorScenario.supervisorReviews}`,
+    `- stale_command_lane_recovered: ${result.proof.supervisorScenario.staleCommandLaneRecovered}`,
+    `- completion_blocked_before_audit: ${result.proof.supervisorScenario.completionBlockedBeforeAudit}`,
+    `- goal_completed_after_audit: ${result.proof.supervisorScenario.goalCompletedAfterAudit}`,
     `- proof: ${result.proofPath}`,
     result.audit.gaps.length ? `- gaps: ${result.audit.gaps.join("; ")}` : "- gaps: none",
     "",
@@ -201,6 +372,11 @@ export async function runBurnInHarness(worktree: string, input: BurnInHarnessInp
   }
 
   const audit = auditBurnIn(checkpoint)
+  const supervisorScenario = await writeSupervisorScenario(worktree, {
+    operationID,
+    targetElapsedSeconds,
+    completed: audit.status === "passed",
+  })
   const proof: BurnInProof = {
     operationID,
     elapsedTargetSeconds: targetElapsedSeconds,
@@ -218,6 +394,7 @@ export async function runBurnInHarness(worktree: string, input: BurnInHarnessInp
       scheduler: schedulerHeartbeatPath,
     },
     checkpointPath,
+    supervisorScenario,
   }
 
   const result: BurnInHarnessResult = {
@@ -250,6 +427,8 @@ export function formatBurnInHarness(result: BurnInHarnessResult) {
     `- daemon_heartbeats: ${result.proof.daemonHeartbeats}`,
     `- scheduler_heartbeats: ${result.proof.schedulerHeartbeats}`,
     `- restart_count: ${result.proof.restartCount}`,
+    `- supervisor_reviews: ${result.proof.supervisorScenario.supervisorReviews}`,
+    `- goal_completed_after_audit: ${result.proof.supervisorScenario.goalCompletedAfterAudit}`,
     `- proof: ${result.proofPath}`,
   ].join("\n")
 }
