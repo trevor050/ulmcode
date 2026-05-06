@@ -90,10 +90,40 @@ const ReportArtifacts = Schema.Struct({
   manifest: Schema.Boolean,
 }).annotate({ identifier: "UlmReportArtifacts" })
 const RuntimeSnapshot = JsonObject.annotate({ identifier: "UlmRuntimeSnapshot" })
+const OperationGoalStatus = Schema.Struct({
+  status: Schema.String,
+  objective: Schema.String,
+  targetDurationHours: Schema.optional(Schema.Finite),
+  updatedAt: Schema.optional(Schema.String),
+  completedAt: Schema.optional(Schema.String),
+}).annotate({ identifier: "UlmOperationGoalStatus" })
+const SupervisorStatus = Schema.Struct({
+  generatedAt: Schema.optional(Schema.String),
+  action: Schema.optional(Schema.String),
+  reason: Schema.optional(Schema.String),
+  requiredNextTool: Schema.optional(Schema.String),
+  blockers: Schema.Array(Schema.String),
+  nextTools: Schema.Array(Schema.String),
+}).annotate({ identifier: "UlmSupervisorStatus" })
+const ToolInventoryStatus = Schema.Struct({
+  generatedAt: Schema.optional(Schema.String),
+  total: Schema.Finite,
+  installed: Schema.Finite,
+  missing: Schema.Finite,
+  highValueMissing: Schema.Finite,
+  installedHighValue: Schema.Array(Schema.String),
+  missingHighValue: Schema.Array(Schema.String),
+}).annotate({ identifier: "UlmToolInventoryStatus" })
 const OperationStatusSummary = Schema.Struct({
   operationID: Schema.String,
   root: Schema.String,
   operation: Schema.optional(OperationRecord),
+  goal: Schema.optional(OperationGoalStatus),
+  supervisor: Schema.optional(SupervisorStatus),
+  toolInventory: Schema.optional(ToolInventoryStatus),
+  policies: Schema.Struct({
+    foregroundCommand: Schema.String,
+  }).annotate({ identifier: "UlmOperationPolicies" }),
   plans: Schema.Struct({ operation: Schema.Boolean }).annotate({ identifier: "UlmPlanArtifacts" }),
   findings: FindingCounts,
   evidence: EvidenceCounts,

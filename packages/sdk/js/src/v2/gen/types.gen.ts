@@ -1233,6 +1233,7 @@ export type Config = {
   }
   experimental?: {
     disable_paste_summary?: boolean
+    enable_sse_json_repair?: boolean
     batch_tool?: boolean
     openTelemetry?: boolean
     primary_tools?: Array<string>
@@ -1752,6 +1753,37 @@ export type UlmOperationRecord = {
   time: UlmOperationTime
 }
 
+export type UlmOperationGoalStatus = {
+  status: string
+  objective: string
+  targetDurationHours?: number
+  updatedAt?: string
+  completedAt?: string
+}
+
+export type UlmSupervisorStatus = {
+  generatedAt?: string
+  action?: string
+  reason?: string
+  requiredNextTool?: string
+  blockers: Array<string>
+  nextTools: Array<string>
+}
+
+export type UlmToolInventoryStatus = {
+  generatedAt?: string
+  total: number
+  installed: number
+  missing: number
+  highValueMissing: number
+  installedHighValue: Array<string>
+  missingHighValue: Array<string>
+}
+
+export type UlmOperationPolicies = {
+  foregroundCommand: string
+}
+
 export type UlmPlanArtifacts = {
   operation: boolean
 }
@@ -1803,6 +1835,10 @@ export type UlmOperationStatusSummary = {
   operationID: string
   root: string
   operation?: UlmOperationRecord
+  goal?: UlmOperationGoalStatus
+  supervisor?: UlmSupervisorStatus
+  toolInventory?: UlmToolInventoryStatus
+  policies: UlmOperationPolicies
   plans: UlmPlanArtifacts
   findings: UlmFindingCounts
   evidence: UlmEvidenceCounts

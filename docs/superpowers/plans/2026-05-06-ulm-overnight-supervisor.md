@@ -1235,13 +1235,14 @@ git commit -m "feat: add compact ULM supervisor prompt context"
 **Purpose:** Make supervisor/goal/tool-inventory state visible to operators, because long runs need inspectability.
 
 **Files:**
-- Modify: `packages/opencode/src/cli/cmd/ulm*.ts` or current ULM CLI command files after inspection.
+- Modify: `packages/opencode/src/ulm/artifact.ts`
 - Modify: `packages/opencode/src/cli/cmd/tui/routes/ulm-operations.tsx`
-- Modify: `packages/opencode/src/server/routes/instance/httpapi/handlers/*` as needed for operation status payload.
+- Modify: `packages/opencode/src/cli/cmd/tui/component/dialog-ulm-operations.tsx`
+- Modify: `packages/opencode/src/server/routes/instance/httpapi/groups/ulm.ts`
 - Modify: generated SDK if HTTP API changes.
 - Test: existing `httpapi-ulm`, CLI, and TUI tests.
 
-- [ ] **Step 1: Inspect current ULM CLI/API route files**
+- [x] **Step 1: Inspect current ULM CLI/API route files**
 
 ```bash
 rg -n 'ulm|operation.status|operation.updated|operationID' packages/opencode/src/cli packages/opencode/src/server packages/opencode/test/server packages/opencode/test/cli
@@ -1249,7 +1250,7 @@ rg -n 'ulm|operation.status|operation.updated|operationID' packages/opencode/src
 
 Expected: identify exact files.
 
-- [ ] **Step 2: Add status fields**
+- [x] **Step 2: Add status fields**
 
 Expose:
 
@@ -1259,9 +1260,9 @@ Expose:
 - local tool inventory summary.
 - foreground long-command policy reminder.
 
-- [ ] **Step 3: Update CLI output**
+- [x] **Step 3: Update CLI output**
 
-`opencode ulm status <operationID>` should show:
+`opencode ulm status <operationID>` should show via the shared dashboard formatter:
 
 ```text
 Goal: active/complete/blocked
@@ -1270,11 +1271,11 @@ Tools: installed/missing summary
 Runtime: stale/background/heartbeat summary
 ```
 
-- [ ] **Step 4: Update TUI route**
+- [x] **Step 4: Update TUI route**
 
 Add compact panels only. Do not turn the dashboard into a giant text wall.
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 ```bash
 bun test packages/opencode/test/server/httpapi-ulm.test.ts packages/opencode/test/cli/ulm.test.ts
@@ -1283,7 +1284,18 @@ bun run --cwd packages/opencode test:ulm-tui-launch
 
 Expected: pass.
 
-- [ ] **Step 6: Regenerate SDK if route schema changed**
+Actual:
+
+```bash
+cd packages/opencode
+bun test test/cli/ulm.test.ts test/server/httpapi-ulm.test.ts
+bun run typecheck
+bun run test:ulm-tui-launch
+```
+
+Result: pass.
+
+- [x] **Step 6: Regenerate SDK if route schema changed**
 
 ```bash
 ./packages/sdk/js/script/build.ts
@@ -1291,10 +1303,12 @@ Expected: pass.
 
 Expected: generated SDK updates only when API changed.
 
-- [ ] **Step 7: Commit**
+Actual: `packages/sdk/js/src/v2/gen/types.gen.ts` updated.
+
+- [x] **Step 7: Commit**
 
 ```bash
-git add packages/opencode/src packages/opencode/test packages/sdk/js
+git add packages/opencode/src/ulm/artifact.ts packages/opencode/src/cli/cmd/tui/routes/ulm-operations.tsx packages/opencode/src/cli/cmd/tui/component/dialog-ulm-operations.tsx packages/opencode/src/server/routes/instance/httpapi/groups/ulm.ts packages/opencode/test/cli/ulm.test.ts packages/opencode/test/server/httpapi-ulm.test.ts packages/sdk/js/src/v2/gen/types.gen.ts docs/superpowers/plans/2026-05-06-ulm-overnight-supervisor.md
 git commit -m "feat: expose ULM supervisor state"
 ```
 
@@ -1533,7 +1547,7 @@ Below is the checklist to update as work progresses. The goal is not complete un
 - [x] Task 8: Wire supervisor reviews into runtime scheduler/daemon.
 - [x] Task 9: Integrate Plannotator as plan critic.
 - [x] Task 10: Add compact supervisor/goal/tool-inventory prompt context.
-- [ ] Task 11: Expose supervisor state in CLI/TUI/API surfaces.
+- [x] Task 11: Expose supervisor state in CLI/TUI/API surfaces.
 - [ ] Task 12: Add overnight supervisor harness scenario.
 - [ ] Task 13: Update autonomy/profile/agent documentation.
 - [ ] Task 14: Run final verification ladder and completion audit.
