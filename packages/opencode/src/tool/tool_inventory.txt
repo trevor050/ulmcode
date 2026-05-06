@@ -1,0 +1,12 @@
+Inspect the local machine for cybersecurity and assessment tools, then optionally write durable operation artifacts.
+
+Use this near the start of long ULMCode pentest runs so the model knows what it can actually execute locally and what it should install or replace with fallbacks. This is especially important for unattended school-district laptop runs, where the model should not waste hours planning around tools that are not installed.
+
+The tool writes:
+
+- `.ulmcode/operations/<operation-id>/tool-inventory/tool-inventory.json`
+- `.ulmcode/operations/<operation-id>/tool-inventory/tool-inventory.md`
+
+Set `includeVersions=false` when you only need a fast binary presence check. Version probes are timeboxed by `probeTimeoutMs` and should not be allowed to block the main model.
+
+This tool does not install anything. Use `tool_acquire` with `install=true` only after the operator explicitly authorizes local package installation.

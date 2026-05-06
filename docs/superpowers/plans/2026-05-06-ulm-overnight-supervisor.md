@@ -564,7 +564,7 @@ git commit -m "feat: add durable ULM operation goals"
 - Modify: `packages/opencode/src/tool/registry.ts`
 - Modify: `tools/ulmcode-profile/tool-manifest.json`
 
-- [ ] **Step 1: Write inventory tests**
+- [x] **Step 1: Write inventory tests**
 
 Test cases:
 
@@ -575,7 +575,7 @@ Test cases:
 - writes `.ulmcode/operations/<operation-id>/tool-inventory/tool-inventory.md`.
 - records SecLists paths when present.
 
-- [ ] **Step 2: Implement inventory catalog**
+- [x] **Step 2: Implement inventory catalog**
 
 Use categories:
 
@@ -594,7 +594,7 @@ enum4linux-ng, smbmap, impacket-smbclient, trivy, semgrep, gitleaks,
 searchsploit, yara, yr, binwalk, r2, zap-baseline.py
 ```
 
-- [ ] **Step 3: Implement version probes**
+- [x] **Step 3: Implement version probes**
 
 Rules:
 
@@ -603,7 +603,7 @@ Rules:
 - Never let a version probe block the model.
 - Store probe errors as inventory facts, not thrown fatal errors.
 
-- [ ] **Step 4: Implement artifact writer**
+- [x] **Step 4: Implement artifact writer**
 
 Artifact paths:
 
@@ -620,7 +620,7 @@ Markdown must include:
 - SecLists status.
 - suggested `tool_acquire` next actions.
 
-- [ ] **Step 5: Add `tool_inventory` tool**
+- [x] **Step 5: Add `tool_inventory` tool**
 
 Inputs:
 
@@ -639,7 +639,7 @@ probeTimeoutMs=800
 writeArtifacts=true
 ```
 
-- [ ] **Step 6: Expand `tool-manifest.json`**
+- [x] **Step 6: Expand `tool-manifest.json`**
 
 Add acquisition metadata for the restored catalog while keeping unattended profiles non-destructive.
 
@@ -650,16 +650,19 @@ Rules:
 - Do not add destructive command profiles.
 - Keep profile validation green.
 
-- [ ] **Step 7: Run tests**
+- [x] **Step 7: Run tests**
 
 ```bash
-bun test packages/opencode/test/ulm/tool-inventory.test.ts packages/opencode/test/tool/tool_inventory.test.ts
-bun run --cwd packages/opencode test:ulm-tool-manifest
+cd packages/opencode
+bun test test/ulm/tool-inventory.test.ts test/tool/tool_inventory.test.ts
+bun run typecheck
+bun test test/tool/registry.test.ts
+bun run test:ulm-tool-manifest
 ```
 
-Expected: pass.
+Expected: pass. Manifest validator should report at least `16 tools, 4 profiles` after the initial expansion.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add packages/opencode/src/ulm/tool-inventory.ts packages/opencode/src/tool/tool_inventory.ts packages/opencode/src/tool/tool_inventory.txt packages/opencode/src/tool/registry.ts packages/opencode/test/ulm/tool-inventory.test.ts packages/opencode/test/tool/tool_inventory.test.ts tools/ulmcode-profile/tool-manifest.json
@@ -1479,7 +1482,7 @@ Below is the checklist to update as work progresses. The goal is not complete un
 
 - [x] Task 1: Fix AI SDK `other` finish-reason handling for tool-loop continuation and TUI final-state rendering.
 - [x] Task 2: Add persistent operation goals.
-- [ ] Task 3: Add local cybersecurity tool inventory and acquisition guidance.
+- [x] Task 3: Add local cybersecurity tool inventory and acquisition guidance.
 - [ ] Task 4: Add duration-aware pentest kickoff and adaptive planning.
 - [ ] Task 5: Add supervisor review engine.
 - [ ] Task 6: Enforce foreground command discipline for commands expected to exceed two minutes.

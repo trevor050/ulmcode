@@ -100,6 +100,153 @@
       ],
       "outputParsers": ["json", "html"],
       "fallbacks": ["manual-browser-review"]
+    },
+    {
+      "id": "nuclei",
+      "purpose": "low-noise template-based vulnerability baseline checks",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "go", "command": "go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest" }
+      ],
+      "validate": "nuclei -version",
+      "safeExamples": [
+        "nuclei -l evidence/raw/urls.txt -severity info,low,medium -rate-limit 15 -jsonl -o evidence/raw/nuclei-baseline.jsonl"
+      ],
+      "outputParsers": ["jsonl"],
+      "fallbacks": ["manual-validation", "zap-baseline"]
+    },
+    {
+      "id": "subfinder",
+      "purpose": "passive subdomain discovery for authorized domains",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "go", "command": "go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest" }
+      ],
+      "validate": "subfinder -version",
+      "safeExamples": [
+        "subfinder -d <authorized-domain> -silent -o evidence/raw/subfinder.txt"
+      ],
+      "outputParsers": ["text"],
+      "fallbacks": ["amass", "dnsx"]
+    },
+    {
+      "id": "amass",
+      "purpose": "external attack-surface enumeration for authorized domains",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "darwin", "command": "brew install amass" },
+        { "platform": "linux", "command": "sudo apt-get update && sudo apt-get install -y amass" }
+      ],
+      "validate": "amass -version",
+      "safeExamples": [
+        "amass enum -passive -d <authorized-domain> -o evidence/raw/amass-passive.txt"
+      ],
+      "outputParsers": ["text"],
+      "fallbacks": ["subfinder"]
+    },
+    {
+      "id": "feroxbuster",
+      "purpose": "authorized recursive content discovery with rate limits",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "darwin", "command": "brew install feroxbuster" },
+        { "platform": "linux", "command": "sudo apt-get update && sudo apt-get install -y feroxbuster" }
+      ],
+      "validate": "feroxbuster --version",
+      "safeExamples": [
+        "feroxbuster -u https://<authorized-host> -w wordlists/common.txt --rate-limit 25 --json -o evidence/raw/feroxbuster.json"
+      ],
+      "outputParsers": ["json"],
+      "fallbacks": ["ffuf", "gobuster"]
+    },
+    {
+      "id": "gobuster",
+      "purpose": "authorized directory, DNS, and vhost discovery",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "darwin", "command": "brew install gobuster" },
+        { "platform": "go", "command": "go install github.com/OJ/gobuster/v3@latest" }
+      ],
+      "validate": "gobuster version",
+      "safeExamples": [
+        "gobuster dir -u https://<authorized-host> -w wordlists/common.txt -o evidence/raw/gobuster.txt"
+      ],
+      "outputParsers": ["text"],
+      "fallbacks": ["ffuf", "feroxbuster"]
+    },
+    {
+      "id": "whatweb",
+      "purpose": "web technology fingerprinting",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "darwin", "command": "brew install whatweb" },
+        { "platform": "linux", "command": "sudo apt-get update && sudo apt-get install -y whatweb" }
+      ],
+      "validate": "whatweb --version",
+      "safeExamples": [
+        "whatweb --log-json=evidence/raw/whatweb.json https://<authorized-host>"
+      ],
+      "outputParsers": ["json"],
+      "fallbacks": ["httpx"]
+    },
+    {
+      "id": "sslscan",
+      "purpose": "TLS configuration inventory",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "darwin", "command": "brew install sslscan" },
+        { "platform": "linux", "command": "sudo apt-get update && sudo apt-get install -y sslscan" }
+      ],
+      "validate": "sslscan --version",
+      "safeExamples": [
+        "sslscan --xml=evidence/raw/sslscan.xml <authorized-host>:443"
+      ],
+      "outputParsers": ["xml", "text"],
+      "fallbacks": ["testssl.sh", "nmap"]
+    },
+    {
+      "id": "trivy",
+      "purpose": "container, dependency, and config scanning for provided assets",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "darwin", "command": "brew install trivy" },
+        { "platform": "linux", "command": "sudo apt-get update && sudo apt-get install -y trivy" }
+      ],
+      "validate": "trivy --version",
+      "safeExamples": [
+        "trivy fs --format json --output evidence/raw/trivy-fs.json <authorized-project-dir>"
+      ],
+      "outputParsers": ["json"],
+      "fallbacks": ["manual-dependency-review"]
+    },
+    {
+      "id": "semgrep",
+      "purpose": "source and configuration static analysis for provided repositories",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "pipx", "command": "pipx install semgrep" }
+      ],
+      "validate": "semgrep --version",
+      "safeExamples": [
+        "semgrep scan --config auto --json --output evidence/raw/semgrep.json <authorized-project-dir>"
+      ],
+      "outputParsers": ["json"],
+      "fallbacks": ["grep", "manual-code-review"]
+    },
+    {
+      "id": "gitleaks",
+      "purpose": "secret scanning for provided repositories",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "darwin", "command": "brew install gitleaks" },
+        { "platform": "linux", "command": "sudo apt-get update && sudo apt-get install -y gitleaks" }
+      ],
+      "validate": "gitleaks version",
+      "safeExamples": [
+        "gitleaks detect --source <authorized-project-dir> --report-format json --report-path evidence/raw/gitleaks.json"
+      ],
+      "outputParsers": ["json"],
+      "fallbacks": ["manual-secret-review"]
     }
   ],
   "commandProfiles": [

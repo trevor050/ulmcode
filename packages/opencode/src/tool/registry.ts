@@ -40,6 +40,7 @@ import { RuntimeSchedulerTool } from "./runtime_scheduler"
 import { RuntimeDaemonTool } from "./runtime_daemon"
 import { CommandSuperviseTool } from "./command_supervise"
 import { ToolAcquireTool } from "./tool_acquire"
+import { ToolInventoryTool } from "./tool_inventory"
 import * as Tool from "./tool"
 import { Config } from "@/config/config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
@@ -173,6 +174,7 @@ export const layer: Layer.Layer<
     const runtimeDaemon = yield* RuntimeDaemonTool
     const commandSupervise = yield* CommandSuperviseTool
     const toolAcquire = yield* ToolAcquireTool
+    const toolInventory = yield* ToolInventoryTool
     const agent = yield* Agent.Service
 
     const state = yield* InstanceState.make<State>(
@@ -294,6 +296,7 @@ export const layer: Layer.Layer<
           runtimeDaemon: Tool.init(runtimeDaemon),
           commandSupervise: Tool.init(commandSupervise),
           toolAcquire: Tool.init(toolAcquire),
+          toolInventory: Tool.init(toolInventory),
           patch: Tool.init(patchtool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
@@ -344,6 +347,7 @@ export const layer: Layer.Layer<
             tool.runtimeDaemon,
             tool.commandSupervise,
             tool.toolAcquire,
+            tool.toolInventory,
             tool.patch,
             ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [tool.lsp] : []),
             ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [tool.plan] : []),
