@@ -18,6 +18,8 @@ import type { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
 import { Skill } from "@/skill"
 import { activeOperationGoal, readOperationPlanExcerpt } from "@/ulm/operation-context"
+import { readULMConfig } from "@/ulm/config"
+import { operatorFallbackTimeoutMillis } from "@/ulm/operator-timeout"
 
 type OperationGoalContext = {
   operationID: string
@@ -99,6 +101,8 @@ async function ulmOperationContext(worktree: string) {
   const active = await activeOperationGoal(worktree)
   if (!active) return undefined
   const goal = active.goal
+  const config = await readULMConfig({ directory: worktree, worktree })
+  const operatorTimeoutMillis = operatorFallbackTimeoutMillis(goal, config)
   const maxPlanChars = goal.continuation?.injectPlanMaxChars ?? 12_000
   const supervisor = await latestSupervisorReview(worktree, goal.operationID)
   const inventory = await toolInventory(worktree, goal.operationID)
@@ -123,7 +127,9 @@ async function ulmOperationContext(worktree: string) {
     inventory?.nextActions?.[0] ? `inventory_next: ${short(inventory.nextActions[0], 180)}` : undefined,
     "foreground_command_policy: commands expected over 2 minutes must use command_supervise, task background=true, runtime_scheduler, or runtime_daemon instead of foreground waiting",
     "operator_availability_policy: assume the operator is unavailable after execution starts; do not wait for new operator input, honor the original authorized scope, work around ambiguity with conservative skip/decline defaults, and write durable notes",
-    `unattended_operator_policy: after ${goal.continuation?.operatorFallbackTimeoutSeconds ?? 75}s, permission/question prompts default safely; do not block waiting for operator`,
+    operatorTimeoutMillis === undefined
+      ? "unattended_operator_policy: operator timeout disabled by ULMconfig.toml; wait indefinitely for permission/question prompts"
+      : `unattended_operator_policy: after ${Math.round(operatorTimeoutMillis / 1000)}s, permission/question prompts default safely; do not block waiting for operator`,
     "</ulm_operation_context>",
     plan.content
       ? [

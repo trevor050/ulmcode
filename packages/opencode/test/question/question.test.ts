@@ -182,6 +182,44 @@ it.instance(
   { git: true },
 )
 
+it.instance(
+  "ask - ULMconfig zero disables unattended timeout",
+  () =>
+    Effect.gen(function* () {
+      const ctx = yield* InstanceState.context
+      yield* Effect.promise(() =>
+        fs.writeFile(path.join(ctx.worktree, "ULMconfig.toml"), "operator_timeout_seconds = 0\n"),
+      )
+      yield* Effect.promise(() =>
+        createOperationGoal(ctx.worktree, {
+          operationID: "school",
+          objective: "Authorized unattended run",
+          targetDurationHours: 20,
+          continuation: { operatorFallbackTimeoutSeconds: 0.01 },
+        }),
+      )
+
+      const fiber = yield* askEffect({
+        sessionID: SessionID.make("ses_test"),
+        questions: [
+          {
+            question: "Which optional enrichment should run next?",
+            header: "Enrich",
+            options: [
+              { label: "Run (Recommended)", description: "Run optional enrichment" },
+              { label: "Skip", description: "Skip optional enrichment and continue core scope" },
+            ],
+          },
+        ],
+      }).pipe(Effect.forkScoped)
+
+      expect(yield* waitForPending(1)).toHaveLength(1)
+      yield* rejectAll
+      expect((yield* Fiber.await(fiber))._tag).toBe("Failure")
+    }),
+  { git: true },
+)
+
 // reply tests
 
 it.instance(

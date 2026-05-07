@@ -3,6 +3,7 @@ import path from "path"
 import { operationPath, slug } from "./artifact"
 import { superviseOperation } from "./operation-supervisor"
 import type { OperationGoalRecord } from "./operation-goal"
+import type { ULMRuntimeConfig } from "./config"
 
 export type OperatorTimeoutKind = "permission" | "question"
 
@@ -33,8 +34,9 @@ const sensitivePatterns = [
   "token",
 ]
 
-export function operatorFallbackTimeoutMillis(goal: OperationGoalRecord) {
-  return Math.max(1, Math.round((goal.continuation?.operatorFallbackTimeoutSeconds ?? 75) * 1000))
+export function operatorFallbackTimeoutMillis(goal: OperationGoalRecord, config: ULMRuntimeConfig = {}) {
+  if (config.operator_timeout_seconds === 0) return undefined
+  return Math.max(1, Math.round((config.operator_timeout_seconds ?? goal.continuation?.operatorFallbackTimeoutSeconds ?? 75) * 1000))
 }
 
 export function isSensitiveOperatorPrompt(text: string) {

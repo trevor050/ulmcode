@@ -691,6 +691,39 @@ it.live("ask - active unattended ULM operation times out and rejects", () =>
   ),
 )
 
+it.live("ask - ULMconfig zero disables unattended timeout", () =>
+  withDir({ git: true }, () =>
+    Effect.gen(function* () {
+      const ctx = yield* InstanceState.context
+      yield* Effect.promise(() =>
+        fs.writeFile(path.join(ctx.worktree, "ULMconfig.toml"), "operator_timeout_seconds = 0\n"),
+      )
+      yield* Effect.promise(() =>
+        createOperationGoal(ctx.worktree, {
+          operationID: "school",
+          objective: "Authorized unattended run",
+          targetDurationHours: 20,
+          continuation: { operatorFallbackTimeoutSeconds: 0.01 },
+        }),
+      )
+
+      const fiber = yield* ask({
+        id: PermissionID.make("per_timeout_disabled"),
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["install new scanner"],
+        metadata: {},
+        always: [],
+        ruleset: [{ permission: "bash", pattern: "*", action: "ask" }],
+      }).pipe(Effect.forkScoped)
+
+      expect(yield* waitForPending(1)).toHaveLength(1)
+      yield* rejectAll()
+      expect((yield* Fiber.await(fiber))._tag).toBe("Failure")
+    }),
+  ),
+)
+
 it.live("ask - publishes asked event", () =>
   withDir({ git: true }, () =>
     Effect.gen(function* () {

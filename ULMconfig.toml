@@ -1,0 +1,3 @@
+# Fast-edit ULM runtime settings.
+# Set to 0 to disable the unattended operator timeout and wait forever.
+operator_timeout_seconds = 300
