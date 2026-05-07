@@ -3,6 +3,12 @@ import path from "path"
 import type { OperationGoalRecord } from "./operation-goal"
 
 export type ULMRuntimeConfig = {
+  trust_level?: "guided" | "moderate" | "unattended" | "lab_full"
+  scan_profile?: "paranoid" | "stealth" | "balanced" | "aggressive" | "lab-insane"
+  max_parallel_commands?: number
+  per_host_rate_limit_per_second?: number
+  stop_on_rate_limit_spike?: boolean
+  agent_no_tool_timeout_seconds?: number
   continuation_enabled?: boolean
   turn_end_review?: boolean
   max_no_tool_continuation_turns?: number
@@ -93,6 +99,25 @@ export function parseULMConfigToml(text: string): ULMRuntimeConfig {
     const value = parseValue(match[2])
     if (key === "continuation_enabled") {
       result.continuation_enabled = normalizeBoolean(value) ?? result.continuation_enabled
+    }
+    if (key === "trust_level" && ["guided", "moderate", "unattended", "lab_full"].includes(String(value))) {
+      result.trust_level = value as ULMRuntimeConfig["trust_level"]
+    }
+    if (key === "scan_profile" && ["paranoid", "stealth", "balanced", "aggressive", "lab-insane"].includes(String(value))) {
+      result.scan_profile = value as ULMRuntimeConfig["scan_profile"]
+    }
+    if (key === "max_parallel_commands") {
+      result.max_parallel_commands = normalizePositiveInteger(value) ?? result.max_parallel_commands
+    }
+    if (key === "per_host_rate_limit_per_second") {
+      result.per_host_rate_limit_per_second = normalizePositiveInteger(value) ?? result.per_host_rate_limit_per_second
+    }
+    if (key === "stop_on_rate_limit_spike") {
+      result.stop_on_rate_limit_spike = normalizeBoolean(value) ?? result.stop_on_rate_limit_spike
+    }
+    if (key === "agent_no_tool_timeout_seconds") {
+      result.agent_no_tool_timeout_seconds =
+        normalizeNonNegativeInteger(value) ?? result.agent_no_tool_timeout_seconds
     }
     if (key === "turn_end_review") {
       result.turn_end_review = normalizeBoolean(value) ?? result.turn_end_review

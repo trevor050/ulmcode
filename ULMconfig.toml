@@ -1,5 +1,13 @@
 # Fast-edit ULMCode runtime settings.
 
+# Operation posture.
+trust_level = "unattended"
+scan_profile = "balanced"
+max_parallel_commands = 4
+per_host_rate_limit_per_second = 2
+stop_on_rate_limit_spike = true
+agent_no_tool_timeout_seconds = 300
+
 # Turn-end supervisor continuation after the model tries to stop.
 continuation_enabled = true
 turn_end_review = true

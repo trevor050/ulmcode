@@ -16,6 +16,8 @@ type Metadata = {
   installed: number
   missing: number
   highValueMissing: number
+  runtimeKind: string
+  distro?: string
   json?: string
   markdown?: string
 }
@@ -35,6 +37,11 @@ export const ToolInventoryTool = Tool.define<typeof Parameters, Metadata, never>
             `operation_id: ${result.operationID}`,
             `installed: ${result.record.counts.installed}`,
             `missing: ${result.record.counts.missing}`,
+            `runtime_kind: ${result.record.system.runtimeKind}`,
+            `distro: ${result.record.system.distro ?? "unknown"}`,
+            `package_managers: ${result.record.system.packageManagers.join(", ") || "none"}`,
+            `browsers: ${result.record.system.browsers.join(", ") || "none"}`,
+            `container_tools: ${result.record.system.containerTools.join(", ") || "none"}`,
             `high_value_missing: ${missingHighValue.join(", ") || "none"}`,
             `seclists: ${result.record.seclists.found ? result.record.seclists.paths.join(", ") : "missing"}`,
             ...(result.json ? [`json: ${result.json}`] : []),
@@ -51,6 +58,8 @@ export const ToolInventoryTool = Tool.define<typeof Parameters, Metadata, never>
             installed: result.record.counts.installed,
             missing: result.record.counts.missing,
             highValueMissing: result.record.counts.highValueMissing,
+            runtimeKind: result.record.system.runtimeKind,
+            distro: result.record.system.distro,
             json: result.json,
             markdown: result.markdown,
           },

@@ -23,6 +23,8 @@ export const REQUIRED_OPERATION_LANES = [
 export type OperationLaneID = (typeof REQUIRED_OPERATION_LANES)[number] | string
 export type OperationLaneStatus = "pending" | "ready" | "running" | "blocked" | "complete" | "failed"
 export type OperationSafetyMode = "non_destructive" | "interactive_destructive"
+export type OperationTrustLevel = "guided" | "moderate" | "unattended" | "lab_full"
+export type OperationScanProfile = "paranoid" | "stealth" | "balanced" | "aggressive" | "lab-insane"
 
 export type OperationLane = {
   id: OperationLaneID
@@ -50,6 +52,8 @@ export type OperationLane = {
 export type OperationGraphRecord = {
   operationID: string
   safetyMode: OperationSafetyMode
+  trustLevel: OperationTrustLevel
+  scanProfile: OperationScanProfile
   maxConcurrentLanes: number
   createdAt: string
   updatedAt: string
@@ -59,6 +63,8 @@ export type OperationGraphRecord = {
 export type OperationScheduleInput = {
   operationID: string
   safetyMode?: OperationSafetyMode
+  trustLevel?: OperationTrustLevel
+  scanProfile?: OperationScanProfile
   maxConcurrentLanes?: number
   budgetUSD?: number
   modelRoutes?: Record<string, string | undefined>
@@ -280,6 +286,8 @@ export function buildOperationGraph(input: OperationScheduleInput): OperationGra
   return {
     operationID,
     safetyMode: input.safetyMode ?? "non_destructive",
+    trustLevel: input.trustLevel ?? "moderate",
+    scanProfile: input.scanProfile ?? "balanced",
     maxConcurrentLanes: input.maxConcurrentLanes ?? 4,
     createdAt: now,
     updatedAt: now,
@@ -316,6 +324,12 @@ export function validateOperationGraph(graph: OperationGraphRecord) {
   if (graph.safetyMode !== "non_destructive" && graph.safetyMode !== "interactive_destructive") {
     gaps.push("safetyMode must be non_destructive or interactive_destructive")
   }
+  if (!["guided", "moderate", "unattended", "lab_full"].includes(graph.trustLevel)) {
+    gaps.push("trustLevel must be guided, moderate, unattended, or lab_full")
+  }
+  if (!["paranoid", "stealth", "balanced", "aggressive", "lab-insane"].includes(graph.scanProfile)) {
+    gaps.push("scanProfile must be paranoid, stealth, balanced, aggressive, or lab-insane")
+  }
   if (graph.safetyMode === "non_destructive") {
     for (const lane of graph.lanes) {
       if (lane.allowedTools.includes("shell")) gaps.push(`${lane.id}: non_destructive lanes must use command_supervise instead of raw shell`)
@@ -343,6 +357,8 @@ function markdown(graph: OperationGraphRecord) {
     `# Operation Graph: ${graph.operationID}`,
     "",
     `- safety_mode: ${graph.safetyMode}`,
+    `- trust_level: ${graph.trustLevel}`,
+    `- scan_profile: ${graph.scanProfile}`,
     `- max_concurrent_lanes: ${graph.maxConcurrentLanes}`,
     "",
     "## Lanes",

@@ -14,6 +14,12 @@ inject_plan_max_chars = 24000
 operator_fallback_enabled = false
 operator_timeout_seconds = 300
 max_repeated_operator_timeouts_per_kind = 4
+trust_level = "unattended"
+scan_profile = "balanced"
+max_parallel_commands = 6
+per_host_rate_limit_per_second = 2
+stop_on_rate_limit_spike = true
+agent_no_tool_timeout_seconds = 300
 `),
   ).toEqual({
     continuation_enabled: false,
@@ -23,6 +29,12 @@ max_repeated_operator_timeouts_per_kind = 4
     operator_fallback_enabled: false,
     operator_timeout_seconds: 300,
     max_repeated_operator_timeouts_per_kind: 4,
+    trust_level: "unattended",
+    scan_profile: "balanced",
+    max_parallel_commands: 6,
+    per_host_rate_limit_per_second: 2,
+    stop_on_rate_limit_spike: true,
+    agent_no_tool_timeout_seconds: 300,
   })
 })
 

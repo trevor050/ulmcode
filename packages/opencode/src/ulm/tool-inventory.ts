@@ -42,6 +42,25 @@ export type ToolInventoryRecord = {
   generatedAt: string
   platform: NodeJS.Platform
   arch: string
+  system: {
+    hostname: string
+    username: string
+    home: string
+    cwd: string
+    release: string
+    distro?: string
+    runtimeKind: "host" | "docker" | "wsl" | "kali" | "unknown"
+    isKali: boolean
+    isDocker: boolean
+    isWSL: boolean
+    shell?: string
+    packageManagers: string[]
+    shells: string[]
+    browsers: string[]
+    languageRuntimes: string[]
+    containerTools: string[]
+    networkInterfaces: Array<{ name: string; address: string; family: string; internal: boolean }>
+  }
   seclists: {
     found: boolean
     paths: string[]
@@ -183,6 +202,63 @@ async function resolveExecutable(command: string) {
   return undefined
 }
 
+async function readOsRelease() {
+  try {
+    return await fs.readFile("/etc/os-release", "utf8")
+  } catch {
+    return ""
+  }
+}
+
+function osReleaseName(text: string) {
+  const pretty = text.match(/^PRETTY_NAME="?([^"\n]+)"?/m)?.[1]
+  const name = text.match(/^NAME="?([^"\n]+)"?/m)?.[1]
+  return pretty ?? name
+}
+
+async function detectCommands(commands: string[]) {
+  const found = await Promise.all(commands.map(async (command) => ((await resolveExecutable(command)) ? command : undefined)))
+  return found.filter((item): item is string => item !== undefined)
+}
+
+async function systemInfo() {
+  const osRelease = await readOsRelease()
+  const isKali = /kali/i.test(osRelease)
+  const isDocker =
+    Boolean(process.env.container) ||
+    Boolean(await fs.stat("/.dockerenv").then(() => true).catch(() => false)) ||
+    /docker|containerd|kubepods/i.test(await fs.readFile("/proc/1/cgroup", "utf8").catch(() => ""))
+  const isWSL = /microsoft|wsl/i.test(os.release()) || /microsoft|wsl/i.test(await fs.readFile("/proc/version", "utf8").catch(() => ""))
+  return {
+    hostname: os.hostname(),
+    username: os.userInfo().username,
+    home: os.homedir(),
+    cwd: process.cwd(),
+    release: os.release(),
+    distro: osReleaseName(osRelease),
+    runtimeKind: (isKali ? "kali" : isDocker ? "docker" : isWSL ? "wsl" : "host") as ToolInventoryRecord["system"]["runtimeKind"],
+    isKali,
+    isDocker,
+    isWSL,
+    shell: process.env.SHELL,
+    packageManagers: await detectCommands(["apt", "apt-get", "brew", "go", "cargo", "pipx", "pip", "npm", "bun", "uv"]),
+    shells: await detectCommands(["zsh", "bash", "fish", "pwsh", "tmux"]),
+    browsers: await detectCommands(["google-chrome", "chromium", "chromium-browser", "firefox", "safari", "playwright"]),
+    languageRuntimes: await detectCommands(["node", "bun", "python3", "python", "go", "ruby", "perl", "java", "cargo"]),
+    containerTools: await detectCommands(["docker", "podman", "colima", "lima", "kubectl"]),
+    networkInterfaces: Object.entries(os.networkInterfaces())
+      .flatMap(([name, entries]) =>
+        (entries ?? []).map((entry) => ({
+          name,
+          address: entry.address,
+          family: String(entry.family),
+          internal: entry.internal,
+        })),
+      )
+      .sort((a, b) => `${a.name}:${a.address}`.localeCompare(`${b.name}:${b.address}`)),
+  }
+}
+
 async function runWithLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<void>) {
   const queue = [...items]
   await Promise.all(
@@ -230,6 +306,7 @@ function categoryCounts(tools: ToolInventoryEntry[]) {
 function nextActions(record: Omit<ToolInventoryRecord, "nextActions">) {
   const missingHighValue = record.tools.filter((tool) => !tool.installed && tool.highValue)
   const actions = [
+    `Runtime detected as ${record.system.runtimeKind}${record.system.distro ? ` (${record.system.distro})` : ""}.`,
     missingHighValue.length
       ? `Review high-value missing tools: ${missingHighValue.map((tool) => tool.id).join(", ")}`
       : "High-value baseline tools are available.",
@@ -247,6 +324,11 @@ function inventoryMarkdown(record: ToolInventoryRecord) {
     "",
     `generated_at: ${record.generatedAt}`,
     `platform: ${record.platform}/${record.arch}`,
+    `runtime_kind: ${record.system.runtimeKind}`,
+    `distro: ${record.system.distro ?? "unknown"}`,
+    `hostname: ${record.system.hostname}`,
+    `user: ${record.system.username}`,
+    `shell: ${record.system.shell ?? "unknown"}`,
     `installed: ${record.counts.installed}`,
     `missing: ${record.counts.missing}`,
     `high_value_missing: ${record.counts.highValueMissing}`,
@@ -255,6 +337,20 @@ function inventoryMarkdown(record: ToolInventoryRecord) {
     "## Installed Tools",
     "",
     ...(installed.length ? installed.map((tool) => `- ${tool.id} (${tool.category})${tool.version ? `: ${tool.version}` : ""}`) : ["- none detected"]),
+    "",
+    "## Runtime And System",
+    "",
+    `- package_managers: ${record.system.packageManagers.join(", ") || "none detected"}`,
+    `- shells: ${record.system.shells.join(", ") || "none detected"}`,
+    `- browsers: ${record.system.browsers.join(", ") || "none detected"}`,
+    `- language_runtimes: ${record.system.languageRuntimes.join(", ") || "none detected"}`,
+    `- container_tools: ${record.system.containerTools.join(", ") || "none detected"}`,
+    "",
+    "## Network Interfaces",
+    "",
+    ...(record.system.networkInterfaces.length
+      ? record.system.networkInterfaces.map((item) => `- ${item.name}: ${item.address} (${item.family}${item.internal ? ", internal" : ""})`)
+      : ["- none detected"]),
     "",
     "## High-Value Missing Tools",
     "",
@@ -308,11 +404,13 @@ export async function collectToolInventory(
   }
 
   const seclists = await seclistsStatus()
+  const system = await systemInfo()
   const base = {
     operationID,
     generatedAt: options.now ?? new Date().toISOString(),
     platform: process.platform,
     arch: process.arch,
+    system,
     seclists,
     counts: {
       total: tools.length,

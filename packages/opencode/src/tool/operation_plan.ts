@@ -15,6 +15,12 @@ const Phase = Schema.Struct({
 
 export const Parameters = Schema.Struct({
   operationID: Schema.String,
+  templateName: Schema.optional(Schema.String),
+  trustLevel: Schema.optional(Schema.Literals(["guided", "moderate", "unattended", "lab_full"])),
+  scanProfile: Schema.optional(Schema.Literals(["paranoid", "stealth", "balanced", "aggressive", "lab-insane"])),
+  browserEvidence: Schema.optional(Schema.Boolean),
+  operationMemory: Schema.optional(Schema.Boolean),
+  reportDesignProfile: Schema.optional(Schema.Literals(["standard", "premium", "board-ready"])),
   assumptions: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
   phases: Schema.mutable(Schema.Array(Phase)),
   reportingCloseout: Schema.mutable(Schema.Array(Schema.String)),

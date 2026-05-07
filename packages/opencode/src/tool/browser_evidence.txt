@@ -1,0 +1,3 @@
+Record browser-state evidence from authorized browser work.
+
+Use this for screenshots, DOM snapshots, traces, request logs, auth-state observations, and page behavior that should survive context compaction. Browser artifacts should be cited by findings and reports when UI state matters.

@@ -1,0 +1,3 @@
+Convert noisy tool output into compact operation artifacts.
+
+Use this after commands like nmap, nuclei, httpx, ffuf, gobuster, nikto, sqlmap, and subfinder when raw output is too bulky. The output is a triage aid, not validation proof.

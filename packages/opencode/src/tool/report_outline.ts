@@ -9,6 +9,9 @@ export const Parameters = Schema.Struct({
   audience: Schema.optional(Schema.Literals(["technical", "executive", "board", "mixed"])),
   targetPages: Schema.optional(Schema.Number),
   includeAppendix: Schema.optional(Schema.Boolean),
+  designProfile: Schema.optional(Schema.Literals(["standard", "premium", "board-ready"])),
+  includeCoverageSection: Schema.optional(Schema.Boolean),
+  includeHandoffChecklist: Schema.optional(Schema.Boolean),
 })
 
 type Metadata = {

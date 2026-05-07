@@ -1,0 +1,3 @@
+Write the operation attack-surface graph.
+
+Use this for hosts, services, routes, APIs, forms, parameters, roles, accounts, data objects, browser states, findings, and evidence relationships. This is broader than identity_graph and should become the coordinator's map of the target.

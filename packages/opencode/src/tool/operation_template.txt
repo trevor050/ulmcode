@@ -1,0 +1,5 @@
+Create a ULMCode operation from a named template.
+
+Templates create the goal, execution-ready plan, lane graph, report outline, and operation-local memory file together. Use this when the operator gives a target type or asks for a long unattended run.
+
+Prefer templates over blank planning for repeatable work. Pick a trust level and scan profile up front so later agents do not guess about autonomy, intensity, browser evidence, or report expectations.

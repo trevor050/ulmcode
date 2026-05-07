@@ -9,6 +9,8 @@ const ModelRoutes = Schema.Record(Schema.String, Schema.String)
 export const Parameters = Schema.Struct({
   operationID: Schema.String,
   safetyMode: Schema.optional(Schema.Literals(["non_destructive", "interactive_destructive"])),
+  trustLevel: Schema.optional(Schema.Literals(["guided", "moderate", "unattended", "lab_full"])),
+  scanProfile: Schema.optional(Schema.Literals(["paranoid", "stealth", "balanced", "aggressive", "lab-insane"])),
   maxConcurrentLanes: Schema.optional(Schema.Number),
   budgetUSD: Schema.optional(Schema.Number),
   modelRoutes: Schema.optional(ModelRoutes),

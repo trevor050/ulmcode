@@ -35,8 +35,11 @@ describe("tool.tool_inventory", () => {
 
             expect(result.title).toStartWith("Tool inventory:")
             expect(result.output).toContain("<tool_inventory_json>")
+            expect(result.output).toContain("runtime_kind:")
+            expect(result.output).toContain("package_managers:")
             expect(result.output).toContain("Use tool_acquire with install=true only after operator authorization.")
             expect(result.metadata.operationID).toBe("school")
+            expect(result.metadata.runtimeKind).toBeString()
             expect(result.metadata.json).toContain("tool-inventory.json")
             expect(result.metadata.markdown).toContain("tool-inventory.md")
           }).pipe(Effect.provide(layer)),

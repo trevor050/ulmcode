@@ -1,0 +1,3 @@
+Write an operation alert artifact for notable unattended-run events.
+
+Use this for validated high/critical findings, stale daemons, exhausted budgets, blocked runs, and handoff-ready status. This tool records alert intent and sink choices; external delivery is handled by operator/profile wiring.

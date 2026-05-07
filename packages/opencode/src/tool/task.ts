@@ -15,6 +15,7 @@ import { EffectBridge } from "@/effect/bridge"
 import { Instance } from "@/project/instance"
 import { summarizeRuntimeUsage, type RuntimeUsageMessage } from "@/ulm/artifact"
 import { ModelID, ProviderID } from "@/provider/schema"
+import { readULMConfig, type ULMRuntimeConfig } from "@/ulm/config"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -93,6 +94,14 @@ function currentWorktree() {
   }
 }
 
+function currentDirectory() {
+  try {
+    return Instance.directory
+  } catch {
+    return undefined
+  }
+}
+
 function modelFromRoute(route: string | undefined) {
   if (!route) return undefined
   const [providerID, ...modelParts] = route.split("/")
@@ -116,6 +125,18 @@ function runtimeUsageMessage(message: MessageV2.WithParts): RuntimeUsageMessage 
       overflow: part.type === "compaction" ? part.overflow : undefined,
     })),
   }
+}
+
+function latestToolActivity(messages: MessageV2.WithParts[]) {
+  const times = messages.flatMap((message) =>
+    message.parts.flatMap((part) => {
+      if (part.type !== "tool") return []
+      if (part.state.status === "pending") return []
+      if (part.state.status === "running") return [part.state.time.start]
+      return [part.state.time.end, part.state.time.start]
+    }),
+  )
+  return Math.max(0, ...times)
 }
 
 export const TaskTool = Tool.define(
@@ -208,6 +229,14 @@ export const TaskTool = Tool.define(
         providerID: msg.info.providerID,
       }
       const background = params.background === true
+      const operationDirectory = currentDirectory() ?? process.cwd()
+      const operationWorktree = currentWorktree() ?? operationDirectory
+      const ulmConfig: ULMRuntimeConfig = params.operationID
+        ? yield* Effect.promise(() => readULMConfig({ directory: operationDirectory, worktree: operationWorktree }).catch(() => ({})))
+        : {}
+      const noToolTimeoutMs = ulmConfig.agent_no_tool_timeout_seconds
+        ? ulmConfig.agent_no_tool_timeout_seconds * 1000
+        : undefined
       if ((yield* jobs.get(nextSession.id))?.status === "running") {
         return yield* Effect.fail(new Error(`Task ${nextSession.id} is already running`))
       }
@@ -245,6 +274,31 @@ export const TaskTool = Tool.define(
           parts,
         })
         return result.parts.findLast((item) => item.type === "text")?.text ?? ""
+      })
+
+      const guardNoToolActivity = Effect.fn("TaskTool.guardNoToolActivity")(function* () {
+        if (!noToolTimeoutMs || noToolTimeoutMs <= 0) return yield* Effect.never
+        const startedAt = Date.now()
+        for (;;) {
+          yield* Effect.sleep("10 seconds")
+          const messages = yield* sessions.messages({ sessionID: nextSession.id }).pipe(
+            Effect.catch(() => Effect.succeed<MessageV2.WithParts[]>([])),
+          )
+          const lastToolAt = latestToolActivity(messages)
+          const reference = lastToolAt || startedAt
+          if (Date.now() - reference >= noToolTimeoutMs) {
+            return yield* Effect.fail(
+              new Error(
+                `Subagent ${nextSession.id} had no tool activity for ${Math.round(noToolTimeoutMs / 1000)} seconds and was stopped by ULMCode watchdog.`,
+              ),
+            )
+          }
+        }
+      })
+
+      const guardedRunTask = Effect.fn("TaskTool.guardedRunTask")(function* () {
+        if (!noToolTimeoutMs) return yield* runTask()
+        return yield* Effect.race(runTask(), guardNoToolActivity())
       })
 
       const resumeParent: (input: {
@@ -316,9 +370,10 @@ export const TaskTool = Tool.define(
             ...(params.operationID ? { operationID: params.operationID } : {}),
             ...(params.laneID ? { laneID: params.laneID } : {}),
             ...(params.modelRoute ? { modelRoute: params.modelRoute } : {}),
+            ...(noToolTimeoutMs ? { agentNoToolTimeoutSeconds: Math.round(noToolTimeoutMs / 1000) } : {}),
             ...(worktree ? { worktree } : {}),
           },
-          run: runTask().pipe(
+          run: guardedRunTask().pipe(
             Effect.flatMap((text) =>
               Effect.gen(function* () {
                 const messages = yield* sessions.messages({ sessionID: nextSession.id }).pipe(
@@ -369,7 +424,7 @@ export const TaskTool = Tool.define(
         }),
         () =>
           Effect.gen(function* () {
-            const text = yield* runTask()
+            const text = yield* guardedRunTask()
             return {
               title: params.description,
               metadata,

@@ -60,6 +60,20 @@ afterEach(async () => {
 })
 
 describe("tool.registry", () => {
+  it.instance("includes ULM operation expansion tools", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+      expect(ids).toContain("operation_memory")
+      expect(ids).toContain("operation_template")
+      expect(ids).toContain("asset_graph")
+      expect(ids).toContain("attack_chain")
+      expect(ids).toContain("browser_evidence")
+      expect(ids).toContain("operation_alert")
+      expect(ids).toContain("output_normalize")
+    }),
+  )
+
   it.instance("loads tools from .opencode/tool (singular)", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance

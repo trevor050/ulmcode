@@ -1,6 +1,6 @@
 Create a durable ULMCode operation graph and lane schedule.
 
-Use this after `operation_plan` and before launching broad execution. It converts the operation into required parallel lanes with dependencies, model routes, budgets, allowed tools, expected artifacts, safety mode, and stale recovery policy. The graph is the resumable work queue for long-running operations; do not rely on prose-only plans for overnight execution.
+Use this after `operation_plan` and before launching broad execution. It converts the operation into required parallel lanes with dependencies, model routes, budgets, allowed tools, expected artifacts, safety mode, trust level, scan profile, and stale recovery policy. The graph is the resumable work queue for long-running operations; do not rely on prose-only plans for overnight execution.
 
 The default K-12 graph includes district profile, person recon, service/web inventory, identity graph, identity/SaaS review, evidence normalization, finding validation, evidence indexing, report writing, technical review, executive review, final report review, and operator handoff lanes.
 

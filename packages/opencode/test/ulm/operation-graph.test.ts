@@ -24,6 +24,8 @@ describe("ULM operation graph", () => {
 
     expect(graph.operationID).toBe("school")
     expect(graph.safetyMode).toBe("non_destructive")
+    expect(graph.trustLevel).toBe("moderate")
+    expect(graph.scanProfile).toBe("balanced")
     expect(graph.lanes.map((lane) => lane.id)).toEqual([...REQUIRED_OPERATION_LANES])
     expect(validateOperationGraph(graph)).toEqual([])
     expect(graph.lanes.find((lane) => lane.id === "district_profile")?.status).toBe("ready")
@@ -49,9 +51,16 @@ describe("ULM operation graph", () => {
     const result = await writeOperationGraph(dir.path, { operationID: "School", maxConcurrentLanes: 3 })
 
     expect(result.lanes).toBe(REQUIRED_OPERATION_LANES.length)
-    const json = JSON.parse(await fs.readFile(result.json, "utf8")) as { maxConcurrentLanes?: number; lanes?: unknown[] }
+    const json = JSON.parse(await fs.readFile(result.json, "utf8")) as {
+      maxConcurrentLanes?: number
+      trustLevel?: string
+      scanProfile?: string
+      lanes?: unknown[]
+    }
     const markdown = await fs.readFile(result.markdown, "utf8")
     expect(json.maxConcurrentLanes).toBe(3)
+    expect(json.trustLevel).toBe("moderate")
+    expect(json.scanProfile).toBe("balanced")
     expect(json.lanes).toHaveLength(REQUIRED_OPERATION_LANES.length)
     expect(markdown).toContain("## Lanes")
     expect(markdown).toContain("report_review")

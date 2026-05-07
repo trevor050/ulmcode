@@ -19,6 +19,7 @@ import { OperationAuditTool } from "./operation_audit"
 import { OperationCheckpointTool } from "./operation_checkpoint"
 import { OperationGoalTool } from "./operation_goal"
 import { OperationGovernorTool } from "./operation_governor"
+import { OperationMemoryTool } from "./operation_memory"
 import { OperationNextTool } from "./operation_next"
 import { OperationPlanTool } from "./operation_plan"
 import { OperationQueueTool } from "./operation_queue"
@@ -30,6 +31,10 @@ import { OperationScheduleTool } from "./operation_schedule"
 import { OperationSuperviseTool } from "./operation_supervise"
 import { OperationStageGateTool } from "./operation_stage_gate"
 import { OperationStatusTool } from "./operation_status"
+import { OperationTemplateTool } from "./operation_template"
+import { AssetGraphTool } from "./asset_graph"
+import { AttackChainTool } from "./attack_chain"
+import { BrowserEvidenceTool } from "./browser_evidence"
 import { EvidenceRecordTool } from "./evidence_record"
 import { EvidenceNormalizeTool } from "./evidence_normalize"
 import { FindingRecordTool } from "./finding_record"
@@ -46,6 +51,8 @@ import { RuntimeDaemonTool } from "./runtime_daemon"
 import { CommandSuperviseTool } from "./command_supervise"
 import { ToolAcquireTool } from "./tool_acquire"
 import { ToolInventoryTool } from "./tool_inventory"
+import { OperationAlertTool } from "./operation_alert"
+import { OutputNormalizeTool } from "./output_normalize"
 import * as Tool from "./tool"
 import { Config } from "@/config/config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
@@ -158,6 +165,7 @@ export const layer: Layer.Layer<
     const operationCheckpoint = yield* OperationCheckpointTool
     const operationGoal = yield* OperationGoalTool
     const operationGovernor = yield* OperationGovernorTool
+    const operationMemory = yield* OperationMemoryTool
     const operationNext = yield* OperationNextTool
     const operationPlan = yield* OperationPlanTool
     const operationQueue = yield* OperationQueueTool
@@ -169,6 +177,10 @@ export const layer: Layer.Layer<
     const operationSupervise = yield* OperationSuperviseTool
     const operationStageGate = yield* OperationStageGateTool
     const operationStatus = yield* OperationStatusTool
+    const operationTemplate = yield* OperationTemplateTool
+    const assetGraph = yield* AssetGraphTool
+    const attackChain = yield* AttackChainTool
+    const browserEvidence = yield* BrowserEvidenceTool
     const evidenceRecord = yield* EvidenceRecordTool
     const evidenceNormalize = yield* EvidenceNormalizeTool
     const findingRecord = yield* FindingRecordTool
@@ -185,6 +197,8 @@ export const layer: Layer.Layer<
     const commandSupervise = yield* CommandSuperviseTool
     const toolAcquire = yield* ToolAcquireTool
     const toolInventory = yield* ToolInventoryTool
+    const operationAlert = yield* OperationAlertTool
+    const outputNormalize = yield* OutputNormalizeTool
     const agent = yield* Agent.Service
 
     const state = yield* InstanceState.make<State>(
@@ -285,6 +299,7 @@ export const layer: Layer.Layer<
           operationCheckpoint: Tool.init(operationCheckpoint),
           operationGoal: Tool.init(operationGoal),
           operationGovernor: Tool.init(operationGovernor),
+          operationMemory: Tool.init(operationMemory),
           operationNext: Tool.init(operationNext),
           operationPlan: Tool.init(operationPlan),
           operationQueue: Tool.init(operationQueue),
@@ -296,6 +311,10 @@ export const layer: Layer.Layer<
           operationSupervise: Tool.init(operationSupervise),
           operationStageGate: Tool.init(operationStageGate),
           operationStatus: Tool.init(operationStatus),
+          operationTemplate: Tool.init(operationTemplate),
+          assetGraph: Tool.init(assetGraph),
+          attackChain: Tool.init(attackChain),
+          browserEvidence: Tool.init(browserEvidence),
           evidenceRecord: Tool.init(evidenceRecord),
           evidenceNormalize: Tool.init(evidenceNormalize),
           findingRecord: Tool.init(findingRecord),
@@ -312,6 +331,8 @@ export const layer: Layer.Layer<
           commandSupervise: Tool.init(commandSupervise),
           toolAcquire: Tool.init(toolAcquire),
           toolInventory: Tool.init(toolInventory),
+          operationAlert: Tool.init(operationAlert),
+          outputNormalize: Tool.init(outputNormalize),
           patch: Tool.init(patchtool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
@@ -341,6 +362,7 @@ export const layer: Layer.Layer<
             tool.operationCheckpoint,
             tool.operationGoal,
             tool.operationGovernor,
+            tool.operationMemory,
             tool.operationNext,
             tool.operationPlan,
             tool.operationQueue,
@@ -352,6 +374,10 @@ export const layer: Layer.Layer<
             tool.operationSupervise,
             tool.operationStageGate,
             tool.operationStatus,
+            tool.operationTemplate,
+            tool.assetGraph,
+            tool.attackChain,
+            tool.browserEvidence,
             tool.evidenceRecord,
             tool.evidenceNormalize,
             tool.findingRecord,
@@ -368,6 +394,8 @@ export const layer: Layer.Layer<
             tool.commandSupervise,
             tool.toolAcquire,
             tool.toolInventory,
+            tool.operationAlert,
+            tool.outputNormalize,
             tool.patch,
             ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [tool.lsp] : []),
             ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [tool.plan] : []),

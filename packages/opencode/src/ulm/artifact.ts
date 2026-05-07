@@ -214,6 +214,9 @@ export type ReportOutlineInput = {
   audience?: "technical" | "executive" | "board" | "mixed"
   targetPages?: number
   includeAppendix?: boolean
+  designProfile?: "standard" | "premium" | "board-ready"
+  includeCoverageSection?: boolean
+  includeHandoffChecklist?: boolean
 }
 
 export type ReportLintOptions = {
@@ -620,6 +623,12 @@ export type OperationPlanPhase = {
 
 export type OperationPlanInput = {
   operationID: string
+  templateName?: string
+  trustLevel?: "guided" | "moderate" | "unattended" | "lab_full"
+  scanProfile?: "paranoid" | "stealth" | "balanced" | "aggressive" | "lab-insane"
+  browserEvidence?: boolean
+  operationMemory?: boolean
+  reportDesignProfile?: "standard" | "premium" | "board-ready"
   assumptions?: string[]
   phases: OperationPlanPhase[]
   reportingCloseout: string[]
@@ -1672,6 +1681,12 @@ function operationPlanMarkdown(record: OperationPlanRecord) {
     "",
     `- written: ${record.writtenAt}`,
     `- objective: ${record.objective ?? "unknown"}`,
+    `- template: ${record.templateName ?? "custom"}`,
+    `- trust_level: ${record.trustLevel ?? "moderate"}`,
+    `- scan_profile: ${record.scanProfile ?? "balanced"}`,
+    `- browser_evidence: ${record.browserEvidence ?? false}`,
+    `- operation_memory: ${record.operationMemory ?? false}`,
+    `- report_design_profile: ${record.reportDesignProfile ?? "standard"}`,
     "",
     "## Assumptions",
     ...(record.assumptions?.length ? record.assumptions.map((item) => `- ${item}`) : ["- none recorded"]),
@@ -2483,6 +2498,8 @@ export async function writeReportOutline(worktree: string, input: ReportOutlineI
   const targetPages = input.targetPages ?? 50
   const audience = input.audience ?? "mixed"
   const appendix = input.includeAppendix ?? true
+  const includeCoverage = input.includeCoverageSection ?? true
+  const includeHandoff = input.includeHandoffChecklist ?? true
   const hasDistrictProfile = await exists(path.join(root, "profiles", "district-profile.json"))
   const hasPeopleProfiles = await exists(path.join(root, "profiles", "people"))
   const hasIdentityGraph = await exists(path.join(root, "profiles", "identity-graph.json"))
@@ -2494,8 +2511,10 @@ export async function writeReportOutline(worktree: string, input: ReportOutlineI
     ["Attack Path Narrative", 5],
     ["Findings Detail", Math.max(12, reportReady.length * 4)],
     ["Risk Register and Prioritized Roadmap", 5],
+    ...(includeCoverage ? ([["Coverage, Browser Evidence, and Testing Limits", 4]] as Array<[string, number]>) : []),
     ["Validation Limits and Known Unknowns", 3],
     ["Evidence Map", 3],
+    ...(includeHandoff ? ([["Operator Handoff Checklist", 3]] as Array<[string, number]>) : []),
     ...(appendix ? [["Appendix: Raw Evidence Index", 8] as [string, number]] : []),
   ]
   const allocated = sections.reduce((sum, [, pages]) => sum + pages, 0)
@@ -2505,6 +2524,7 @@ export async function writeReportOutline(worktree: string, input: ReportOutlineI
     "",
     `- audience: ${audience}`,
     `- target_pages: ${targetPages}`,
+    `- design_profile: ${input.designProfile ?? "premium"}`,
     `- objective: ${operation?.objective ?? "unknown"}`,
     `- reportable_findings: ${reportReady.length}`,
     "",
@@ -3215,6 +3235,12 @@ function renderReportSections(input: {
     }</tbody>
   </table>`
       }
+      if (normalized.includes("coverage") || normalized.includes("browser evidence") || normalized.includes("testing limits")) {
+        return `<h2>${escapeHtml(title)}</h2>
+  <p>This section summarizes what the operation actually touched, where browser evidence exists, and where confidence is limited by scope, time, authentication, tooling, or unresolved blockers.</p>
+  <p>Current affected assets from validated/report-ready findings: ${escapeHtml(assets.join(", ") || "none recorded")}.</p>
+  <p>Browser evidence should be reviewed under browser/ and evidence/ when present. Missing browser artifacts are a testing limitation, not proof of absence.</p>`
+      }
       if (normalized.includes("evidence map")) {
         return `<h2>${escapeHtml(title)}</h2>
   <p>The Evidence Index maps report claims back to stored evidence identifiers and paths, keeping the handoff reviewable after context compaction or process restart.</p>
@@ -3222,6 +3248,16 @@ function renderReportSections(input: {
     <thead><tr><th>ID</th><th>Kind</th><th>Title</th><th>Path</th><th>Summary</th></tr></thead>
     <tbody>${renderEvidenceRows(input.evidence)}</tbody>
   </table>`
+      }
+      if (normalized.includes("operator handoff")) {
+        return `<h2>${escapeHtml(title)}</h2>
+  <ul>
+    <li>Review report-ready findings and their evidence paths before sending externally.</li>
+    <li>Review candidate, needs-validation, and rejected findings so known unknowns are not lost.</li>
+    <li>Confirm runtime_summary and operation_audit exist for unattended-run accountability.</li>
+    <li>Run report_lint with finalHandoff=true after any manual report edits.</li>
+    <li>Use the operation memory file for internal continuation notes only; do not include it in customer deliverables.</li>
+  </ul>`
       }
       if (normalized.includes("appendix") || normalized.includes("raw evidence")) {
         return `<h2>${escapeHtml(title)}</h2>
@@ -3277,16 +3313,21 @@ export async function renderReport(worktree: string, input: ReportRenderInput): 
   <meta charset="utf-8">
   <title>${escapeHtml(title)}</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #111; margin: 48px; line-height: 1.55; }
-    h1, h2, h3 { line-height: 1.15; }
-    h1 { font-size: 34px; margin-bottom: 8px; }
-    h2 { border-top: 1px solid #ccc; padding-top: 24px; margin-top: 32px; }
-    table { width: 100%; border-collapse: collapse; margin: 16px 0; }
-    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }
-    th { background: #f2f2f2; }
-    .meta { color: #555; }
-    .finding { page-break-inside: avoid; }
-    @media print { body { margin: 0.65in; } }
+    :root { --ink: #111318; --muted: #58606f; --rule: #d9dde5; --paper: #fbfaf7; --panel: #ffffff; --accent: #9b611d; --accent-soft: #f6ead8; }
+    body { font-family: "Avenir Next", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--ink); background: var(--paper); margin: 46px; line-height: 1.58; }
+    h1, h2, h3 { line-height: 1.12; letter-spacing: 0; }
+    h1 { font-size: 42px; margin: 0 0 10px; max-width: 920px; }
+    h2 { border-top: 2px solid var(--ink); padding-top: 18px; margin-top: 34px; font-size: 24px; }
+    h3 { font-size: 18px; margin-top: 24px; }
+    p { max-width: 920px; }
+    table { width: 100%; border-collapse: collapse; margin: 18px 0 24px; background: var(--panel); box-shadow: 0 1px 0 rgba(17,19,24,0.04); }
+    th, td { border: 1px solid var(--rule); padding: 9px 10px; text-align: left; vertical-align: top; }
+    th { background: var(--accent-soft); color: var(--ink); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+    ul { padding-left: 22px; }
+    .meta { color: var(--muted); border-left: 4px solid var(--accent); padding-left: 12px; margin-bottom: 28px; }
+    .finding { page-break-inside: avoid; background: var(--panel); border: 1px solid var(--rule); padding: 14px 18px; margin: 18px 0; }
+    @page { margin: 0.62in; }
+    @media print { body { margin: 0; background: white; } table, .finding { box-shadow: none; } }
   </style>
 </head>
 <body>

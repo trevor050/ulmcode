@@ -20,6 +20,7 @@ import { Skill } from "@/skill"
 import { activeOperationGoal, readOperationPlanExcerpt } from "@/ulm/operation-context"
 import { effectiveULMContinuation, readULMConfig } from "@/ulm/config"
 import { operatorFallbackTimeoutMillis } from "@/ulm/operator-timeout"
+import { readOperationMemory } from "@/ulm/operation-extras"
 
 type OperationGoalContext = {
   operationID: string
@@ -52,6 +53,13 @@ type ToolInventoryContext = {
     highValue?: boolean
   }>
   nextActions?: string[]
+  system?: {
+    runtimeKind?: string
+    distro?: string
+    packageManagers?: string[]
+    browsers?: string[]
+    containerTools?: string[]
+  }
 }
 
 function short(value: string | undefined, max: number) {
@@ -108,6 +116,7 @@ async function ulmOperationContext(worktree: string) {
   const supervisor = await latestSupervisorReview(worktree, goal.operationID)
   const inventory = await toolInventory(worktree, goal.operationID)
   const plan = await readOperationPlanExcerpt(worktree, goal.operationID, maxPlanChars)
+  const memory = await readOperationMemory(worktree, goal.operationID).catch(() => undefined)
   const decision = supervisor?.decisions?.[0]
   const installed = inventory?.tools?.filter((tool) => tool.installed && tool.highValue).map((tool) => tool.id).filter(Boolean).slice(0, 8)
   const missing = inventory?.tools?.filter((tool) => !tool.installed && tool.highValue).map((tool) => tool.id).filter(Boolean).slice(0, 8)
@@ -126,6 +135,10 @@ async function ulmOperationContext(worktree: string) {
     installed?.length ? `installed_high_value: ${installed.join(", ")}` : undefined,
     missing?.length ? `missing_high_value: ${missing.join(", ")}` : undefined,
     inventory?.nextActions?.[0] ? `inventory_next: ${short(inventory.nextActions[0], 180)}` : undefined,
+    inventory?.system
+      ? `runtime_system: kind=${inventory.system.runtimeKind ?? "unknown"} distro=${inventory.system.distro ?? "unknown"} package_managers=${inventory.system.packageManagers?.join(",") || "none"} browsers=${inventory.system.browsers?.join(",") || "none"} containers=${inventory.system.containerTools?.join(",") || "none"}`
+      : undefined,
+    memory ? `operation_memory: ${memory.file}` : "operation_memory: missing; call operation_memory append when important details must survive compaction",
     "foreground_command_policy: commands expected over 2 minutes must use command_supervise, task background=true, runtime_scheduler, or runtime_daemon instead of foreground waiting",
     "operator_availability_policy: assume the operator is unavailable after execution starts; do not wait for new operator input, honor the original authorized scope, work around ambiguity with conservative skip/decline defaults, and write durable notes",
     operatorTimeoutMillis === undefined
@@ -140,6 +153,9 @@ async function ulmOperationContext(worktree: string) {
           "</ulm_operation_plan>",
         ].join("\n")
       : `<ulm_operation_plan max_chars="${plan.maxChars}" missing="true"></ulm_operation_plan>`,
+    memory?.content
+      ? ["<ulm_operation_memory>", memory.content, "</ulm_operation_memory>"].join("\n")
+      : "<ulm_operation_memory missing=\"true\"></ulm_operation_memory>",
   ]
     .filter((line): line is string => line !== undefined)
     .join("\n")

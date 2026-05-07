@@ -1,0 +1,3 @@
+Record an attack chain narrative from stored findings, assets, and evidence.
+
+Use this when multiple observations combine into a meaningful risk path. Do not invent exploitability. Mark blockers when the chain is plausible but not fully demonstrated.

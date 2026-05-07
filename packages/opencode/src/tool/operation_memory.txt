@@ -1,0 +1,7 @@
+Read or update the per-operation `memory.md` file.
+
+This memory is operation-local. It is for agents, not customers. Use it before large actions, after compaction/restart, before spawning subagents, and whenever there is a detail future agents must not lose.
+
+Keep entries short. Good entries include scope constraints, credentials or auth-state notes already provided by the operator, current blocker, why a tool path failed, which artifact is canonical, or what the next worker must avoid repeating.
+
+Do not use this as a report, finding database, or cross-operation memory.
