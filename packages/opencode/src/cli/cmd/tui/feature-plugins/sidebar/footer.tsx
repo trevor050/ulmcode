@@ -1,6 +1,8 @@
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
-import { createMemo, Show } from "solid-js"
-import { Global } from "@opencode-ai/core/global"
+import nodePath from "path"
+import { createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
+import { activeOperationGoal } from "@/ulm/operation-context"
+import { operationPath } from "@/ulm/artifact"
 
 const id = "internal:sidebar-footer"
 
@@ -13,15 +15,22 @@ function View(props: { api: TuiPluginApi }) {
   )
   const done = createMemo(() => props.api.kv.get("dismissed_getting_started", false))
   const show = createMemo(() => !has() && !done())
-  const path = createMemo(() => {
-    const dir = props.api.state.path.directory || process.cwd()
-    const out = dir.replace(Global.Path.home, "~")
-    const text = props.api.state.vcs?.branch ? out + ":" + props.api.state.vcs.branch : out
-    const list = text.split("/")
-    return {
-      parent: list.slice(0, -1).join("/"),
-      name: list.at(-1) ?? "",
-    }
+  const [operationFile, setOperationFile] = createSignal<string | undefined>()
+
+  async function refreshOperationFile() {
+    const root = props.api.state.path.worktree || props.api.state.path.directory || process.cwd()
+    const operation = await activeOperationGoal(root)
+    setOperationFile(
+      operation
+        ? nodePath.join(operationPath(operation.worktree, operation.operationID), "goals", "operation-goal.json")
+        : undefined,
+    )
+  }
+
+  onMount(() => {
+    void refreshOperationFile()
+    const interval = setInterval(() => void refreshOperationFile(), 5_000)
+    onCleanup(() => clearInterval(interval))
   })
 
   return (
@@ -48,7 +57,7 @@ function View(props: { api: TuiPluginApi }) {
                 ✕
               </text>
             </box>
-            <text fg={theme().textMuted}>OpenCode includes free models so you can start immediately.</text>
+            <text fg={theme().textMuted}>ULMCode includes free models so you can start immediately.</text>
             <text fg={theme().textMuted}>
               Connect from 75+ providers to use other models, including Claude, GPT, Gemini etc
             </text>
@@ -59,12 +68,23 @@ function View(props: { api: TuiPluginApi }) {
           </box>
         </box>
       </Show>
-      <text>
-        <span style={{ fg: theme().textMuted }}>{path().parent}/</span>
-        <span style={{ fg: theme().text }}>{path().name}</span>
-      </text>
+      <Show
+        when={operationFile()}
+        fallback={
+          <text fg={theme().textMuted}>
+            op: <span style={{ fg: theme().text }}>no active operation</span>
+          </text>
+        }
+      >
+        {(file) => (
+          <text>
+            <span style={{ fg: theme().textMuted }}>op: </span>
+            <span style={{ fg: theme().text }}>{file()}</span>
+          </text>
+        )}
+      </Show>
       <text fg={theme().textMuted}>
-        <span style={{ fg: theme().success }}>•</span> <b>Open</b>
+        <span style={{ fg: theme().success }}>•</span> <b>ULM</b>
         <span style={{ fg: theme().text }}>
           <b>Code</b>
         </span>{" "}

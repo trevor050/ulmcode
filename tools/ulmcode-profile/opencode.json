@@ -97,6 +97,14 @@
     "oh-my-openagent"
   ],
   "mcp": {
+    "agent_browser": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "agent-browser-mcp"
+      ]
+    },
     "playwright": {
       "type": "local",
       "command": [

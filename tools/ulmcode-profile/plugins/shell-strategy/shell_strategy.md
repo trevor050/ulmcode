@@ -59,3 +59,12 @@ Good supervised pattern:
 - Poll with `operation_status`, `task_status`, command heartbeat files, or scheduler output.
 
 Use `timeout` or explicit input only when a command has no proper non-interactive mode. Record the exact command and result in the operation ledger when a long-running or potentially prompt-prone command matters to the engagement.
+
+## Browser Automation
+
+Prefer `agent_browser` MCP for browser navigation, snapshots, screenshots, and form checks because it is the low-context browser lane for this profile. Use Playwright only as the fallback when `agent_browser` is unavailable, cannot express the action, or needs Playwright-specific rendering/debug behavior.
+
+When using the Vercel agent-browser CLI directly, load its matching runtime guidance before guessing syntax:
+
+- `agent-browser skills get core`
+- `agent-browser skills get core --full` when a workflow needs detailed flags or templates
