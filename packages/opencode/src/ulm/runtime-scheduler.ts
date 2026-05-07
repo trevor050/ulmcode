@@ -6,7 +6,7 @@ import { readOperationGoal } from "./operation-goal"
 import { superviseOperation, type OperationSupervisorAction, type OperationSupervisorReviewKind } from "./operation-supervisor"
 import { evaluateRuntimeGovernor, type GovernorDecision } from "./runtime-governor"
 import { runOperationStep, syncOperationRuntimeState, type OperationRunResult, type OperationRuntimeSyncResult } from "./operation-run"
-import { nextWorkUnits, requeueStaleWorkUnits, type WorkQueueNextResult } from "./work-queue"
+import { bindWorkUnitJob, nextWorkUnits, requeueStaleWorkUnits, type WorkQueueNextResult } from "./work-queue"
 
 type SchedulerLaunchParams = NonNullable<OperationRunResult["taskParams"]>
 type SchedulerCommandParams = WorkQueueNextResult["units"][number]["commandSupervise"]
@@ -187,7 +187,10 @@ export async function runRuntimeScheduler(worktree: string, input: RuntimeSchedu
         : { units: [] }
     for (const unit of commandUnits.units) {
       const launchedCommand = await input.launchCommandWorkUnit?.({ ...unit.commandSupervise, dryRun: false })
-      if (launchedCommand?.jobID) launchedCommandJobs.push(launchedCommand.jobID)
+      if (launchedCommand?.jobID) {
+        launchedCommandJobs.push(launchedCommand.jobID)
+        await bindWorkUnitJob(worktree, { operationID, workUnitID: unit.id, jobID: launchedCommand.jobID })
+      }
     }
     const governor = await evaluateRuntimeGovernor(worktree, { operationID, laneID: run?.laneID })
     const record: RuntimeSchedulerCycle = {

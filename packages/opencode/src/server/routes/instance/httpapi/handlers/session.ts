@@ -80,7 +80,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     })
 
     const cost = Effect.fn("SessionHttpApi.cost")(function* (ctx: { params: { sessionID: SessionID } }) {
-      return yield* mapNotFound(session.cost(ctx.params.sessionID))
+      return yield* SessionError.mapStorageNotFound(session.cost(ctx.params.sessionID))
     })
 
     const todo = Effect.fn("SessionHttpApi.todo")(function* (ctx: { params: { sessionID: SessionID } }) {

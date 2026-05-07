@@ -322,6 +322,7 @@ async function auditOperationRuntime() {
     "runRuntimeScheduler",
     "heartbeat.json",
     "requeueStaleWorkUnits",
+    "bindWorkUnitJob",
     "evaluateRuntimeGovernor",
     "runOperationStep",
     "launchCommandWorkUnit",
@@ -342,6 +343,14 @@ async function auditOperationRuntime() {
     "child.unref()",
     "--supervisor",
     "writeRuntimeSupervisor",
+    "buildCommandPlan",
+    "ulm-command-worker.ts",
+  ])
+  requireText("packages/opencode/script/ulm-command-worker.ts", await read("packages/opencode/script/ulm-command-worker.ts"), [
+    "hardTimeoutSeconds",
+    "idleTimeoutSeconds",
+    "heartbeatPath",
+    "proc.kill",
   ])
   requireText("packages/opencode/src/ulm/runtime-supervisor.ts", runtimeSupervisor, [
     "writeRuntimeSupervisor",

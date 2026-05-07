@@ -284,6 +284,7 @@ export type OperationStatusSummary = {
     manifest: boolean
   }
   runtimeSummary: boolean
+  evalScorecard: boolean
   graph?: {
     exists: boolean
     lanes: {
@@ -570,6 +571,42 @@ export type RuntimeSummaryResult = {
   json: string
   markdown: string
   finalDir: string
+}
+
+export type EvalScorecardInput = {
+  operationID: string
+  target: string
+  sandbox?: string
+  allowedProfiles?: string[]
+  successCriteria: string[]
+  artifactRequirements?: string[]
+  mitreTags?: string[]
+  budget?: {
+    maxHours?: number
+    maxUSD?: number
+  }
+  metrics: {
+    passed: boolean
+    timeToFirstSignalMs?: number
+    validatedFindings: number
+    falsePositives: number
+    toolFailures: number
+    retries: number
+    costUSD?: number
+    reportQuality: "passed" | "failed" | "not_checked"
+  }
+  notes?: string[]
+}
+
+export type EvalScorecardRecord = EvalScorecardInput & {
+  operationID: string
+  generatedAt: string
+}
+
+export type EvalScorecardResult = {
+  operationID: string
+  json: string
+  markdown: string
 }
 
 export type OperationPlanPhase = {
@@ -2562,6 +2599,7 @@ export async function readOperationStatus(
       manifest: await exists(path.join(root, "deliverables", "final", "manifest.json")),
     },
     runtimeSummary: !!runtime,
+    evalScorecard: await exists(path.join(root, "deliverables", "eval-scorecard.json")),
     graph: await readGraphStatus(root, id),
     runtime: runtime
       ? {
@@ -2576,6 +2614,72 @@ export async function readOperationStatus(
       : undefined,
     lastEvents: await readJsonlTail(path.join(root, "events.jsonl"), options.eventLimit ?? 5),
   }
+}
+
+function evalScorecardMarkdown(record: EvalScorecardRecord) {
+  return [
+    "# ULM Eval Scorecard",
+    "",
+    `- Operation: ${record.operationID}`,
+    `- Target: ${record.target}`,
+    `- Sandbox: ${record.sandbox ?? "unspecified"}`,
+    `- Status: ${record.metrics.passed ? "passed" : "failed"}`,
+    `- Generated: ${record.generatedAt}`,
+    record.budget?.maxHours === undefined ? undefined : `- Budget hours: ${record.budget.maxHours}`,
+    record.budget?.maxUSD === undefined ? undefined : `- Budget USD: ${record.budget.maxUSD}`,
+    "",
+    "## Success Criteria",
+    "",
+    ...record.successCriteria.map((item) => `- ${item}`),
+    "",
+    "## Metrics",
+    "",
+    `- Time to first signal: ${record.metrics.timeToFirstSignalMs ?? "unknown"}ms`,
+    `- Validated findings: ${record.metrics.validatedFindings}`,
+    `- False positives: ${record.metrics.falsePositives}`,
+    `- Tool failures: ${record.metrics.toolFailures}`,
+    `- Retries: ${record.metrics.retries}`,
+    `- Cost USD: ${record.metrics.costUSD ?? "unknown"}`,
+    `- Report quality: ${record.metrics.reportQuality}`,
+    "",
+    record.allowedProfiles?.length ? `## Allowed Profiles\n\n${record.allowedProfiles.map((item) => `- ${item}`).join("\n")}\n` : undefined,
+    record.artifactRequirements?.length
+      ? `## Artifact Requirements\n\n${record.artifactRequirements.map((item) => `- ${item}`).join("\n")}\n`
+      : undefined,
+    record.mitreTags?.length ? `## MITRE Tags\n\n${record.mitreTags.map((item) => `- ${item}`).join("\n")}\n` : undefined,
+    record.notes?.length ? `## Notes\n\n${record.notes.map((item) => `- ${item}`).join("\n")}\n` : undefined,
+  ]
+    .filter((line): line is string => line !== undefined)
+    .join("\n")
+    .trimEnd()
+    .concat("\n")
+}
+
+export async function writeEvalScorecard(
+  worktree: string,
+  input: EvalScorecardInput,
+): Promise<EvalScorecardResult> {
+  const operationID = slug(input.operationID, "operation")
+  const root = operationPath(worktree, operationID)
+  const record: EvalScorecardRecord = {
+    ...input,
+    operationID,
+    generatedAt: new Date().toISOString(),
+  }
+  const json = path.join(root, "deliverables", "eval-scorecard.json")
+  const markdown = path.join(root, "deliverables", "eval-scorecard.md")
+  await writeJson(json, record)
+  await fs.writeFile(markdown, evalScorecardMarkdown(record))
+  await appendJsonl(path.join(root, "events.jsonl"), {
+    type: "eval_scorecard",
+    operationID,
+    passed: record.metrics.passed,
+    validatedFindings: record.metrics.validatedFindings,
+    falsePositives: record.metrics.falsePositives,
+    generatedAt: record.generatedAt,
+  })
+  await publishOperationUpdated(worktree, { operationID, artifact: "eval_scorecard", path: json })
+  return { operationID, json, markdown }
 }
 
 export async function listOperationStatuses(

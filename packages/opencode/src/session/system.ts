@@ -122,6 +122,7 @@ async function ulmOperationContext(worktree: string) {
     missing?.length ? `missing_high_value: ${missing.join(", ")}` : undefined,
     inventory?.nextActions?.[0] ? `inventory_next: ${short(inventory.nextActions[0], 180)}` : undefined,
     "foreground_command_policy: commands expected over 2 minutes must use command_supervise, task background=true, runtime_scheduler, or runtime_daemon instead of foreground waiting",
+    "operator_availability_policy: assume the operator is unavailable after execution starts; ask only blocking safety/scope questions, otherwise continue with conservative defaults and durable notes",
     `unattended_operator_policy: after ${goal.continuation?.operatorFallbackTimeoutSeconds ?? 75}s, permission/question prompts default safely; do not block waiting for operator`,
     "</ulm_operation_context>",
     plan.content

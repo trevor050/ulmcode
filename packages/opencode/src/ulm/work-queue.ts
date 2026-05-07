@@ -354,6 +354,24 @@ export async function syncWorkQueueJobs(
   return { operationID, queuePath, syncedUnits, completedUnits, failedUnits }
 }
 
+export async function bindWorkUnitJob(
+  worktree: string,
+  input: { operationID: string; workUnitID: string; jobID: string },
+): Promise<boolean> {
+  const operationID = slug(input.operationID, "operation")
+  const root = operationPath(worktree, operationID)
+  const queuePath = path.join(root, "work-queue.json")
+  const queue = await readJson<WorkQueueRecord>(queuePath)
+  if (!queue) return false
+  const unit = queue.units.find((item) => item.id === input.workUnitID)
+  if (!unit) return false
+  unit.jobID = input.jobID
+  unit.status = "running"
+  unit.updatedAt = new Date().toISOString()
+  await writeJson(queuePath, { ...queue, generatedAt: unit.updatedAt })
+  return true
+}
+
 export async function requeueStaleWorkUnits(
   worktree: string,
   input: { operationID: string; leaseSeconds?: number; now?: Date },

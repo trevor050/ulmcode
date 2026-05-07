@@ -40,6 +40,7 @@ import { ReportLintTool } from "./report_lint"
 import { ReportOutlineTool } from "./report_outline"
 import { ReportRenderTool } from "./report_render"
 import { RuntimeSummaryTool } from "./runtime_summary"
+import { EvalScorecardTool } from "./eval_scorecard"
 import { RuntimeSchedulerTool } from "./runtime_scheduler"
 import { RuntimeDaemonTool } from "./runtime_daemon"
 import { CommandSuperviseTool } from "./command_supervise"
@@ -178,6 +179,7 @@ export const layer: Layer.Layer<
     const reportOutline = yield* ReportOutlineTool
     const reportRender = yield* ReportRenderTool
     const runtimeSummary = yield* RuntimeSummaryTool
+    const evalScorecard = yield* EvalScorecardTool
     const runtimeScheduler = yield* RuntimeSchedulerTool
     const runtimeDaemon = yield* RuntimeDaemonTool
     const commandSupervise = yield* CommandSuperviseTool
@@ -304,6 +306,7 @@ export const layer: Layer.Layer<
           reportOutline: Tool.init(reportOutline),
           reportRender: Tool.init(reportRender),
           runtimeSummary: Tool.init(runtimeSummary),
+          evalScorecard: Tool.init(evalScorecard),
           runtimeScheduler: Tool.init(runtimeScheduler),
           runtimeDaemon: Tool.init(runtimeDaemon),
           commandSupervise: Tool.init(commandSupervise),
@@ -359,6 +362,7 @@ export const layer: Layer.Layer<
             tool.reportOutline,
             tool.reportRender,
             tool.runtimeSummary,
+            tool.evalScorecard,
             tool.runtimeScheduler,
             tool.runtimeDaemon,
             tool.commandSupervise,

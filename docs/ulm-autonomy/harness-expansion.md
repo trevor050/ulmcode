@@ -10,6 +10,7 @@
 
 - `tools/ulmcode-evals/scenarios/` stores named scenario manifests for the ten long-run capability gaps.
 - `packages/opencode/src/ulm/harness.ts` defines required capabilities and scorecard output.
+- `eval_scorecard` writes operation-level handoff and benchmark/readiness scoring under `.ulmcode/operations/<operation>/deliverables/eval-scorecard.json` and `.md`.
 - `packages/opencode/script/ulm-harness-run.ts` exposes `fast`, `full`, `chaos`, and `overnight` tiers.
 - `tools/ulmcode-labs/` provides replayable local K-12 security scenarios, including chained and authored-report cases.
 - Scorecards write durable JSON and markdown under `packages/opencode/.artifacts/ulm-harness/`.

@@ -68,6 +68,7 @@ function status(input: Partial<OperationStatusSummary> = {}): OperationStatusSum
       manifest: true,
     },
     runtimeSummary: true,
+    evalScorecard: false,
     lastEvents: [],
     ...input,
   }

@@ -21,6 +21,7 @@ import {
   writeIdentityGraph,
   writeOperationCheckpoint,
   writeOperationPlan,
+  writeEvalScorecard,
   writePersonProfile,
   writeReportOutline,
   writeRuntimeSummary,
@@ -234,6 +235,40 @@ describe("ULM artifact ledger", () => {
     const result = await lintReport(worktree, "school")
     expect(result.ok).toBe(true)
     expect(result.counts.reportReady).toBe(1)
+  })
+
+  test("writes operation eval scorecards for objective harness scoring", async () => {
+    const worktree = await tmpdir()
+    const result = await writeEvalScorecard(worktree, {
+      operationID: "school",
+      target: "District portal lab",
+      sandbox: "local-docker",
+      allowedProfiles: ["non_destructive"],
+      successCriteria: ["validated finding reproduced", "report rendered"],
+      artifactRequirements: ["evidence-index.json", "deliverables/final/report.html"],
+      mitreTags: ["T1190"],
+      budget: { maxHours: 10, maxUSD: 25 },
+      metrics: {
+        passed: true,
+        timeToFirstSignalMs: 1200,
+        validatedFindings: 2,
+        falsePositives: 0,
+        toolFailures: 1,
+        retries: 2,
+        costUSD: 3.25,
+        reportQuality: "passed",
+      },
+    })
+
+    const record = JSON.parse(await fs.readFile(result.json, "utf8"))
+    const markdown = await fs.readFile(result.markdown, "utf8")
+
+    expect(result.operationID).toBe("school")
+    expect(record.metrics.validatedFindings).toBe(2)
+    expect(record.mitreTags).toEqual(["T1190"])
+    expect(markdown).toContain("# ULM Eval Scorecard")
+    expect(markdown).toContain("validated finding reproduced")
+    expect((await readOperationStatus(worktree, "school")).evalScorecard).toBe(true)
   })
 
   test("lints reportable findings that cite unrecorded evidence", async () => {

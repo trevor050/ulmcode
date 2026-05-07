@@ -228,7 +228,7 @@ function decisionsFor(input: {
         ],
         operatorMessage: "Start the report closeout pipeline before handoff.",
         modelPrompt:
-          "Run report_outline, evidence_normalize if needed, report writer, technical and executive review, report_lint, report_render, runtime_summary, operation_audit, then operation_stage_gate for handoff.",
+          "Run report_outline, evidence_normalize if needed, report writer, technical and executive review, report_lint, report_render, runtime_summary, eval_scorecard for benchmark/readiness runs, operation_audit, then operation_stage_gate for handoff.",
       }),
     )
   }

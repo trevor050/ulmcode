@@ -47,7 +47,8 @@ Do not mark the operation complete until these artifacts exist and parse:
 - `deliverables/stage-gates/handoff.json`
 - `deliverables/operation-audit.json`
 
-Final reporting should run report writer, report reviewer, `report_lint`, `report_render`, `runtime_summary`, then `operation_audit`.
+Final reporting should run report writer, report reviewer, `report_lint`, `report_render`, `runtime_summary`, `eval_scorecard`, then `operation_audit`.
+Use `eval_scorecard` to keep the result objectively scored for target, sandbox, success criteria, MITRE tags, validated findings, false positives, tool failures, retries, cost, and report quality.
 
 ## Unattended Operator Fallback
 

@@ -28,6 +28,7 @@ export const OperationEvent = {
         Schema.Literal("report_outline"),
         Schema.Literal("report_render"),
         Schema.Literal("runtime_summary"),
+        Schema.Literal("eval_scorecard"),
         Schema.Literal("stage_gate"),
         Schema.Literal("operation_audit"),
       ]),

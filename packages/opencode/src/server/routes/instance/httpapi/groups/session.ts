@@ -147,7 +147,7 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.get("cost", SessionPaths.cost, {
           params: { sessionID: SessionID },
           success: described(Session.Cost, "Cost rollup"),
-          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.cost",

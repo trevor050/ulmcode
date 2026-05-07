@@ -215,6 +215,8 @@ describe("ULM runtime daemon", () => {
 
     expect(launched).toEqual(["work-unit-http"])
     expect(result.cycles[0]?.launchedCommandJobs).toEqual(["cmd-work-unit-http"])
+    const queue = JSON.parse(await fs.readFile(path.join(root, "work-queue.json"), "utf8"))
+    expect(queue.units[0].jobID).toBe("cmd-work-unit-http")
   })
 
   test("passes supervisor cadence through daemon ticks", async () => {
@@ -299,7 +301,12 @@ describe("ULM runtime daemon", () => {
         "1",
         "--json",
       ],
-      { cwd: dir.path, stdout: "pipe", stderr: "pipe" },
+      {
+        cwd: dir.path,
+        stdout: "pipe",
+        stderr: "pipe",
+        env: { ...process.env, ULMCODE_DAEMON_DRY_RUN_LAUNCHES: "1" },
+      },
     )
     const [stdout, stderr, exit] = await Promise.all([
       new Response(proc.stdout).text(),
@@ -312,6 +319,9 @@ describe("ULM runtime daemon", () => {
     const parsed = JSON.parse(stdout)
     expect(parsed.operationID).toBe("school")
     expect(parsed.heartbeatPath).toContain("daemon-heartbeat.json")
+    expect(parsed.cycles[0].launchedJobs).toEqual(["cli-model-lane-district_profile"])
+    const launches = await fs.readdir(path.join(dir.path, ".ulmcode", "operations", "school", "scheduler", "cli-launches"))
+    expect(launches.some((item) => item.includes("district_profile"))).toBe(true)
   })
 
   test("detaches the operator CLI wrapper for long wall-clock runs", async () => {
