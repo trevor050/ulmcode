@@ -85,7 +85,7 @@ function supervisorIntervalElapsed(input: { now: Date; last?: Date; intervalMinu
 }
 
 function supervisorBlocks(action: OperationSupervisorAction | undefined) {
-  return action !== undefined && action !== "continue" && action !== "handoff_ready"
+  return action !== undefined && action !== "continue" && action !== "continue_execution" && action !== "handoff_ready"
 }
 
 async function defaultSupervisorEnabled(worktree: string, operationID: string, configured: boolean | undefined) {

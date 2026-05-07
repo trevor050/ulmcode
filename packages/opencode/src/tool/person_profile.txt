@@ -1,0 +1,5 @@
+Write a professional, engagement-relevant person profile for an authorized K-12 assessment.
+
+Use this for public, district-published, or engagement-provided information that helps map access, authority, workflows, validation targets, or report context. Do not store private-life details, home addresses, family information, unrelated personal social media, or anything that is not useful to the penetration test. If you saw irrelevant/private information, summarize that it was excluded rather than recording the details.
+
+Good profiles explain why the person matters, likely access or workflow influence, source references, and safe validation ideas such as checking authorized identity exports or role assignments.

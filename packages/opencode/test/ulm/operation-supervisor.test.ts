@@ -71,4 +71,27 @@ describe("ULM operation supervisor", () => {
     expect(review.files?.json).toContain("supervisor-review-")
     expect(review.files?.markdown).toContain("latest.md")
   })
+
+  test("turn-end review carries plan excerpt and requires continued execution", async () => {
+    await using dir = await tmpdir({ git: true })
+    await createOperationGoal(dir.path, {
+      operationID: "school",
+      objective: "Authorized overnight assessment",
+      targetDurationHours: 20,
+      continuation: { injectPlanMaxChars: 80 },
+    })
+    await writeMinimalPlan(dir.path)
+
+    const review = await superviseOperation(dir.path, {
+      operationID: "school",
+      reviewKind: "turn_end",
+      latestAssistantMessage: "Done for now.",
+      writeArtifacts: false,
+    })
+
+    expect(review.decisions[0]?.action).toBe("reporting_ready")
+    expect(review.planExcerpt?.maxChars).toBe(80)
+    expect(review.planExcerpt?.content).toContain("[ULM operation plan truncated at 80 chars]")
+    expect(review.latestAssistantMessage).toBe("Done for now.")
+  })
 })

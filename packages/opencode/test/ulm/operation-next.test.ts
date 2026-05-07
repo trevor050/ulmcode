@@ -30,9 +30,9 @@ describe("ULM operation next action", () => {
 
     expect(result.action.action).toBe("launch_lane")
     if (result.action.action !== "launch_lane") throw new Error("expected launch_lane")
-    expect(result.action.lane.id).toBe("recon")
-    expect(result.action.prompt).toContain('Run operation lane "recon"')
-    expect(result.action.recommendedTools).toContain("command_supervise")
+    expect(result.action.lane.id).toBe("district_profile")
+    expect(result.action.prompt).toContain('Run operation lane "district_profile"')
+    expect(result.action.recommendedTools).toContain("district_profile")
   })
 
   test("waits when max concurrent lanes are already running", async () => {

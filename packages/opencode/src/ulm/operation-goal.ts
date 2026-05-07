@@ -15,6 +15,11 @@ export type OperationGoalContinuation = {
   enabled: boolean
   idleMinutesBeforeReview: number
   maxNoToolContinuationTurns: number
+  turnEndReview: boolean
+  injectPlanMaxChars: number
+  operatorFallbackTimeoutSeconds: number
+  operatorFallbackEnabled: boolean
+  maxRepeatedOperatorTimeoutsPerKind: number
 }
 
 export type OperationGoalRecord = {
@@ -79,6 +84,11 @@ const defaultContinuation: OperationGoalContinuation = {
   enabled: true,
   idleMinutesBeforeReview: 10,
   maxNoToolContinuationTurns: 1,
+  turnEndReview: true,
+  injectPlanMaxChars: 12_000,
+  operatorFallbackTimeoutSeconds: 75,
+  operatorFallbackEnabled: true,
+  maxRepeatedOperatorTimeoutsPerKind: 2,
 }
 
 function goalFiles(worktree: string, operationID: string): OperationGoalFiles {
@@ -149,6 +159,11 @@ function goalMarkdown(goal: OperationGoalRecord) {
     `- enabled: ${goal.continuation.enabled}`,
     `- idle_minutes_before_review: ${goal.continuation.idleMinutesBeforeReview}`,
     `- max_no_tool_continuation_turns: ${goal.continuation.maxNoToolContinuationTurns}`,
+    `- turn_end_review: ${goal.continuation.turnEndReview}`,
+    `- inject_plan_max_chars: ${goal.continuation.injectPlanMaxChars}`,
+    `- operator_fallback_timeout_seconds: ${goal.continuation.operatorFallbackTimeoutSeconds}`,
+    `- operator_fallback_enabled: ${goal.continuation.operatorFallbackEnabled}`,
+    `- max_repeated_operator_timeouts_per_kind: ${goal.continuation.maxRepeatedOperatorTimeoutsPerKind}`,
     "",
     "## Time",
     "",

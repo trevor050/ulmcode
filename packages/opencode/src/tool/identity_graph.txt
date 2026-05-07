@@ -1,0 +1,3 @@
+Write the K-12 identity graph for an authorized operation.
+
+Use this to connect people, accounts, groups, roles, applications, data systems, vendors, and devices. Edges should represent relationships like has_role, member_of, administers, owns_data, likely_access, validates_against, or vendor_integrates_with. Mark low-confidence public inferences as low confidence and validate them later with authorized exports or authenticated review.

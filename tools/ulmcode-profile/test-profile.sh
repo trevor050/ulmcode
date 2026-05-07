@@ -19,6 +19,7 @@ grep -q '"@khalilgharbaoui/opencode-claude-code-plugin"' "$PROFILE_DIR/package.j
 grep -q '"oh-my-openagent"' "$PROFILE_DIR/package.json"
 grep -q 'file:plugins/vendor/oh-my-openagent-3.17.12' "$PROFILE_DIR/package.json"
 grep -q '"report-writer"' "$PROFILE_DIR/oh-my-openagent.jsonc"
+grep -q '"person-recon"' "$PROFILE_DIR/oh-my-openagent.jsonc"
 grep -q '"backend-architect"' "$PROFILE_DIR/oh-my-openagent.jsonc"
 grep -q '"frontend-builder"' "$PROFILE_DIR/oh-my-openagent.jsonc"
 grep -q '"product-taste-pass"' "$PROFILE_DIR/oh-my-openagent.jsonc"
@@ -34,6 +35,11 @@ grep -q 'finalHandoff: true' "$PROFILE_DIR/commands/ulm-final-handoff.md"
 grep -q '"defaultSafetyMode": "non_destructive"' "$PROFILE_DIR/tool-manifest.json"
 grep -q '"destructiveSafetyMode": "interactive_destructive"' "$PROFILE_DIR/tool-manifest.json"
 grep -q '"commandProfiles"' "$PROFILE_DIR/tool-manifest.json"
+grep -q '"agent-browser"' "$PROFILE_DIR/tool-manifest.json"
+if grep -q '"vercel"' "$PROFILE_DIR/opencode.json" || grep -q '"context7"' "$PROFILE_DIR/opencode.json"; then
+  echo "profile must not include unrelated Vercel/context7 MCP servers" >&2
+  exit 1
+fi
 test -f "$PROFILE_DIR/plugins/ulmcode-runtime-guard.js"
 test -f "$PROFILE_DIR/plugins/vendor/opencode-claude-code-plugin-0.2.2/package.json"
 grep -q '"@khalilgharbaoui/opencode-claude-code-plugin"' "$PROFILE_DIR/plugins/vendor/opencode-claude-code-plugin-0.2.2/package.json"

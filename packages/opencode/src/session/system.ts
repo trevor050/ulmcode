@@ -17,6 +17,7 @@ import type { Provider } from "@/provider/provider"
 import type { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
 import { Skill } from "@/skill"
+import { activeOperationGoal, readOperationPlanExcerpt } from "@/ulm/operation-context"
 
 type OperationGoalContext = {
   operationID: string
@@ -70,22 +71,6 @@ function parseTime(value: string | undefined) {
   return Number.isFinite(time) ? time : 0
 }
 
-async function activeOperationGoal(worktree: string) {
-  const root = path.join(worktree, ".ulmcode", "operations")
-  let entries: string[]
-  try {
-    entries = await fs.readdir(root)
-  } catch {
-    return undefined
-  }
-  const goals = (
-    await Promise.all(entries.map((entry) => readJson<OperationGoalContext>(path.join(root, entry, "goals", "operation-goal.json"))))
-  )
-    .filter((goal): goal is OperationGoalContext => !!goal && goal.status === "active")
-    .sort((a, b) => parseTime(b.updatedAt ?? b.createdAt) - parseTime(a.updatedAt ?? a.createdAt))
-  return goals[0]
-}
-
 async function latestSupervisorReview(worktree: string, operationID: string) {
   const dir = path.join(worktree, ".ulmcode", "operations", operationID, "supervisor")
   let entries: string[]
@@ -111,10 +96,13 @@ async function toolInventory(worktree: string, operationID: string) {
 }
 
 async function ulmOperationContext(worktree: string) {
-  const goal = await activeOperationGoal(worktree)
-  if (!goal) return undefined
+  const active = await activeOperationGoal(worktree)
+  if (!active) return undefined
+  const goal = active.goal
+  const maxPlanChars = goal.continuation?.injectPlanMaxChars ?? 12_000
   const supervisor = await latestSupervisorReview(worktree, goal.operationID)
   const inventory = await toolInventory(worktree, goal.operationID)
+  const plan = await readOperationPlanExcerpt(worktree, goal.operationID, maxPlanChars)
   const decision = supervisor?.decisions?.[0]
   const installed = inventory?.tools?.filter((tool) => tool.installed && tool.highValue).map((tool) => tool.id).filter(Boolean).slice(0, 8)
   const missing = inventory?.tools?.filter((tool) => !tool.installed && tool.highValue).map((tool) => tool.id).filter(Boolean).slice(0, 8)
@@ -134,7 +122,15 @@ async function ulmOperationContext(worktree: string) {
     missing?.length ? `missing_high_value: ${missing.join(", ")}` : undefined,
     inventory?.nextActions?.[0] ? `inventory_next: ${short(inventory.nextActions[0], 180)}` : undefined,
     "foreground_command_policy: commands expected over 2 minutes must use command_supervise, task background=true, runtime_scheduler, or runtime_daemon instead of foreground waiting",
+    `unattended_operator_policy: after ${goal.continuation?.operatorFallbackTimeoutSeconds ?? 75}s, permission/question prompts default safely; do not block waiting for operator`,
     "</ulm_operation_context>",
+    plan.content
+      ? [
+          `<ulm_operation_plan max_chars="${plan.maxChars}" chars="${plan.chars}" truncated="${plan.truncated}" path="${plan.path ?? ""}">`,
+          plan.content,
+          "</ulm_operation_plan>",
+        ].join("\n")
+      : `<ulm_operation_plan max_chars="${plan.maxChars}" missing="true"></ulm_operation_plan>`,
   ]
     .filter((line): line is string => line !== undefined)
     .join("\n")

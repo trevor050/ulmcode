@@ -1,6 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { operationPath, readOperationStatus, slug, type OperationStatusSummary } from "./artifact"
+import { readOperationPlanExcerpt, type OperationPlanExcerpt } from "./operation-context"
 import { readOperationGoal, type OperationGoalRecord } from "./operation-goal"
 
 export type OperationSupervisorReviewKind =
@@ -9,10 +10,15 @@ export type OperationSupervisorReviewKind =
   | "pre_compaction"
   | "post_compaction"
   | "pre_handoff"
+  | "turn_end"
+  | "reporting_gate"
+  | "operator_timeout"
   | "manual"
 
 export type OperationSupervisorAction =
   | "continue"
+  | "continue_execution"
+  | "reporting_ready"
   | "ask_question"
   | "recover"
   | "schedule"
@@ -20,6 +26,7 @@ export type OperationSupervisorAction =
   | "compact"
   | "pause"
   | "handoff_ready"
+  | "blocked_for_operator"
   | "blocked"
 
 export type OperationSupervisorDecision = {
@@ -37,6 +44,8 @@ export type OperationSupervisorReview = {
   generatedAt: string
   goal?: OperationGoalRecord
   status: OperationStatusSummary
+  planExcerpt?: OperationPlanExcerpt
+  latestAssistantMessage?: string
   decisions: OperationSupervisorDecision[]
   files?: {
     json: string
@@ -49,6 +58,7 @@ export type OperationSupervisorInput = {
   reviewKind?: OperationSupervisorReviewKind
   maxActions?: number
   writeArtifacts?: boolean
+  latestAssistantMessage?: string
 }
 
 type OperationGraphLike = {
@@ -83,6 +93,15 @@ function hasStaleOrFailedLane(graph: OperationGraphLike | undefined) {
   )
 }
 
+function graphIncomplete(status: OperationStatusSummary) {
+  return (
+    (status.graph?.lanes.incomplete.length ?? 0) > 0 ||
+    (status.graph?.lanes.missingProofs.length ?? 0) > 0 ||
+    (status.graph?.lanes.invalidProofs.length ?? 0) > 0 ||
+    (status.graph?.lanes.running.length ?? 0) > 0
+  )
+}
+
 function longRunGoal(goal: OperationGoalRecord | undefined) {
   return (goal?.targetDurationHours ?? 0) >= 8
 }
@@ -92,6 +111,7 @@ function decisionsFor(input: {
   goal?: OperationGoalRecord
   status: OperationStatusSummary
   graph?: OperationGraphLike
+  finalArtifacts: { operationAudit: boolean; handoffGate: boolean }
 }) {
   const decisions: OperationSupervisorDecision[] = []
   if (!input.goal) {
@@ -118,6 +138,18 @@ function decisionsFor(input: {
       }),
     )
   }
+  if (hasStaleOrFailedLane(input.graph)) {
+    decisions.push(
+      decision({
+        action: "recover",
+        reason: "operation graph contains failed, blocked, stale, errored, or cancelled lane work",
+        requiredNextTool: "operation_resume",
+        requiredArtifacts: ["plans/operation-graph.json", "background job metadata"],
+        operatorMessage: "Recover restartable stale or failed lanes before launching duplicate work.",
+        modelPrompt: "Call operation_resume with recoverStaleTasks=true, or call operation_recover for the operation.",
+      }),
+    )
+  }
   if (longRunGoal(input.goal) && input.graph && !input.graph.lanes?.some((lane) => lane.id === "supervisor")) {
     decisions.push(
       decision({
@@ -130,15 +162,15 @@ function decisionsFor(input: {
       }),
     )
   }
-  if (hasStaleOrFailedLane(input.graph)) {
+  if (input.status.graph?.exists && graphIncomplete(input.status)) {
     decisions.push(
       decision({
-        action: "recover",
-        reason: "operation graph contains failed, blocked, stale, errored, or cancelled lane work",
-        requiredNextTool: "operation_resume",
-        requiredArtifacts: ["plans/operation-graph.json", "background job metadata"],
-        operatorMessage: "Recover restartable stale or failed lanes before launching duplicate work.",
-        modelPrompt: "Call operation_resume with recoverStaleTasks=true, or call operation_recover for the operation.",
+        action: "continue_execution",
+        reason: "operation graph has incomplete lanes or missing lane proof",
+        requiredNextTool: "operation_run",
+        requiredArtifacts: ["plans/operation-graph.json", "lane-complete/"],
+        operatorMessage: "Continue execution until every planned lane is complete or explicitly skipped with proof.",
+        modelPrompt: "Call operation_run or operation_next, then advance the next incomplete lane with task background=true or command_supervise.",
       }),
     )
   }
@@ -166,11 +198,47 @@ function decisionsFor(input: {
       }),
     )
   }
+  const executionReadyForReporting =
+    input.status.plans.operation &&
+    !graphIncomplete(input.status) &&
+    !hasStaleOrFailedLane(input.graph) &&
+    input.status.findings.byState.candidate === 0 &&
+    input.status.findings.byState.needs_validation === 0
+  if (
+    executionReadyForReporting &&
+    (!input.status.reports.outline ||
+      (!input.status.reports.markdown && !input.status.reports.html) ||
+      !input.status.reports.manifest ||
+      !input.status.runtimeSummary ||
+      !input.finalArtifacts.operationAudit ||
+      !input.finalArtifacts.handoffGate)
+  ) {
+    decisions.push(
+      decision({
+        action: "reporting_ready",
+        reason: "execution lanes are ready for the reporting and audit pipeline",
+        requiredNextTool: "report_outline",
+        requiredArtifacts: [
+          "reports/report-outline.md",
+          "reports/report.md or reports/report.html",
+          "deliverables/final/manifest.json",
+          "deliverables/runtime-summary.json",
+          "deliverables/operation-audit.json",
+          "deliverables/stage-gates/handoff.json",
+        ],
+        operatorMessage: "Start the report closeout pipeline before handoff.",
+        modelPrompt:
+          "Run report_outline, evidence_normalize if needed, report writer, technical and executive review, report_lint, report_render, runtime_summary, operation_audit, then operation_stage_gate for handoff.",
+      }),
+    )
+  }
   if (
     input.reviewKind === "pre_handoff" &&
     input.goal?.status === "complete" &&
     input.status.runtimeSummary &&
     input.status.reports.manifest &&
+    input.finalArtifacts.operationAudit &&
+    input.finalArtifacts.handoffGate &&
     !hasRuntimeBlindSpot(input.status)
   ) {
     decisions.push(
@@ -183,10 +251,21 @@ function decisionsFor(input: {
       }),
     )
   }
+  if (!decisions.length && input.reviewKind === "operator_timeout") {
+    decisions.push(
+      decision({
+        action: "blocked_for_operator",
+        reason: "operator prompt timed out and fallback policy denied or answered conservatively",
+        requiredArtifacts: ["operator-timeouts/"],
+        operatorMessage: "Operator input was unavailable; stay within the existing authorized scope.",
+        modelPrompt: "Do not retry the same blocked ask. Continue with safe in-scope work, or pause only if no safe bounded work remains.",
+      }),
+    )
+  }
   if (!decisions.length) {
     decisions.push(
       decision({
-        action: "continue",
+        action: input.reviewKind === "turn_end" ? "continue_execution" : "continue",
         reason: "no supervisor blockers found",
         requiredNextTool: "operation_run",
         requiredArtifacts: ["plans/operation-run.jsonl"],
@@ -207,6 +286,10 @@ function reviewMarkdown(review: OperationSupervisorReview) {
     `goal_status: ${review.goal?.status ?? "missing"}`,
     `operation_stage: ${review.status.operation?.stage ?? "unknown"}`,
     `operation_status: ${review.status.operation?.status ?? "unknown"}`,
+    review.planExcerpt
+      ? `plan_excerpt: path=${review.planExcerpt.path ?? "missing"} chars=${review.planExcerpt.chars} max_chars=${review.planExcerpt.maxChars} truncated=${review.planExcerpt.truncated}`
+      : undefined,
+    review.latestAssistantMessage ? `latest_assistant_message: ${review.latestAssistantMessage.slice(0, 500)}` : undefined,
     "",
     "## Decisions",
     "",
@@ -222,7 +305,9 @@ function reviewMarkdown(review: OperationSupervisorReview) {
         .join("\n"),
     ),
     "",
-  ].join("\n")
+  ]
+    .filter((line): line is string => line !== undefined)
+    .join("\n")
 }
 
 async function writeReview(worktree: string, review: OperationSupervisorReview) {
@@ -247,14 +332,24 @@ export async function superviseOperation(
   const operationID = slug(input.operationID, "operation")
   const status = await readOperationStatus(worktree, operationID)
   const goal = (await readOperationGoal(worktree, operationID)).goal
-  const graph = await readJson<OperationGraphLike>(path.join(operationPath(worktree, operationID), "plans", "operation-graph.json"))
+  const root = operationPath(worktree, operationID)
+  const graph = await readJson<OperationGraphLike>(path.join(root, "plans", "operation-graph.json"))
+  const finalArtifacts = {
+    operationAudit: !!(await readJson(path.join(root, "deliverables", "operation-audit.json"))),
+    handoffGate: !!(await readJson(path.join(root, "deliverables", "stage-gates", "handoff.json"))),
+  }
   const review: OperationSupervisorReview = {
     operationID,
     reviewKind: input.reviewKind ?? "manual",
     generatedAt: options.now ?? new Date().toISOString(),
     goal,
     status,
-    decisions: decisionsFor({ reviewKind: input.reviewKind ?? "manual", goal, status, graph }).slice(0, input.maxActions ?? 5),
+    planExcerpt: await readOperationPlanExcerpt(worktree, operationID, goal?.continuation?.injectPlanMaxChars ?? 12_000),
+    latestAssistantMessage: input.latestAssistantMessage,
+    decisions: decisionsFor({ reviewKind: input.reviewKind ?? "manual", goal, status, graph, finalArtifacts }).slice(
+      0,
+      input.maxActions ?? 5,
+    ),
   }
   if (input.writeArtifacts === false) return review
   return writeReview(worktree, review)

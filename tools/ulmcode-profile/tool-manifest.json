@@ -59,6 +59,22 @@
       "fallbacks": ["dig"]
     },
     {
+      "id": "agent-browser",
+      "purpose": "low-context browser navigation, screenshots, form review, and authenticated workflow observation for authorized HTTP surfaces",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "npm", "command": "npm i -g agent-browser && agent-browser install" },
+        { "platform": "skills", "command": "npx skills add https://github.com/vercel-labs/agent-browser --skill agent-browser" }
+      ],
+      "validate": "agent-browser --version",
+      "safeExamples": [
+        "agent-browser open https://<authorized-host>",
+        "agent-browser screenshot --output evidence/screenshots/<host>.png"
+      ],
+      "outputParsers": ["screenshots", "text"],
+      "fallbacks": ["playwright", "manual-browser-review"]
+    },
+    {
       "id": "gowitness",
       "purpose": "browser screenshots for authorized HTTP surfaces",
       "safety": "non_destructive",
@@ -70,7 +86,7 @@
         "gowitness scan file -f evidence/raw/urls.txt --screenshot-path evidence/screenshots --write-db"
       ],
       "outputParsers": ["sqlite", "screenshots"],
-      "fallbacks": ["playwright", "browser-use"]
+      "fallbacks": ["agent-browser", "playwright", "browser-use"]
     },
     {
       "id": "ffuf",
@@ -337,6 +353,17 @@
       "hardTimeoutSeconds": 7200,
       "restartable": true,
       "artifacts": ["evidence/raw/web-title-screenshot.jsonl"]
+    },
+    {
+      "id": "browser-screenshot",
+      "tool": "agent-browser",
+      "safety": "non_destructive",
+      "template": "agent-browser screenshot {url} --output {outputPrefix}.png",
+      "heartbeatSeconds": 60,
+      "idleTimeoutSeconds": 600,
+      "hardTimeoutSeconds": 3600,
+      "restartable": true,
+      "artifacts": ["evidence/screenshots/browser-screenshot.png"]
     },
     {
       "id": "tls-inventory",

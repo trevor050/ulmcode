@@ -29,5 +29,6 @@ Pentest plans should include these fields in the plan text even if the JSON sche
 - `supervisorHandoff`: when the supervisor reviews progress and what it is allowed to block
 - `foregroundCommandPolicy`: confirmation that expected >2 minute commands go to supervised/background execution
 - `reportCloseout`: report writer, report reviewer, report lint, report render, runtime summary, and operation audit sequence
+- `districtAndPeopleRecon`: district profile, specific people/role profile lanes, identity graph construction, and how private/irrelevant information is excluded
 
 Do not use chat todos as the plan of record. The durable plan must be written here, then scheduled through `operation_schedule` before broad execution.

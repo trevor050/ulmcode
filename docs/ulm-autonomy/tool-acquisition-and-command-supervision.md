@@ -10,6 +10,7 @@
 
 - `tools/ulmcode-profile/tool-manifest.json` is the tool-acquisition and supervised-command catalog.
 - Each tool records install methods, validation command, safe examples, output parsers, safety classification, and fallback paths.
+- `agent-browser` is the preferred low-context browser automation tool in the ULM profile; Playwright stays as a fallback. The isolated profile intentionally excludes unrelated Vercel and context7 MCP servers.
 - Each command profile records heartbeat, idle timeout, hard timeout, restartability, expected artifacts, and safety mode.
 - `tool_acquire` validates a required local tool, records blockers/fallbacks, and only installs when explicitly requested. Omitting `toolID` runs a clean-machine preflight across every manifest tool and writes `tools/tool-preflight.json` plus `.md`; the markdown includes a blocked install plan with validation command, install command, fallback path, and blocker text for every missing tool.
 - Operators can run the same preflight outside a model turn with `bun run --cwd packages/opencode ulm:tool-preflight -- --worktree <repo-or-operation-worktree> --json`.

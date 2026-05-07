@@ -100,10 +100,10 @@ describe("ULM runtime scheduler", () => {
       },
     })
 
-    expect(launched).toEqual([{ laneID: "recon", modelRoute: "opencode-go/default" }])
-    expect(result.cycles[0]?.launchedJobs).toEqual(["job-recon"])
+    expect(launched).toEqual([{ laneID: "district_profile", modelRoute: "opencode-go/default" }])
+    expect(result.cycles[0]?.launchedJobs).toEqual(["job-district_profile"])
     const heartbeat = JSON.parse(await fs.readFile(result.heartbeatPath, "utf8"))
-    expect(heartbeat.launchedJobs).toEqual(["job-recon"])
+    expect(heartbeat.launchedJobs).toEqual(["job-district_profile"])
   })
 
   test("requeues stale claimed work units during scheduler cycles", async () => {
@@ -229,11 +229,11 @@ describe("ULM runtime scheduler", () => {
     })
 
     expect(result.cycles[0]?.supervisor?.ran).toBe(true)
-    expect(result.cycles[0]?.supervisor?.action).toBe("continue")
-    expect(launched).toEqual(["recon"])
+    expect(result.cycles[0]?.supervisor?.action).toBe("continue_execution")
+    expect(launched).toEqual(["district_profile"])
     const heartbeat = JSON.parse(await fs.readFile(result.heartbeatPath, "utf8"))
     expect(heartbeat.supervisorRan).toBe(true)
-    expect(heartbeat.supervisorAction).toBe("continue")
+    expect(heartbeat.supervisorAction).toBe("continue_execution")
   })
 
   test("supervisor blockers prevent new lane launch", async () => {
@@ -297,7 +297,7 @@ describe("ULM runtime scheduler", () => {
     expect(launched).toEqual([])
   })
 
-  test("supervisor handoff-ready decisions allow the final run audit path", async () => {
+  test("supervisor pre-handoff decisions reject complete lanes without lane proof", async () => {
     await using dir = await tmpdir({ git: true })
     const goal = await createOperationGoal(dir.path, {
       operationID: "School",
@@ -332,7 +332,7 @@ describe("ULM runtime scheduler", () => {
       supervisorReviewKind: "pre_handoff",
     })
 
-    expect(result.cycles[0]?.supervisor?.action).toBe("handoff_ready")
+    expect(result.cycles[0]?.supervisor?.action).toBe("continue_execution")
     expect(result.cycles[0]?.run?.action).toBe("stop")
     expect(result.reason).toBe("all operation lanes are complete")
   })
