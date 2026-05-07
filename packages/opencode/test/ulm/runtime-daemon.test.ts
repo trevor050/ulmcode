@@ -113,8 +113,8 @@ describe("ULM runtime daemon", () => {
       },
     })
 
-    expect(launched).toEqual(["recon"])
-    expect(result.cycles[0]?.launchedJobs).toEqual(["job-recon"])
+    expect(launched).toEqual(["district_profile"])
+    expect(result.cycles[0]?.launchedJobs).toEqual(["job-district_profile"])
   })
 
   test("recovers stale operation jobs before scheduler ticks", async () => {

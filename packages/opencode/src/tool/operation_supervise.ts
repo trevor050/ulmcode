@@ -6,9 +6,22 @@ import { superviseOperation } from "@/ulm/operation-supervisor"
 
 export const Parameters = Schema.Struct({
   operationID: Schema.String,
-  reviewKind: Schema.optional(Schema.Literals(["startup", "heartbeat", "pre_compaction", "post_compaction", "pre_handoff", "manual"])),
+  reviewKind: Schema.optional(
+    Schema.Literals([
+      "startup",
+      "heartbeat",
+      "pre_compaction",
+      "post_compaction",
+      "pre_handoff",
+      "turn_end",
+      "reporting_gate",
+      "operator_timeout",
+      "manual",
+    ]),
+  ),
   maxActions: Schema.optional(Schema.Number),
   writeArtifacts: Schema.optional(Schema.Boolean),
+  latestAssistantMessage: Schema.optional(Schema.String),
 })
 
 type Metadata = {

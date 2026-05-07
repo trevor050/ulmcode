@@ -33,6 +33,9 @@ import { OperationStatusTool } from "./operation_status"
 import { EvidenceRecordTool } from "./evidence_record"
 import { EvidenceNormalizeTool } from "./evidence_normalize"
 import { FindingRecordTool } from "./finding_record"
+import { DistrictProfileTool } from "./district_profile"
+import { IdentityGraphTool } from "./identity_graph"
+import { PersonProfileTool } from "./person_profile"
 import { ReportLintTool } from "./report_lint"
 import { ReportOutlineTool } from "./report_outline"
 import { ReportRenderTool } from "./report_render"
@@ -168,6 +171,9 @@ export const layer: Layer.Layer<
     const evidenceRecord = yield* EvidenceRecordTool
     const evidenceNormalize = yield* EvidenceNormalizeTool
     const findingRecord = yield* FindingRecordTool
+    const districtProfile = yield* DistrictProfileTool
+    const identityGraph = yield* IdentityGraphTool
+    const personProfile = yield* PersonProfileTool
     const reportLint = yield* ReportLintTool
     const reportOutline = yield* ReportOutlineTool
     const reportRender = yield* ReportRenderTool
@@ -291,6 +297,9 @@ export const layer: Layer.Layer<
           evidenceRecord: Tool.init(evidenceRecord),
           evidenceNormalize: Tool.init(evidenceNormalize),
           findingRecord: Tool.init(findingRecord),
+          districtProfile: Tool.init(districtProfile),
+          identityGraph: Tool.init(identityGraph),
+          personProfile: Tool.init(personProfile),
           reportLint: Tool.init(reportLint),
           reportOutline: Tool.init(reportOutline),
           reportRender: Tool.init(reportRender),
@@ -343,6 +352,9 @@ export const layer: Layer.Layer<
             tool.evidenceRecord,
             tool.evidenceNormalize,
             tool.findingRecord,
+            tool.districtProfile,
+            tool.identityGraph,
+            tool.personProfile,
             tool.reportLint,
             tool.reportOutline,
             tool.reportRender,

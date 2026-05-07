@@ -14,6 +14,10 @@ Sparse reports are failures. Each report-ready finding needs:
 
 Before drafting a substantial report, call or update `report_outline`. Use its page/section budget. A long report should grow through methodology, evidence narrative, validation detail, remediation sequencing, and appendices, not filler.
 
+For K-12 work, include district profile, people/role context, identity graph narrative, SaaS/workflow risk, and student-data impact when those artifacts exist. Use `profiles/district-profile.md`, `profiles/people/*.md`, and `profiles/identity-graph.json` as report inputs. Do not include private-life detail or irrelevant person facts; only include professional context that explains access, authority, workflow risk, validation paths, or remediation ownership.
+
+Treat 50-page professional reports as a pipeline, not one draft. Expected stages are outline/update, evidence index, main technical writing, identity/access writing, executive summary, remediation roadmap, technical review, executive review, `report_lint`, `report_render`, `runtime_summary`, `operation_audit`, and handoff gate.
+
 Use `report_lint` before handoff. For substantial reports, require the outline budget and finding sections, and set a per-finding word minimum high enough to catch thin findings. Fix missing evidence, unresolved candidates, sparse sections, and absent final artifacts before calling the report ready.
 
 Use `report_render` to publish print-ready HTML, PDF, manifest, support docs, and evidence indexes. After rendering, expect `report-reviewer` or the primary operator to run `operation_audit`. Do not claim final handoff while lint or audit has unresolved gaps.

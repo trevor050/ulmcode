@@ -19,12 +19,12 @@ describe("ULM operation run controller", () => {
     const result = await runOperationStep(dir.path, { operationID: "School" })
 
     expect(result.action).toBe("launch_lane")
-    expect(result.laneID).toBe("recon")
+    expect(result.laneID).toBe("district_profile")
     expect(result.taskParams?.background).toBe(true)
     expect(result.taskParams?.modelRoute).toBe("opencode-go/default")
-    expect(result.commandProfiles).toContain("service-inventory")
+    expect(result.commandProfiles).toEqual([])
     const graph = JSON.parse(await fs.readFile(result.graphPath, "utf8"))
-    expect(graph.lanes.find((lane: { id: string }) => lane.id === "recon")?.status).toBe("running")
+    expect(graph.lanes.find((lane: { id: string }) => lane.id === "district_profile")?.status).toBe("running")
   })
 
   test("marks complete lanes and unlocks dependent lanes", async () => {
@@ -70,15 +70,15 @@ describe("ULM operation run controller", () => {
     const result = await runOperationStep(dir.path, {
       operationID: "School",
       mode: "complete_lane",
-      laneID: "recon",
-      summary: "Recon finished.",
-      artifacts: ["evidence/raw/", "commands/", "status.md"],
+      laneID: "district_profile",
+      summary: "District profile finished.",
+      artifacts: ["profiles/district-profile.json", "profiles/district-profile.md"],
     })
 
     const updated = JSON.parse(await fs.readFile(graph.json, "utf8"))
-    expect(result.blockers).toContain("proof artifact is missing or empty: evidence/raw/")
-    expect(result.completedLanes).not.toContain("recon")
-    expect(updated.lanes.find((lane: { id: string }) => lane.id === "recon")?.status).toBe("running")
+    expect(result.blockers).toContain("proof artifact is missing or empty: profiles/district-profile.json")
+    expect(result.completedLanes).not.toContain("district_profile")
+    expect(updated.lanes.find((lane: { id: string }) => lane.id === "district_profile")?.status).toBe("running")
   })
 
   test("auto-completes running lanes only when lane completion proof references real artifacts", async () => {
@@ -91,22 +91,20 @@ describe("ULM operation run controller", () => {
     })
     await runOperationStep(dir.path, { operationID: "School" })
     const operationRoot = path.join(dir.path, ".ulmcode", "operations", "school")
-    await fs.mkdir(path.join(operationRoot, "evidence", "raw"), { recursive: true })
-    await fs.mkdir(path.join(operationRoot, "commands"), { recursive: true })
-    await fs.writeFile(path.join(operationRoot, "evidence", "raw", "service-inventory.xml"), "<nmaprun />\n")
-    await fs.writeFile(path.join(operationRoot, "commands", "service-inventory.log"), "complete\n")
-    await fs.writeFile(path.join(operationRoot, "status.md"), "recon done\n")
+    await fs.mkdir(path.join(operationRoot, "profiles"), { recursive: true })
+    await fs.writeFile(path.join(operationRoot, "profiles", "district-profile.json"), "{}\n")
+    await fs.writeFile(path.join(operationRoot, "profiles", "district-profile.md"), "# District Profile\n")
     await fs.mkdir(path.join(operationRoot, "lane-complete"), { recursive: true })
     await fs.writeFile(
-      path.join(operationRoot, "lane-complete", "recon.json"),
+      path.join(operationRoot, "lane-complete", "district_profile.json"),
       JSON.stringify(
         {
           operationID: "school",
-          laneID: "recon",
+          laneID: "district_profile",
           status: "complete",
           completedAt: new Date().toISOString(),
-          summary: "Recon has concrete artifacts.",
-          artifacts: ["evidence/raw/", "commands/", "status.md"],
+          summary: "District profile has concrete artifacts.",
+          artifacts: ["profiles/district-profile.json", "profiles/district-profile.md"],
           evidenceRefs: [],
         },
         null,
@@ -117,9 +115,9 @@ describe("ULM operation run controller", () => {
     const result = await runOperationStep(dir.path, { operationID: "School" })
 
     const updated = JSON.parse(await fs.readFile(graph.json, "utf8"))
-    expect(result.completedLanes).toContain("recon")
-    expect(updated.lanes.find((lane: { id: string }) => lane.id === "recon")?.status).toBe("complete")
-    expect(updated.lanes.find((lane: { id: string }) => lane.id === "web_inventory")?.status).toBe("running")
+    expect(result.completedLanes).toContain("district_profile")
+    expect(updated.lanes.find((lane: { id: string }) => lane.id === "district_profile")?.status).toBe("complete")
+    expect(updated.lanes.find((lane: { id: string }) => lane.id === "person_recon")?.status).toBe("running")
   })
 
   test("syncs completed background jobs back to lane state", async () => {

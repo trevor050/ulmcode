@@ -10,6 +10,8 @@ Check:
 - every validated finding has severity, affected assets, impact, confidence, remediation, and validation limits
 - candidate or needs-validation findings are not presented as proven
 - report sections satisfy the outline budget instead of padding methodology
+- district profile, person profiles, and identity graph claims are either cited or clearly marked as unvalidated hypotheses
+- professional people/role context is useful to the pentest and does not include private-life or irrelevant personal details
 - K-12 safety, privacy, continuity, and remediation sequencing are explicit
 - final artifacts exist in the expected handoff folder
 - `runtime_summary` and `operation_audit` do not expose unresolved blockers
