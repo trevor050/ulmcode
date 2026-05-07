@@ -589,6 +589,8 @@ async function auditProfileRouting() {
     '"xhigh-court"',
     '"reasoningEffort": "xhigh"',
   ])
+  assert(!profileConfig.includes('"oh-my-openagent"'), "profile must not load Oh My OpenAgent")
+  assert(!profileConfig.includes('"oh-my-opencode"'), "profile must not load legacy Oh My OpenCode")
   requireText("tools/ulmcode-profile/plugins/shell-strategy/shell_strategy.md", shellStrategy, [
     "Shell Non-Interactive Strategy",
     "GIT_TERMINAL_PROMPT",
@@ -596,21 +598,16 @@ async function auditProfileRouting() {
     "Long Command Handoff",
   ])
   for (const command of [
-    "btw.md",
-    "commit-msg.md",
-    "explain-diff.md",
-    "frontend-polish.md",
-    "handoff.md",
-    "review.md",
-    "ship.md",
-    "test-plan.md",
+    "ulm-final-handoff.md",
+    "ulm-resume.md",
+    "ulm-test-plan.md",
   ]) {
     assert(await exists(`tools/ulmcode-profile/commands/${command}`), `profile command ${command} is missing`)
   }
   return {
     id: "profile_routing",
     status: "ok",
-    detail: "GPT-5.5/GPT-5.4 routing, xhigh hard-task routes, shell strategy, and local workflow commands are enforced",
+    detail: "GPT-5.5/GPT-5.4 routing, xhigh hard-task routes, shell strategy, and ULM commands are enforced",
   } satisfies CheckResult
 }
 
@@ -637,8 +634,8 @@ async function auditProfileRuntime() {
   ])
   requireText("tools/ulmcode-profile/scripts/install-profile.sh", installer, [
     "ulmcode-launch.sh",
-    "oh-my-openagent.jsonc",
-    "local-opencode",
+    "rm -f \"$TARGET_DIR/oh-my-openagent.jsonc\"",
+    "rm -f \"$TARGET_DIR/.opencode/oh-my-openagent.jsonc\"",
     "tool-manifest.json",
   ])
   requireText("tools/ulmcode-profile/tool-manifest.json", toolManifest, [

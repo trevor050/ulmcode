@@ -26,7 +26,7 @@ async function makeAuditFixture() {
   await writeFixtureFile(
     root,
     "tools/ulmcode-profile/opencode.json",
-    JSON.stringify({ plugin: ["oh-my-openagent"] }),
+    JSON.stringify({ plugin: ["plugins/ulmcode-runtime-guard.js"] }),
   )
   await writeFixtureFile(
     root,
@@ -36,7 +36,7 @@ async function makeAuditFixture() {
   await writeFixtureFile(
     root,
     "tools/ulmcode-profile/scripts/install-profile.sh",
-    "cp ulmcode-launch.sh oh-my-openagent.jsonc local-opencode tool-manifest.json",
+    'cp ulmcode-launch.sh tool-manifest.json\nrm -f "$TARGET_DIR/oh-my-openagent.jsonc"\nrm -f "$TARGET_DIR/.opencode/oh-my-openagent.jsonc"',
   )
   await writeFixtureFile(
     root,

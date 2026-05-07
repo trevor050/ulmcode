@@ -129,6 +129,7 @@ type ProfileConfig = {
   small_model?: string
   default_agent?: string
   instructions?: string[]
+  plugin?: string[]
   agent?: Record<string, AgentConfig>
 }
 
@@ -144,7 +145,6 @@ type OmoConfig = {
 }
 
 const opencodeConfig = JSON.parse(await fs.readFile(profileConfig, "utf8")) as ProfileConfig
-const omoConfig = JSON.parse(await fs.readFile(path.join(profileRoot, "oh-my-openagent.jsonc"), "utf8")) as OmoConfig
 
 function assertRoute(file: string, id: string, route: OmoRoute | undefined, expected: OmoRoute) {
   if (!route) throw new Error(`${file}: missing route ${id}`)
@@ -178,33 +178,9 @@ function validateRouting() {
   if (opencodeConfig.agent?.["report-reviewer"]?.options?.reasoningEffort !== "xhigh") {
     throw new Error("opencode.json: report-reviewer must use xhigh reasoning")
   }
-
-  assertRoute("oh-my-openagent.jsonc", "quick", omoConfig.categories?.quick, {
-    model: "openai/gpt-5.4-mini-fast",
-  })
-  assertRoute("oh-my-openagent.jsonc", "repo-scout", omoConfig.categories?.["repo-scout"], {
-    model: "openai/gpt-5.4-mini-fast",
-  })
-  assertRoute("oh-my-openagent.jsonc", "validator", omoConfig.categories?.validator, {
-    model: "openai/gpt-5.5-fast",
-    variant: "xhigh",
-    reasoningEffort: "xhigh",
-  })
-  assertRoute("oh-my-openagent.jsonc", "plan-critic", omoConfig.categories?.["plan-critic"], {
-    model: "openai/gpt-5.5-fast",
-    variant: "high",
-    reasoningEffort: "high",
-  })
-  assertRoute("oh-my-openagent.jsonc", "report-reviewer", omoConfig.categories?.["report-reviewer"], {
-    model: "openai/gpt-5.5-fast",
-    variant: "xhigh",
-    reasoningEffort: "xhigh",
-  })
-  assertRoute("oh-my-openagent.jsonc", "xhigh-court", omoConfig.categories?.["xhigh-court"], {
-    model: "openai/gpt-5.5-fast",
-    variant: "xhigh",
-    reasoningEffort: "xhigh",
-  })
+  if (opencodeConfig.plugin?.some((plugin) => plugin === "oh-my-openagent" || plugin === "oh-my-opencode")) {
+    throw new Error("opencode.json: ULM profile must not load Oh My OpenAgent")
+  }
 }
 
 if (!opencodeConfig.instructions?.includes("__ULMCODE_PROFILE_DIR__/plugins/shell-strategy/shell_strategy.md")) {
@@ -222,19 +198,14 @@ for (const needle of ["Plannotator-style critique lane", "critic only", "does no
 }
 
 const profileReadme = await fs.readFile(path.join(profileRoot, "README.md"), "utf8")
-for (const needle of ["plan-critic", "replace_plan=false", "ROE/safety concerns"]) {
-  if (!profileReadme.includes(needle)) throw new Error(`profile README is missing Plannotator note: ${needle}`)
+for (const needle of ["General personal OpenCode agents", "Sisyphus", "OpenCode-Builder"]) {
+  if (!profileReadme.includes(needle)) throw new Error(`profile README is missing isolation note: ${needle}`)
 }
 
 for (const command of [
-  "btw.md",
-  "commit-msg.md",
-  "explain-diff.md",
-  "frontend-polish.md",
-  "handoff.md",
-  "review.md",
-  "ship.md",
-  "test-plan.md",
+  "ulm-final-handoff.md",
+  "ulm-resume.md",
+  "ulm-test-plan.md",
 ]) {
   if (!commandFiles.some((file) => path.basename(file) === command)) {
     throw new Error(`profile commands missing ${command}`)

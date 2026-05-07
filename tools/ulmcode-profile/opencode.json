@@ -93,8 +93,7 @@
   },
   "plugin": [
     "__ULMCODE_PROFILE_DIR__/plugins/ulmcode-runtime-guard.js",
-    "@khalilgharbaoui/opencode-claude-code-plugin",
-    "oh-my-openagent"
+    "@khalilgharbaoui/opencode-claude-code-plugin"
   ],
   "mcp": {
     "agent_browser": {

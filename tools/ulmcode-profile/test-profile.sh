@@ -18,17 +18,10 @@ done
 grep -q '"@khalilgharbaoui/opencode-claude-code-plugin"' "$PROFILE_DIR/package.json"
 grep -q '"oh-my-openagent"' "$PROFILE_DIR/package.json"
 grep -q 'file:plugins/vendor/oh-my-openagent-3.17.12' "$PROFILE_DIR/package.json"
-grep -q '"report-writer"' "$PROFILE_DIR/oh-my-openagent.jsonc"
-grep -q '"person-recon"' "$PROFILE_DIR/oh-my-openagent.jsonc"
-grep -q '"backend-architect"' "$PROFILE_DIR/oh-my-openagent.jsonc"
-grep -q '"frontend-builder"' "$PROFILE_DIR/oh-my-openagent.jsonc"
-grep -q '"product-taste-pass"' "$PROFILE_DIR/oh-my-openagent.jsonc"
-grep -q '"background_task"' "$PROFILE_DIR/oh-my-openagent.jsonc"
 grep -q 'ulmcode-runtime-guard.js' "$PROFILE_DIR/opencode.json"
 grep -q '"k12-long-report-production": "allow"' "$PROFILE_DIR/opencode.json"
-grep -q '"oh-my-openagent"' "$PROFILE_DIR/opencode.json"
-if grep -q 'oh-my-openagent@latest' "$PROFILE_DIR/opencode.json"; then
-  echo "profile must use vendored oh-my-openagent dependency, not @latest" >&2
+if grep -q 'oh-my-openagent' "$PROFILE_DIR/opencode.json" || grep -q 'oh-my-opencode' "$PROFILE_DIR/opencode.json"; then
+  echo "profile must not load Oh My OpenAgent; ULMCode owns its native agent surface" >&2
   exit 1
 fi
 grep -q 'finalHandoff: true' "$PROFILE_DIR/commands/ulm-final-handoff.md"
@@ -51,13 +44,6 @@ grep -q '"name": "oh-my-openagent"' "$PROFILE_DIR/plugins/vendor/oh-my-openagent
 grep -q '"version": "3.17.12"' "$PROFILE_DIR/plugins/vendor/oh-my-openagent-3.17.12/package.json"
 grep -q 'npm pack oh-my-openagent@3.17.12' "$PROFILE_DIR/plugins/vendor/oh-my-openagent-3.17.12/ULMCODE_VENDOR.md"
 bun "$PROFILE_DIR/scripts/check-runtime-guard.mjs" "$PROFILE_DIR/plugins/ulmcode-runtime-guard.js" >/dev/null
-test -f "$PROFILE_DIR/local-opencode/.opencode/agents/backend-architect.md"
-test -f "$PROFILE_DIR/local-opencode/.opencode/agents/verification-court.md"
-test -f "$PROFILE_DIR/local-opencode/.opencode/prompts/sisyphus-routing.md"
-test -f "$PROFILE_DIR/local-opencode/.opencode/commands/feature-forge.md"
-test -f "$PROFILE_DIR/local-opencode/root/commands/ship.md"
-grep -q 'Feature Forge' "$PROFILE_DIR/local-opencode/.opencode/commands/feature-forge.md"
-grep -q 'GPT-5.5 backend architect' "$PROFILE_DIR/local-opencode/.opencode/agents/backend-architect.md"
 sh -n "$PROFILE_DIR/scripts/install-profile.sh"
 install_dir="$(mktemp -d)"
 trap 'rm -rf "$install_dir"' EXIT
@@ -70,10 +56,14 @@ grep -q 'file:plugins/vendor/oh-my-openagent-3.17.12' "$install_dir/package.json
 test -f "$install_dir/tool-manifest.json"
 grep -q '"commandProfiles"' "$install_dir/tool-manifest.json"
 test -f "$install_dir/commands/ulm-resume.md"
-test -f "$install_dir/commands/ship.md"
-test -f "$install_dir/.opencode/agents/backend-architect.md"
-test -f "$install_dir/.opencode/prompts/sisyphus-routing.md"
-test -f "$install_dir/.opencode/commands/feature-forge.md"
+if [ -e "$install_dir/.opencode/agents" ] || [ -e "$install_dir/.opencode/prompts" ] || [ -e "$install_dir/.opencode/commands" ]; then
+  echo "profile installer must not copy personal/general OpenCode agents, prompts, or commands" >&2
+  exit 1
+fi
+if [ -e "$install_dir/oh-my-openagent.jsonc" ] || [ -e "$install_dir/.opencode/oh-my-openagent.jsonc" ]; then
+  echo "profile installer must not install Oh My OpenAgent config files" >&2
+  exit 1
+fi
 sh -n "$install_dir/ulmcode-launch.sh"
 test -f "$PROFILE_DIR/../../packages/opencode/script/ulm-lifecycle-smoke.ts"
 (cd "$PROFILE_DIR/../../packages/opencode" && bun run test:ulm-smoke >/dev/null)
