@@ -1,3 +1,15 @@
-# Fast-edit ULM runtime settings.
+# Fast-edit ULMCode runtime settings.
+
+# Turn-end supervisor continuation after the model tries to stop.
+continuation_enabled = true
+turn_end_review = true
+max_no_tool_continuation_turns = 1
+
+# How much of the durable operation plan gets injected into ULM context.
+inject_plan_max_chars = 12000
+
+# Permission/question prompt fallback policy for unattended runs.
+operator_fallback_enabled = true
 # Set to 0 to disable the unattended operator timeout and wait forever.
 operator_timeout_seconds = 300
+max_repeated_operator_timeouts_per_kind = 2

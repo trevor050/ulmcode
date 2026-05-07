@@ -182,10 +182,11 @@ export const layer = Layer.effect(
       yield* bus.publish(Event.Asked, info)
       const ctx = yield* InstanceState.context
       const operation = yield* Effect.promise(() => activeOperationForContext(ctx))
-      const activeOperation = operation && operationAllowsUnattendedFallback(operation.goal) ? operation : undefined
+      const ulmConfig = yield* Effect.promise(() => readULMConfig(ctx))
+      const activeOperation = operation && operationAllowsUnattendedFallback(operation.goal, ulmConfig) ? operation : undefined
       const timeoutMillis =
         activeOperation !== undefined
-          ? operatorFallbackTimeoutMillis(activeOperation.goal, yield* Effect.promise(() => readULMConfig(ctx)))
+          ? operatorFallbackTimeoutMillis(activeOperation.goal, ulmConfig)
           : undefined
       const timeout =
         activeOperation === undefined || timeoutMillis === undefined

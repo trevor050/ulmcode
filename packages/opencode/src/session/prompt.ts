@@ -62,6 +62,7 @@ import { eq } from "@/storage/db"
 import * as Database from "@/storage/db"
 import { SessionTable } from "./session.sql"
 import { activeOperationForContext } from "@/ulm/operation-context"
+import { effectiveULMContinuation, readULMConfig } from "@/ulm/config"
 import { superviseOperation, type OperationSupervisorAction } from "@/ulm/operation-supervisor"
 
 // @ts-ignore
@@ -1457,8 +1458,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const ctx = yield* InstanceState.context
       const operation = yield* Effect.promise(() => activeOperationForContext(ctx))
       if (!operation) return false
-      if (operation.goal.continuation?.turnEndReview === false) return false
-      if (operation.goal.continuation?.enabled === false) return false
+      const continuation = effectiveULMContinuation(operation.goal, yield* Effect.promise(() => readULMConfig(ctx)))
+      if (!continuation.turnEndReview) return false
+      if (!continuation.enabled) return false
 
       const review = yield* Effect.tryPromise(() =>
         superviseOperation(operation.worktree, {
@@ -1475,7 +1477,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         (msg) => msg.info.role === "user" && !msg.parts.every((part) => "synthetic" in part && part.synthetic),
       )
       const noToolContinuations = countNoToolContinuationTurns({ messages: input.messages, lastHumanUser })
-      if (noToolContinuations >= (operation.goal.continuation?.maxNoToolContinuationTurns ?? 1)) return false
+      if (noToolContinuations >= continuation.maxNoToolContinuationTurns) return false
 
       yield* createUserMessage({
         sessionID: input.sessionID,

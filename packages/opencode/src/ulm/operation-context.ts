@@ -2,6 +2,7 @@ import fs from "fs/promises"
 import path from "path"
 import { operationPath, operationsRoot } from "./artifact"
 import type { OperationGoalRecord } from "./operation-goal"
+import { effectiveULMContinuation, type ULMRuntimeConfig } from "./config"
 
 export type ActiveOperationContext = {
   worktree: string
@@ -96,6 +97,8 @@ export async function readOperationPlanExcerpt(
   )
 }
 
-export function operationAllowsUnattendedFallback(goal: OperationGoalRecord | undefined) {
-  return goal?.status === "active" && goal.continuation?.enabled !== false && goal.continuation?.operatorFallbackEnabled !== false
+export function operationAllowsUnattendedFallback(goal: OperationGoalRecord | undefined, config: ULMRuntimeConfig = {}) {
+  if (goal?.status !== "active") return false
+  const continuation = effectiveULMContinuation(goal, config)
+  return continuation.enabled && continuation.operatorFallbackEnabled
 }

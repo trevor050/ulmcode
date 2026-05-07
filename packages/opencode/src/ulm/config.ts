@@ -1,11 +1,31 @@
 import fs from "fs/promises"
 import path from "path"
+import type { OperationGoalRecord } from "./operation-goal"
 
 export type ULMRuntimeConfig = {
+  continuation_enabled?: boolean
+  turn_end_review?: boolean
+  max_no_tool_continuation_turns?: number
+  inject_plan_max_chars?: number
+  operator_fallback_enabled?: boolean
   operator_timeout_seconds?: number
+  max_repeated_operator_timeouts_per_kind?: number
 }
 
 export const ULM_CONFIG_FILE = "ULMconfig.toml"
+
+export function effectiveULMContinuation(goal: OperationGoalRecord, config: ULMRuntimeConfig = {}) {
+  return {
+    enabled: config.continuation_enabled ?? goal.continuation?.enabled ?? true,
+    turnEndReview: config.turn_end_review ?? goal.continuation?.turnEndReview ?? true,
+    maxNoToolContinuationTurns:
+      config.max_no_tool_continuation_turns ?? goal.continuation?.maxNoToolContinuationTurns ?? 1,
+    injectPlanMaxChars: config.inject_plan_max_chars ?? goal.continuation?.injectPlanMaxChars ?? 12_000,
+    operatorFallbackEnabled: config.operator_fallback_enabled ?? goal.continuation?.operatorFallbackEnabled ?? true,
+    maxRepeatedOperatorTimeoutsPerKind:
+      config.max_repeated_operator_timeouts_per_kind ?? goal.continuation?.maxRepeatedOperatorTimeoutsPerKind ?? 2,
+  }
+}
 
 function stripComment(line: string) {
   let quote: '"' | "'" | undefined
@@ -38,6 +58,22 @@ function normalizeOperatorTimeout(value: unknown) {
   return value
 }
 
+function normalizeNonNegativeInteger(value: unknown) {
+  if (value === undefined) return undefined
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return undefined
+  return Math.floor(value)
+}
+
+function normalizePositiveInteger(value: unknown) {
+  if (value === undefined) return undefined
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 1) return undefined
+  return Math.floor(value)
+}
+
+function normalizeBoolean(value: unknown) {
+  return typeof value === "boolean" ? value : undefined
+}
+
 export function parseULMConfigToml(text: string): ULMRuntimeConfig {
   let section = ""
   const result: ULMRuntimeConfig = {}
@@ -55,9 +91,28 @@ export function parseULMConfigToml(text: string): ULMRuntimeConfig {
 
     const key = section ? `${section}.${match[1]}` : match[1]
     const value = parseValue(match[2])
+    if (key === "continuation_enabled") {
+      result.continuation_enabled = normalizeBoolean(value) ?? result.continuation_enabled
+    }
+    if (key === "turn_end_review") {
+      result.turn_end_review = normalizeBoolean(value) ?? result.turn_end_review
+    }
+    if (key === "max_no_tool_continuation_turns") {
+      result.max_no_tool_continuation_turns =
+        normalizeNonNegativeInteger(value) ?? result.max_no_tool_continuation_turns
+    }
+    if (key === "inject_plan_max_chars") {
+      result.inject_plan_max_chars = normalizePositiveInteger(value) ?? result.inject_plan_max_chars
+    }
+    if (key === "operator_fallback_enabled") {
+      result.operator_fallback_enabled = normalizeBoolean(value) ?? result.operator_fallback_enabled
+    }
     if (key === "operator_timeout_seconds") {
-      const seconds = normalizeOperatorTimeout(value)
-      if (seconds !== undefined) result.operator_timeout_seconds = seconds
+      result.operator_timeout_seconds = normalizeOperatorTimeout(value) ?? result.operator_timeout_seconds
+    }
+    if (key === "max_repeated_operator_timeouts_per_kind") {
+      result.max_repeated_operator_timeouts_per_kind =
+        normalizeNonNegativeInteger(value) ?? result.max_repeated_operator_timeouts_per_kind
     }
   }
 

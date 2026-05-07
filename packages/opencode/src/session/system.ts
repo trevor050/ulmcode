@@ -18,7 +18,7 @@ import type { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
 import { Skill } from "@/skill"
 import { activeOperationGoal, readOperationPlanExcerpt } from "@/ulm/operation-context"
-import { readULMConfig } from "@/ulm/config"
+import { effectiveULMContinuation, readULMConfig } from "@/ulm/config"
 import { operatorFallbackTimeoutMillis } from "@/ulm/operator-timeout"
 
 type OperationGoalContext = {
@@ -102,8 +102,9 @@ async function ulmOperationContext(worktree: string) {
   if (!active) return undefined
   const goal = active.goal
   const config = await readULMConfig({ directory: worktree, worktree })
+  const continuation = effectiveULMContinuation(goal, config)
   const operatorTimeoutMillis = operatorFallbackTimeoutMillis(goal, config)
-  const maxPlanChars = goal.continuation?.injectPlanMaxChars ?? 12_000
+  const maxPlanChars = continuation.injectPlanMaxChars
   const supervisor = await latestSupervisorReview(worktree, goal.operationID)
   const inventory = await toolInventory(worktree, goal.operationID)
   const plan = await readOperationPlanExcerpt(worktree, goal.operationID, maxPlanChars)
@@ -130,6 +131,7 @@ async function ulmOperationContext(worktree: string) {
     operatorTimeoutMillis === undefined
       ? "unattended_operator_policy: operator timeout disabled by ULMconfig.toml; wait indefinitely for permission/question prompts"
       : `unattended_operator_policy: after ${Math.round(operatorTimeoutMillis / 1000)}s, permission/question prompts default safely; do not block waiting for operator`,
+    `ulm_config: continuation_enabled=${continuation.enabled} turn_end_review=${continuation.turnEndReview} max_no_tool_continuation_turns=${continuation.maxNoToolContinuationTurns} inject_plan_max_chars=${continuation.injectPlanMaxChars} operator_fallback_enabled=${continuation.operatorFallbackEnabled} max_repeated_operator_timeouts_per_kind=${continuation.maxRepeatedOperatorTimeoutsPerKind}`,
     "</ulm_operation_context>",
     plan.content
       ? [

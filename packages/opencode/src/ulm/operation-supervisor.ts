@@ -3,6 +3,7 @@ import path from "path"
 import { operationPath, readOperationStatus, slug, type OperationStatusSummary } from "./artifact"
 import { readOperationPlanExcerpt, type OperationPlanExcerpt } from "./operation-context"
 import { readOperationGoal, type OperationGoalRecord } from "./operation-goal"
+import { effectiveULMContinuation, readULMConfig } from "./config"
 
 export type OperationSupervisorReviewKind =
   | "startup"
@@ -332,6 +333,7 @@ export async function superviseOperation(
   const operationID = slug(input.operationID, "operation")
   const status = await readOperationStatus(worktree, operationID)
   const goal = (await readOperationGoal(worktree, operationID)).goal
+  const continuation = goal ? effectiveULMContinuation(goal, await readULMConfig({ directory: worktree, worktree })) : undefined
   const root = operationPath(worktree, operationID)
   const graph = await readJson<OperationGraphLike>(path.join(root, "plans", "operation-graph.json"))
   const finalArtifacts = {
@@ -344,7 +346,7 @@ export async function superviseOperation(
     generatedAt: options.now ?? new Date().toISOString(),
     goal,
     status,
-    planExcerpt: await readOperationPlanExcerpt(worktree, operationID, goal?.continuation?.injectPlanMaxChars ?? 12_000),
+    planExcerpt: await readOperationPlanExcerpt(worktree, operationID, continuation?.injectPlanMaxChars ?? 12_000),
     latestAssistantMessage: input.latestAssistantMessage,
     decisions: decisionsFor({ reviewKind: input.reviewKind ?? "manual", goal, status, graph, finalArtifacts }).slice(
       0,
