@@ -347,9 +347,23 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Config") {}
 
+export function applyMcpAllowlist(config: Info) {
+  const mcpAllowlist = process.env.OPENCODE_MCP_ALLOWLIST?.split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+  if (!mcpAllowlist?.length || !config.mcp) return config
+  const allowed = new Set(mcpAllowlist)
+  config.mcp = Object.fromEntries(Object.entries(config.mcp).filter(([name]) => allowed.has(name)))
+  return config
+}
+
+function globalConfigDir() {
+  return Flag.OPENCODE_CONFIG_DIR ?? Global.Path.config
+}
+
 function globalConfigFile() {
   const candidates = ["opencode.jsonc", "opencode.json", "config.json"].map((file) =>
-    path.join(Global.Path.config, file),
+    path.join(globalConfigDir(), file),
   )
   for (const file of candidates) {
     if (existsSync(file)) return file
@@ -359,7 +373,7 @@ function globalConfigFile() {
 
 function globalConfigFiles() {
   return ["config.json", "opencode.json", "opencode.jsonc", "config"].map((file) =>
-    path.join(Global.Path.config, file),
+    path.join(globalConfigDir(), file),
   )
 }
 
@@ -465,11 +479,12 @@ export const layer = Layer.effect(
     const loadGlobal = Effect.fnUntraced(function* () {
       let result: Info = {}
       const files = globalConfigFiles()
-      result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "config.json")))
-      result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "opencode.json")))
-      result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "opencode.jsonc")))
+      const configDir = globalConfigDir()
+      result = mergeConfig(result, yield* loadFile(path.join(configDir, "config.json")))
+      result = mergeConfig(result, yield* loadFile(path.join(configDir, "opencode.json")))
+      result = mergeConfig(result, yield* loadFile(path.join(configDir, "opencode.jsonc")))
 
-      const legacy = path.join(Global.Path.config, "config")
+      const legacy = path.join(configDir, "config")
       if (existsSync(legacy)) {
         yield* Effect.promise(() =>
           import(pathToFileURL(legacy).href, { with: { type: "toml" } })
@@ -478,7 +493,7 @@ export const layer = Layer.effect(
               if (provider && model) result.model = `${provider}/${model}`
               result["$schema"] = "https://opencode.ai/config.json"
               result = mergeConfig(result, rest)
-              await fsNode.writeFile(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
+              await fsNode.writeFile(path.join(configDir, "config.json"), JSON.stringify(result, null, 2))
               await fsNode.unlink(legacy)
             })
             .catch(() => {}),
@@ -619,7 +634,7 @@ export const layer = Layer.effect(
         }
 
         const global = yield* getGlobal()
-        yield* merge(Global.Path.config, global, "global")
+        yield* merge(globalConfigDir(), global, "global")
 
         if (Flag.OPENCODE_CONFIG) {
           files.add(Flag.OPENCODE_CONFIG)
@@ -801,6 +816,8 @@ export const layer = Layer.effect(
         if (Flag.OPENCODE_DISABLE_PRUNE) {
           result.compaction = { ...result.compaction, prune: false }
         }
+
+        applyMcpAllowlist(result)
 
         const trackedFiles = Array.from(files)
 

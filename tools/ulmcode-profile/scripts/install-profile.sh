@@ -25,14 +25,17 @@ cp "$PROFILE_DIR/oh-my-openagent.jsonc" "$TARGET_DIR/oh-my-openagent.jsonc"
 cp "$PROFILE_DIR/oh-my-openagent.jsonc" "$TARGET_DIR/.opencode/oh-my-openagent.jsonc"
 cp "$PROFILE_DIR/tool-manifest.json" "$TARGET_DIR/tool-manifest.json"
 sed "s#__ULMCODE_PROFILE_DIR__#$TARGET_DIR#g" "$PROFILE_DIR/opencode.json" > "$TARGET_DIR/opencode.json"
+cp "$TARGET_DIR/opencode.json" "$TARGET_DIR/ulmcode.json"
 
 cat > "$TARGET_DIR/ulmcode-launch.sh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 
+export OPENCODE_APP_NAME="${OPENCODE_APP_NAME:-ulmcode}"
 export OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-"$HOME/.config/ulmcode"}"
 export OPENCODE_CONFIG="${OPENCODE_CONFIG:-"$OPENCODE_CONFIG_DIR/opencode.json"}"
 export OPENCODE_DISABLE_PROJECT_CONFIG="${OPENCODE_DISABLE_PROJECT_CONFIG:-1}"
+export OPENCODE_MCP_ALLOWLIST="${OPENCODE_MCP_ALLOWLIST:-agent_browser,playwright,pentestMCP}"
 export OMO_DISABLE_POSTHOG="${OMO_DISABLE_POSTHOG:-1}"
 
 if command -v ulmcode >/dev/null 2>&1; then

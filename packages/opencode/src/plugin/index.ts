@@ -5,7 +5,7 @@ import type {
   PluginModule,
   WorkspaceAdapter as PluginWorkspaceAdapter,
 } from "@opencode-ai/plugin"
-import { Config } from "@/config/config"
+import { applyMcpAllowlist, Config } from "@/config/config"
 import { Bus } from "../bus"
 import * as Log from "@opencode-ai/core/util/log"
 import { createOpencodeClient } from "@opencode-ai/sdk"
@@ -238,6 +238,7 @@ export const layer = Layer.effect(
             },
           }).pipe(Effect.ignore)
         }
+        applyMcpAllowlist(cfg)
 
         // Subscribe to bus events, fiber interrupted when scope closes
         yield* bus.subscribeAll().pipe(
