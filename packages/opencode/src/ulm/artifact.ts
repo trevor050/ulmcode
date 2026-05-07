@@ -15,6 +15,8 @@ export const FINAL_PACKAGE_FILES = [
   "report.html",
   "findings.json",
   "evidence-index.json",
+  "people-profiles.md",
+  "identity-graph.json",
   "operator-review.md",
   "executive-summary.md",
   "technical-appendix.md",
@@ -133,6 +135,50 @@ export type EvidenceRecord = Omit<EvidenceInput, "content"> & {
   }
 }
 
+export type DistrictProfileInput = {
+  operationID: string
+  name: string
+  domains?: string[]
+  systems?: Array<{ name: string; category: string; source: string; notes?: string }>
+  departments?: Array<{ name: string; source: string; notes?: string }>
+  notes?: string[]
+}
+
+export type PersonProfileInput = {
+  operationID: string
+  name: string
+  role: string
+  organization?: string
+  roleCategory:
+    | "district_leadership"
+    | "school_leadership"
+    | "technology"
+    | "student_services"
+    | "finance_hr"
+    | "teacher_staff"
+    | "vendor_partner"
+    | "other"
+  whyTheyMatter: string
+  likelyAccess: string[]
+  publicContacts?: Array<{ type: "email" | "phone" | "office" | "other"; value: string; source: string }>
+  sources: Array<{ title: string; url?: string; path?: string; summary: string }>
+  validationIdeas?: string[]
+  excludedPrivateInfo?: string[]
+}
+
+export type IdentityGraphInput = {
+  operationID: string
+  nodes: Array<{ id: string; kind: "person" | "account" | "group" | "role" | "application" | "data" | "vendor" | "device"; label: string; source?: string }>
+  edges: Array<{ from: string; to: string; relationship: string; evidence?: string[]; confidence?: "low" | "medium" | "high" }>
+  notes?: string[]
+}
+
+export type ProfileWriteResult = {
+  operationID: string
+  json: string
+  markdown: string
+}
+
 export type EvidenceWriteResult = {
   operationID: string
   evidenceID: string
@@ -238,6 +284,7 @@ export type OperationStatusSummary = {
     manifest: boolean
   }
   runtimeSummary: boolean
+  evalScorecard: boolean
   graph?: {
     exists: boolean
     lanes: {
@@ -526,6 +573,42 @@ export type RuntimeSummaryResult = {
   finalDir: string
 }
 
+export type EvalScorecardInput = {
+  operationID: string
+  target: string
+  sandbox?: string
+  allowedProfiles?: string[]
+  successCriteria: string[]
+  artifactRequirements?: string[]
+  mitreTags?: string[]
+  budget?: {
+    maxHours?: number
+    maxUSD?: number
+  }
+  metrics: {
+    passed: boolean
+    timeToFirstSignalMs?: number
+    validatedFindings: number
+    falsePositives: number
+    toolFailures: number
+    retries: number
+    costUSD?: number
+    reportQuality: "passed" | "failed" | "not_checked"
+  }
+  notes?: string[]
+}
+
+export type EvalScorecardRecord = EvalScorecardInput & {
+  operationID: string
+  generatedAt: string
+}
+
+export type EvalScorecardResult = {
+  operationID: string
+  json: string
+  markdown: string
+}
+
 export type OperationPlanPhase = {
   stage: Stage
   objective: string
@@ -582,6 +665,10 @@ export function makeFindingID(input: Pick<FindingInput, "findingID" | "title">) 
 
 export function makeEvidenceID(input: Pick<EvidenceInput, "evidenceID" | "title">) {
   return slug(input.evidenceID ?? input.title, `evidence-${Date.now()}`)
+}
+
+export function makePersonProfileID(input: Pick<PersonProfileInput, "name" | "role">) {
+  return slug(`${input.name}-${input.role}`, `person-${Date.now()}`)
 }
 
 async function readJson<T>(file: string): Promise<T | undefined> {
@@ -1615,6 +1702,76 @@ function operationPlanMarkdown(record: OperationPlanRecord) {
   ].join("\n")
 }
 
+function districtProfileMarkdown(input: DistrictProfileInput) {
+  return [
+    `# District Profile: ${input.name}`,
+    "",
+    "## Domains",
+    ...(input.domains?.length ? input.domains.map((domain) => `- ${domain}`) : ["- none recorded"]),
+    "",
+    "## Systems",
+    ...(input.systems?.length
+      ? input.systems.map((system) => `- ${system.name} (${system.category}) - source: ${system.source}${system.notes ? ` - ${system.notes}` : ""}`)
+      : ["- none recorded"]),
+    "",
+    "## Departments",
+    ...(input.departments?.length
+      ? input.departments.map((department) => `- ${department.name} - source: ${department.source}${department.notes ? ` - ${department.notes}` : ""}`)
+      : ["- none recorded"]),
+    "",
+    "## Notes",
+    ...(input.notes?.length ? input.notes.map((note) => `- ${note}`) : ["- none recorded"]),
+    "",
+  ].join("\n")
+}
+
+function personProfileMarkdown(input: PersonProfileInput) {
+  return [
+    `# Person Profile: ${input.name}`,
+    "",
+    `- role: ${input.role}`,
+    `- organization: ${input.organization ?? "unknown"}`,
+    `- category: ${input.roleCategory}`,
+    "",
+    "## Pentest Relevance",
+    input.whyTheyMatter,
+    "",
+    "## Likely Access Or Workflow Influence",
+    ...(input.likelyAccess.length ? input.likelyAccess.map((item) => `- ${item}`) : ["- none recorded"]),
+    "",
+    "## Public District Contacts",
+    ...(input.publicContacts?.length
+      ? input.publicContacts.map((contact) => `- ${contact.type}: ${contact.value} - source: ${contact.source}`)
+      : ["- none recorded"]),
+    "",
+    "## Sources",
+    ...input.sources.map((source) => `- ${source.title}${source.url ? ` (${source.url})` : source.path ? ` (${source.path})` : ""}: ${source.summary}`),
+    "",
+    "## Safe Validation Ideas",
+    ...(input.validationIdeas?.length ? input.validationIdeas.map((idea) => `- ${idea}`) : ["- none recorded"]),
+    "",
+    "## Excluded Private/Irrelevant Information",
+    ...(input.excludedPrivateInfo?.length ? input.excludedPrivateInfo.map((item) => `- ${item}`) : ["- none recorded"]),
+    "",
+  ].join("\n")
+}
+
+function identityGraphMarkdown(input: IdentityGraphInput) {
+  return [
+    "# Identity Graph",
+    "",
+    "## Nodes",
+    ...input.nodes.map((node) => `- ${node.id} [${node.kind}]: ${node.label}${node.source ? ` - source: ${node.source}` : ""}`),
+    "",
+    "## Edges",
+    ...input.edges.map((edge) => `- ${edge.from} -> ${edge.to}: ${edge.relationship}${edge.confidence ? ` (${edge.confidence})` : ""}${edge.evidence?.length ? ` - evidence: ${edge.evidence.join(", ")}` : ""}`),
+    "",
+    "## Notes",
+    ...(input.notes?.length ? input.notes.map((note) => `- ${note}`) : ["- none recorded"]),
+    "",
+  ].join("\n")
+}
+
 export function validateOperationPlan(input: OperationPlanInput) {
   const gaps: string[] = []
   if (input.phases.length === 0) gaps.push("operation plan requires at least one phase")
@@ -2323,19 +2480,23 @@ export async function writeReportOutline(worktree: string, input: ReportOutlineI
   const operation = await readJson<OperationRecord>(path.join(root, "operation.json"))
   const findings = await readFindings(root)
   const reportReady = findings.filter((item) => item.state === "report_ready" || item.state === "validated")
-  const targetPages = input.targetPages ?? 40
+  const targetPages = input.targetPages ?? 50
   const audience = input.audience ?? "mixed"
   const appendix = input.includeAppendix ?? true
+  const hasDistrictProfile = await exists(path.join(root, "profiles", "district-profile.json"))
+  const hasPeopleProfiles = await exists(path.join(root, "profiles", "people"))
+  const hasIdentityGraph = await exists(path.join(root, "profiles", "identity-graph.json"))
   const sections: Array<[string, number]> = [
-    ["Executive Summary", 3],
+    ["Executive Summary", 4],
     ["Scope, Authorization, and Methodology", 3],
-    ["Environment Overview", 4],
+    [hasDistrictProfile ? "District Profile and Environment Overview" : "Environment Overview", 5],
+    ...(hasPeopleProfiles || hasIdentityGraph ? ([["People, Roles, and Identity Graph", 5]] as Array<[string, number]>) : []),
     ["Attack Path Narrative", 5],
-    ["Findings Detail", Math.max(10, reportReady.length * 3)],
-    ["Risk Register and Prioritized Roadmap", 4],
-    ["Validation Limits and Known Unknowns", 2],
+    ["Findings Detail", Math.max(12, reportReady.length * 4)],
+    ["Risk Register and Prioritized Roadmap", 5],
+    ["Validation Limits and Known Unknowns", 3],
     ["Evidence Map", 3],
-    ...(appendix ? [["Appendix: Raw Evidence Index", 6] as [string, number]] : []),
+    ...(appendix ? [["Appendix: Raw Evidence Index", 8] as [string, number]] : []),
   ]
   const allocated = sections.reduce((sum, [, pages]) => sum + pages, 0)
   const multiplier = targetPages > allocated ? targetPages / allocated : 1
@@ -2363,6 +2524,8 @@ export async function writeReportOutline(worktree: string, input: ReportOutlineI
     "## Report Writer Contract",
     "- Every finding section must include affected assets, evidence, impact, remediation, confidence, and validation limits.",
     "- Every evidence claim must cite a stored evidence id or path.",
+    "- People, role, and identity claims should cite `profiles/` artifacts or evidence records.",
+    "- Long reports should pass evidence indexing, technical review, executive review, report_lint, report_render, runtime_summary, operation_audit, and handoff gates before delivery.",
     "- Sparse sections should be expanded with methodology, observations, validation detail, and remediation sequencing, not filler.",
     "- Known unknowns and rejected findings belong in the report when they affect decision-making.",
     "",
@@ -2436,6 +2599,7 @@ export async function readOperationStatus(
       manifest: await exists(path.join(root, "deliverables", "final", "manifest.json")),
     },
     runtimeSummary: !!runtime,
+    evalScorecard: await exists(path.join(root, "deliverables", "eval-scorecard.json")),
     graph: await readGraphStatus(root, id),
     runtime: runtime
       ? {
@@ -2450,6 +2614,72 @@ export async function readOperationStatus(
       : undefined,
     lastEvents: await readJsonlTail(path.join(root, "events.jsonl"), options.eventLimit ?? 5),
   }
+}
+
+function evalScorecardMarkdown(record: EvalScorecardRecord) {
+  return [
+    "# ULM Eval Scorecard",
+    "",
+    `- Operation: ${record.operationID}`,
+    `- Target: ${record.target}`,
+    `- Sandbox: ${record.sandbox ?? "unspecified"}`,
+    `- Status: ${record.metrics.passed ? "passed" : "failed"}`,
+    `- Generated: ${record.generatedAt}`,
+    record.budget?.maxHours === undefined ? undefined : `- Budget hours: ${record.budget.maxHours}`,
+    record.budget?.maxUSD === undefined ? undefined : `- Budget USD: ${record.budget.maxUSD}`,
+    "",
+    "## Success Criteria",
+    "",
+    ...record.successCriteria.map((item) => `- ${item}`),
+    "",
+    "## Metrics",
+    "",
+    `- Time to first signal: ${record.metrics.timeToFirstSignalMs ?? "unknown"}ms`,
+    `- Validated findings: ${record.metrics.validatedFindings}`,
+    `- False positives: ${record.metrics.falsePositives}`,
+    `- Tool failures: ${record.metrics.toolFailures}`,
+    `- Retries: ${record.metrics.retries}`,
+    `- Cost USD: ${record.metrics.costUSD ?? "unknown"}`,
+    `- Report quality: ${record.metrics.reportQuality}`,
+    "",
+    record.allowedProfiles?.length ? `## Allowed Profiles\n\n${record.allowedProfiles.map((item) => `- ${item}`).join("\n")}\n` : undefined,
+    record.artifactRequirements?.length
+      ? `## Artifact Requirements\n\n${record.artifactRequirements.map((item) => `- ${item}`).join("\n")}\n`
+      : undefined,
+    record.mitreTags?.length ? `## MITRE Tags\n\n${record.mitreTags.map((item) => `- ${item}`).join("\n")}\n` : undefined,
+    record.notes?.length ? `## Notes\n\n${record.notes.map((item) => `- ${item}`).join("\n")}\n` : undefined,
+  ]
+    .filter((line): line is string => line !== undefined)
+    .join("\n")
+    .trimEnd()
+    .concat("\n")
+}
+
+export async function writeEvalScorecard(
+  worktree: string,
+  input: EvalScorecardInput,
+): Promise<EvalScorecardResult> {
+  const operationID = slug(input.operationID, "operation")
+  const root = operationPath(worktree, operationID)
+  const record: EvalScorecardRecord = {
+    ...input,
+    operationID,
+    generatedAt: new Date().toISOString(),
+  }
+  const json = path.join(root, "deliverables", "eval-scorecard.json")
+  const markdown = path.join(root, "deliverables", "eval-scorecard.md")
+  await writeJson(json, record)
+  await fs.writeFile(markdown, evalScorecardMarkdown(record))
+  await appendJsonl(path.join(root, "events.jsonl"), {
+    type: "eval_scorecard",
+    operationID,
+    passed: record.metrics.passed,
+    validatedFindings: record.metrics.validatedFindings,
+    falsePositives: record.metrics.falsePositives,
+    generatedAt: record.generatedAt,
+  })
+  await publishOperationUpdated(worktree, { operationID, artifact: "eval_scorecard", path: json })
+  return { operationID, json, markdown }
 }
 
 export async function listOperationStatuses(
@@ -2534,6 +2764,73 @@ export async function writeOperationPlan(
   })
   await publishOperationUpdated(worktree, { operationID, artifact: "operation_plan", path: json })
   return { operationID, json, markdown, phases: record.phases.length }
+}
+
+export async function writeDistrictProfile(
+  worktree: string,
+  input: DistrictProfileInput,
+): Promise<ProfileWriteResult> {
+  const operationID = slug(input.operationID, "operation")
+  const root = operationPath(worktree, operationID)
+  const json = path.join(root, "profiles", "district-profile.json")
+  const markdown = path.join(root, "profiles", "district-profile.md")
+  const record = { ...input, operationID, updatedAt: new Date().toISOString() }
+  await writeJson(json, record)
+  await fs.mkdir(path.dirname(markdown), { recursive: true })
+  await fs.writeFile(markdown, districtProfileMarkdown(record))
+  await appendJsonl(path.join(root, "events.jsonl"), {
+    type: "district_profile",
+    operationID,
+    updatedAt: record.updatedAt,
+  })
+  await publishOperationUpdated(worktree, { operationID, artifact: "checkpoint", path: json })
+  return { operationID, json, markdown }
+}
+
+export async function writePersonProfile(
+  worktree: string,
+  input: PersonProfileInput,
+): Promise<ProfileWriteResult> {
+  const operationID = slug(input.operationID, "operation")
+  const root = operationPath(worktree, operationID)
+  const personID = makePersonProfileID(input)
+  const json = path.join(root, "profiles", "people", `${personID}.json`)
+  const markdown = path.join(root, "profiles", "people", `${personID}.md`)
+  const record = { ...input, operationID, personID, updatedAt: new Date().toISOString() }
+  await writeJson(json, record)
+  await fs.mkdir(path.dirname(markdown), { recursive: true })
+  await fs.writeFile(markdown, personProfileMarkdown(record))
+  await appendJsonl(path.join(root, "events.jsonl"), {
+    type: "person_profile",
+    operationID,
+    personID,
+    updatedAt: record.updatedAt,
+  })
+  await publishOperationUpdated(worktree, { operationID, artifact: "checkpoint", path: json })
+  return { operationID, json, markdown }
+}
+
+export async function writeIdentityGraph(
+  worktree: string,
+  input: IdentityGraphInput,
+): Promise<ProfileWriteResult> {
+  const operationID = slug(input.operationID, "operation")
+  const root = operationPath(worktree, operationID)
+  const json = path.join(root, "profiles", "identity-graph.json")
+  const markdown = path.join(root, "profiles", "identity-graph.md")
+  const record = { ...input, operationID, updatedAt: new Date().toISOString() }
+  await writeJson(json, record)
+  await fs.mkdir(path.dirname(markdown), { recursive: true })
+  await fs.writeFile(markdown, identityGraphMarkdown(record))
+  await appendJsonl(path.join(root, "events.jsonl"), {
+    type: "identity_graph",
+    operationID,
+    nodes: record.nodes.length,
+    edges: record.edges.length,
+    updatedAt: record.updatedAt,
+  })
+  await publishOperationUpdated(worktree, { operationID, artifact: "checkpoint", path: json })
+  return { operationID, json, markdown }
 }
 
 export async function lintReport(
@@ -2690,6 +2987,8 @@ function reportOutlineTitles(outline: string | undefined) {
     : [
         "Executive Summary",
         "Scope, Authorization, and Methodology",
+        "District Profile and Environment Overview",
+        "People, Roles, and Identity Graph",
         "Findings Detail",
         "Risk Register and Prioritized Roadmap",
         "Validation Limits and Known Unknowns",
@@ -2771,6 +3070,8 @@ async function finalPackageIntegrityGaps(root: string, input: { requireRuntimeSu
     readme: path.join(finalDir, "README.md"),
     findingsJson: path.join(finalDir, "findings.json"),
     evidenceIndex: path.join(finalDir, "evidence-index.json"),
+    peopleProfiles: path.join(finalDir, "people-profiles.md"),
+    identityGraph: path.join(finalDir, "identity-graph.json"),
     operatorReview: path.join(finalDir, "operator-review.md"),
     executiveSummary: path.join(finalDir, "executive-summary.md"),
     technicalAppendix: path.join(finalDir, "technical-appendix.md"),
@@ -2825,6 +3126,7 @@ async function finalPackageIntegrityGaps(root: string, input: { requireRuntimeSu
   }
   await parseRequiredJson(path.join(finalDir, "findings.json"), "deliverables/final/findings.json", gaps)
   await parseRequiredJson(path.join(finalDir, "evidence-index.json"), "deliverables/final/evidence-index.json", gaps)
+  await parseRequiredJson(path.join(finalDir, "identity-graph.json"), "deliverables/final/identity-graph.json", gaps)
 
   const sourceRuntimeMarkdown = await readText(path.join(root, "deliverables", "runtime-summary.md"))
   const finalRuntimeMarkdown = await readText(path.join(finalDir, "runtime-summary.md"))
@@ -2862,7 +3164,12 @@ function renderReportSections(input: {
       if (normalized.includes("environment overview")) {
         return `<h2>${escapeHtml(title)}</h2>
   <p>Recorded affected assets include ${escapeHtml(assets.join(", ") || "none recorded")}. Evidence kinds represented in the ledger include ${escapeHtml(evidenceKinds.join(", ") || "none recorded")}.</p>
-  <p>The environment overview is intentionally limited to operation artifacts and synthetic evidence available at render time, so unverified systems are not invented in the client deliverable.</p>`
+  <p>District and public system context should be read from profiles/district-profile.md when present. The environment overview is intentionally limited to operation artifacts and synthetic evidence available at render time, so unverified systems are not invented in the client deliverable.</p>`
+      }
+      if (normalized.includes("people") || normalized.includes("identity graph")) {
+        return `<h2>${escapeHtml(title)}</h2>
+  <p>People, role, application, group, and data-system relationships are tracked in profiles/people/ and profiles/identity-graph.json so authority and workflow risk can be reviewed separately from network exposure.</p>
+  <p>Public role inferences should be treated as hypotheses until validated with authorized identity exports, SaaS role review, or authenticated workflow testing.</p>`
       }
       if (normalized.includes("attack path")) {
         return `<h2>${escapeHtml(title)}</h2>
@@ -2930,6 +3237,21 @@ function renderReportSections(input: {
     .join("\n")
 }
 
+async function peopleProfilesMarkdown(root: string) {
+  const peopleDir = path.join(root, "profiles", "people")
+  try {
+    const files = (await fs.readdir(peopleDir))
+      .filter((file) => file.endsWith(".md"))
+      .sort((a, b) => a.localeCompare(b))
+    if (!files.length) return "# People Profiles\n\nNo person profiles were recorded.\n"
+    const bodies = await Promise.all(files.map((file) => fs.readFile(path.join(peopleDir, file), "utf8")))
+    return ["# People Profiles", "", ...bodies].join("\n")
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "# People Profiles\n\nNo person profiles were recorded.\n"
+    throw error
+  }
+}
+
 export async function renderReport(worktree: string, input: ReportRenderInput): Promise<ReportRenderResult> {
   const operationID = slug(input.operationID, "operation")
   const root = operationPath(worktree, operationID)
@@ -2986,6 +3308,8 @@ export async function renderReport(worktree: string, input: ReportRenderInput): 
   const manifestPath = path.join(finalDir, "manifest.json")
   const findingsJsonPath = path.join(finalDir, "findings.json")
   const evidenceIndexPath = path.join(finalDir, "evidence-index.json")
+  const peopleProfilesPath = path.join(finalDir, "people-profiles.md")
+  const identityGraphPath = path.join(finalDir, "identity-graph.json")
   const operatorReviewPath = path.join(finalDir, "operator-review.md")
   const executiveSummaryPath = path.join(finalDir, "executive-summary.md")
   const technicalAppendixPath = path.join(finalDir, "technical-appendix.md")
@@ -2995,6 +3319,10 @@ export async function renderReport(worktree: string, input: ReportRenderInput): 
   await fs.writeFile(readmePath, finalReadme({ title, operationID, operation, reportable, nonReportable, evidence }))
   await writeJson(findingsJsonPath, finalFindingsJson({ operationID, reportable, nonReportable, counts }))
   await writeJson(evidenceIndexPath, finalEvidenceIndexJson({ operationID, evidence, findings }))
+  await fs.writeFile(peopleProfilesPath, await peopleProfilesMarkdown(root))
+  await fs.copyFile(path.join(root, "profiles", "identity-graph.json"), identityGraphPath).catch(async () => {
+    await writeJson(identityGraphPath, { operationID, nodes: [], edges: [], notes: ["No identity graph was recorded before report rendering."] })
+  })
   await fs.writeFile(
     operatorReviewPath,
     operatorReviewMarkdown({ operationID, operation, reportable, nonReportable, evidence, runtimeSummaryExists }),
@@ -3017,6 +3345,8 @@ export async function renderReport(worktree: string, input: ReportRenderInput): 
       readme: readmePath,
       findingsJson: findingsJsonPath,
       evidenceIndex: evidenceIndexPath,
+      peopleProfiles: peopleProfilesPath,
+      identityGraph: identityGraphPath,
       operatorReview: operatorReviewPath,
       executiveSummary: executiveSummaryPath,
       technicalAppendix: technicalAppendixPath,

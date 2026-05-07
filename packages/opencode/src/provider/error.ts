@@ -154,6 +154,7 @@ export function parseStreamError(input: unknown): ParsedStreamError | undefined 
         isRetryable: false,
         responseBody,
       }
+    case "server_is_overloaded":
     case "server_error":
     case "server_is_overloaded":
       return {

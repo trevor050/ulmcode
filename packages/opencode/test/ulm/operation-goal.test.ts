@@ -28,6 +28,11 @@ describe("ULM operation goal", () => {
     expect(result.goal.targetDurationHours).toBe(20.13)
     expect(result.goal.completionPolicy.requiresOperationAudit).toBe(true)
     expect(result.goal.continuation.maxNoToolContinuationTurns).toBe(1)
+    expect(result.goal.continuation.turnEndReview).toBe(true)
+    expect(result.goal.continuation.injectPlanMaxChars).toBe(12000)
+    expect(result.goal.continuation.operatorFallbackTimeoutSeconds).toBe(75)
+    expect(result.goal.continuation.operatorFallbackEnabled).toBe(true)
+    expect(result.goal.continuation.maxRepeatedOperatorTimeoutsPerKind).toBe(2)
     expect(await fs.readFile(result.files.markdown, "utf8")).toContain("Authorized overnight district network assessment")
 
     const read = await readOperationGoal(dir.path, "School Night Run")

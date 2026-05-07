@@ -1,11 +1,14 @@
 import { afterEach, test, expect } from "bun:test"
+import fs from "fs/promises"
 import os from "os"
+import path from "path"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
 import { Bus } from "../../src/bus"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Permission } from "../../src/permission"
 import { PermissionID } from "../../src/permission/schema"
 import { Instance } from "../../src/project/instance"
+import { InstanceState } from "../../src/effect/instance-state"
 import { WithInstance } from "../../src/project/with-instance"
 import { InstanceRuntime } from "../../src/project/instance-runtime"
 import {
@@ -17,6 +20,7 @@ import {
 } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { MessageID, SessionID } from "../../src/session/schema"
+import { createOperationGoal } from "../../src/ulm/operation-goal"
 
 const bus = Bus.layer
 const env = Layer.mergeAll(Permission.layer.pipe(Layer.provide(bus)), bus, CrossSpawnSpawner.defaultLayer)
@@ -648,6 +652,74 @@ it.live("ask - adds request to pending list", () =>
 
       yield* rejectAll()
       yield* Fiber.await(fiber)
+    }),
+  ),
+)
+
+it.live("ask - active unattended ULM operation times out and rejects", () =>
+  withDir({ git: true }, () =>
+    Effect.gen(function* () {
+      const ctx = yield* InstanceState.context
+      yield* Effect.promise(() =>
+        createOperationGoal(ctx.worktree, {
+          operationID: "school",
+          objective: "Authorized unattended run",
+          targetDurationHours: 20,
+          continuation: { operatorFallbackTimeoutSeconds: 0.01 },
+        }),
+      )
+
+      const err = yield* fail(
+        ask({
+          id: PermissionID.make("per_timeout"),
+          sessionID: SessionID.make("session_test"),
+          permission: "bash",
+          patterns: ["install new scanner"],
+          metadata: {},
+          always: [],
+          ruleset: [{ permission: "bash", pattern: "*", action: "ask" }],
+        }),
+      )
+
+      expect(err).toBeInstanceOf(Permission.CorrectedError)
+      expect(err instanceof Error ? err.message : String(err)).toContain("operator is absent")
+      const timeoutFiles = yield* Effect.promise(() =>
+        fs.readdir(path.join(ctx.worktree, ".ulmcode", "operations", "school", "operator-timeouts")),
+      )
+      expect(timeoutFiles.some((file) => file.includes("permission"))).toBe(true)
+    }),
+  ),
+)
+
+it.live("ask - ULMconfig zero disables unattended timeout", () =>
+  withDir({ git: true }, () =>
+    Effect.gen(function* () {
+      const ctx = yield* InstanceState.context
+      yield* Effect.promise(() =>
+        fs.writeFile(path.join(ctx.worktree, "ULMconfig.toml"), "operator_timeout_seconds = 0\n"),
+      )
+      yield* Effect.promise(() =>
+        createOperationGoal(ctx.worktree, {
+          operationID: "school",
+          objective: "Authorized unattended run",
+          targetDurationHours: 20,
+          continuation: { operatorFallbackTimeoutSeconds: 0.01 },
+        }),
+      )
+
+      const fiber = yield* ask({
+        id: PermissionID.make("per_timeout_disabled"),
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["install new scanner"],
+        metadata: {},
+        always: [],
+        ruleset: [{ permission: "bash", pattern: "*", action: "ask" }],
+      }).pipe(Effect.forkScoped)
+
+      expect(yield* waitForPending(1)).toHaveLength(1)
+      yield* rejectAll()
+      expect((yield* Fiber.await(fiber))._tag).toBe("Failure")
     }),
   ),
 )

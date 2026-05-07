@@ -7,6 +7,9 @@ import { zod } from "@/util/effect-zod"
 import * as Log from "@opencode-ai/core/util/log"
 import { withStatics } from "@/util/schema"
 import { QuestionID } from "./schema"
+import { activeOperationForContext, operationAllowsUnattendedFallback } from "@/ulm/operation-context"
+import { isSensitiveOperatorPrompt, operatorFallbackTimeoutMillis, recordOperatorTimeout } from "@/ulm/operator-timeout"
+import { readULMConfig } from "@/ulm/config"
 
 const log = Log.create({ service: "question" })
 
@@ -114,6 +117,13 @@ interface State {
   pending: Map<QuestionID, PendingEntry>
 }
 
+function fallbackAnswer(question: Info): Answer {
+  const preferred =
+    question.options.find((option) => /\b(deny|denied|unavailable|no|skip|cancel)\b/i.test(option.label)) ??
+    question.options.find((option) => option.label.includes("(Recommended)"))
+  return [preferred?.label ?? question.options[0]?.label ?? "Unavailable"]
+}
+
 // Service
 
 export interface Interface {
@@ -170,9 +180,50 @@ export const layer = Layer.effect(
       })
       pending.set(id, { info, deferred })
       yield* bus.publish(Event.Asked, info)
+      const ctx = yield* InstanceState.context
+      const operation = yield* Effect.promise(() => activeOperationForContext(ctx))
+      const ulmConfig = yield* Effect.promise(() => readULMConfig(ctx))
+      const activeOperation = operation && operationAllowsUnattendedFallback(operation.goal, ulmConfig) ? operation : undefined
+      const timeoutMillis =
+        activeOperation !== undefined
+          ? operatorFallbackTimeoutMillis(activeOperation.goal, ulmConfig)
+          : undefined
+      const timeout =
+        activeOperation === undefined || timeoutMillis === undefined
+          ? undefined
+          : Effect.sleep(`${timeoutMillis} millis`).pipe(
+              Effect.flatMap(() =>
+                Effect.gen(function* () {
+                  if (!pending.has(id)) return []
+                  pending.delete(id)
+                  const answers = input.questions.map(fallbackAnswer)
+                  const sensitive = input.questions.some((question) =>
+                    isSensitiveOperatorPrompt(`${question.header} ${question.question}`),
+                  )
+                  yield* Effect.promise(() =>
+                    recordOperatorTimeout(activeOperation.worktree, {
+                      operationID: activeOperation.operationID,
+                      kind: "question",
+                      requestID: String(id),
+                      sessionID: input.sessionID,
+                      fallback: answers.map((answer) => answer.join(", ")).join(" | "),
+                      prompt: input.questions.map((question) => question.question).join(" | "),
+                      sensitive,
+                    }),
+                  )
+                  yield* bus.publish(Event.Replied, {
+                    sessionID: input.sessionID,
+                    requestID: id,
+                    answers: answers.map((answer) => [...answer]),
+                  })
+                  yield* Deferred.succeed(deferred, answers)
+                  return answers
+                }),
+              ),
+            )
 
       return yield* Effect.ensuring(
-        Deferred.await(deferred),
+        timeout ? Effect.raceFirst(Deferred.await(deferred), timeout) : Deferred.await(deferred),
         Effect.sync(() => {
           pending.delete(id)
         }),

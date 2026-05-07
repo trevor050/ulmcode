@@ -8,10 +8,11 @@ Usage notes:
 - When `custom` is enabled (default), a "Type your own answer" option is added automatically; don't include "Other" or catch-all options
 - Answers are returned as arrays of labels; set `multiple: true` to allow selecting more than one
 - If you recommend a specific option, make that the first option in the list and add "(Recommended)" at the end of the label
+- During active unattended ULM operations, unanswered questions time out. Include a clear skip/decline/unavailable option when the operator can safely be absent; timeout fallback prefers that over a recommended action.
 
 ULMCode pentest kickoff guidance:
 - Ask for target duration when it is missing. The answer controls compact planning versus plan-plan versus overnight planning.
 - Ask authorization, scope, safety-limit, credential, tool-installation, and report-audience questions before broad execution.
 - For runs under two hours, ask only questions that change immediate execution.
-- For long and overnight runs, keep asking discovery-driven questions when new evidence changes the lane graph, safety policy, or report obligations.
+- For long and overnight runs, do not wait on discovery-driven questions after execution starts. Record conservative assumptions, honor the original authorized scope, and continue bounded work.
 - Do not use questions to avoid progress. If the missing answer does not affect the next safe bounded action, record the assumption in `operation_plan` and continue.

@@ -86,6 +86,13 @@
       "textVerbosity": "medium",
       "description": "Reconnaissance, inventory, passive discovery, and low-risk enumeration."
     },
+    "person-recon": {
+      "model": "openai/gpt-5.4-mini-fast",
+      "reasoningEffort": "medium",
+      "temperature": 0,
+      "textVerbosity": "medium",
+      "description": "Authorized public K-12 people and role profiling for access, workflow, and identity graph context."
+    },
     "attack-map": {
       "model": "openai/gpt-5.5-fast",
       "variant": "high",

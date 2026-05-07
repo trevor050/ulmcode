@@ -13,6 +13,7 @@ import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_ULM_EVIDENCE from "./prompt/evidence.txt"
 import PROMPT_ULM_PENTEST from "./prompt/pentest.txt"
+import PROMPT_ULM_PERSON_RECON from "./prompt/person-recon.txt"
 import PROMPT_ULM_RECON from "./prompt/recon.txt"
 import PROMPT_ULM_REPORT_REVIEWER from "./prompt/report-reviewer.txt"
 import PROMPT_ULM_REPORT_WRITER from "./prompt/report-writer.txt"
@@ -230,6 +231,23 @@ export const layer = Layer.effect(
             native: true,
             color: "cyan",
           },
+          "person-recon": {
+            name: "person-recon",
+            description:
+              "ULMCode subagent for authorized public K-12 people/role research that writes professional pentest-relevant profiles.",
+            prompt: PROMPT_ULM_PERSON_RECON,
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                todowrite: "deny",
+              }),
+              user,
+            ),
+            options: {},
+            mode: "subagent",
+            native: true,
+            color: "cyan",
+          },
           "attack-map": {
             name: "attack-map",
             description:
@@ -239,6 +257,11 @@ export const layer = Layer.effect(
               defaults,
               Permission.fromConfig({
                 todowrite: "deny",
+                task: {
+                  "*": "deny",
+                  validator: "allow",
+                  evidence: "allow",
+                },
               }),
               user,
             ),
@@ -280,7 +303,17 @@ export const layer = Layer.effect(
             description:
               "ULMCode subagent for dense final report synthesis from operation artifacts, findings, and evidence.",
             prompt: PROMPT_ULM_REPORT_WRITER,
-            permission: Permission.merge(defaults, user),
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                task: {
+                  "*": "deny",
+                  evidence: "allow",
+                  "report-reviewer": "allow",
+                },
+              }),
+              user,
+            ),
             options: {},
             mode: "subagent",
             native: true,

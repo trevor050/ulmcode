@@ -47,7 +47,7 @@ Run from `packages/opencode` on 2026-05-06:
 - `bun test test/ulm/tool-inventory.test.ts test/tool/tool_inventory.test.ts`: 4 pass.
 - `bun test test/ulm/pentest-kickoff.test.ts`: 6 pass.
 - `bun test test/ulm/operation-supervisor.test.ts test/tool/operation_supervise.test.ts`: 5 pass.
-- `bun run test:ulm-tool-manifest`: `ulm_tool_manifest: ok (16 tools, 16 profiles)`.
+- `bun run test:ulm-tool-manifest`: `ulm_tool_manifest: ok (17 tools, 17 profiles)`.
 - `bun run test:ulm-skills`: `ulm_profile_skills: ok`, `routing: ok`, `skills: 11`, `commands: 11`.
 - `bun run test:ulm-rebuild-audit`: all categories ok.
 - `bun run test:ulm-smoke`: `ulm_lifecycle_smoke: ok`.

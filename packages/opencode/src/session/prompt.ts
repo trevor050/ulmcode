@@ -61,6 +61,9 @@ import * as DateTime from "effect/DateTime"
 import { eq } from "@/storage/db"
 import * as Database from "@/storage/db"
 import { SessionTable } from "./session.sql"
+import { activeOperationForContext } from "@/ulm/operation-context"
+import { effectiveULMContinuation, readULMConfig } from "@/ulm/config"
+import { superviseOperation, type OperationSupervisorAction } from "@/ulm/operation-supervisor"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -745,7 +748,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           const markReady = ready ? ready.open.pipe(Effect.asVoid) : Effect.void
           const { msg, part, cwd } = yield* Effect.gen(function* () {
             const ctx = yield* InstanceState.context
-            const session = yield* sessions.get(input.sessionID)
+            const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
             if (session.revert) {
               yield* revert.cleanup(session)
             }
@@ -1371,7 +1374,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
     const prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.prompt")(
       function* (input: PromptInput) {
-        const session = yield* sessions.get(input.sessionID)
+        const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
         yield* revert.cleanup(session)
         const message = yield* createUserMessage(input)
         yield* sessions.touch(input.sessionID)
@@ -1390,6 +1393,115 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       },
     )
 
+    function assistantText(msg: MessageV2.WithParts | undefined) {
+      return (
+        msg?.parts
+          .filter((part): part is MessageV2.TextPart => part.type === "text")
+          .map((part) => part.text)
+          .join("\n")
+          .trim() ?? ""
+      )
+    }
+
+    function canStopAfterSupervisor(action: OperationSupervisorAction | undefined) {
+      return action === "handoff_ready" || action === "blocked_for_operator" || action === "pause"
+    }
+
+    function continuationPrompt(input: {
+      action: OperationSupervisorAction
+      reason: string
+      nextTool?: string
+      operationID: string
+      planPath?: string
+    }) {
+      return [
+        "<system-reminder>",
+        `ULM turn-end supervisor action: ${input.action}`,
+        `reason: ${input.reason}`,
+        input.nextTool ? `required_next_tool: ${input.nextTool}` : "required_next_tool: choose the next safe bounded ULM tool",
+        input.planPath ? `plan_excerpt_source: ${input.planPath}` : "plan_excerpt_source: missing or unavailable",
+        "",
+        "Do not hand off, summarize as done, or wait for the operator unless the supervisor explicitly allows it.",
+        "Continue the active operation using the required next tool. Long commands must use command_supervise, task background=true, runtime_scheduler, or runtime_daemon.",
+        "</system-reminder>",
+      ].join("\n")
+    }
+
+    function assistantHasToolCall(message: MessageV2.WithParts | undefined) {
+      return message?.parts.some((part) => part.type === "tool" && !part.metadata?.providerExecuted) ?? false
+    }
+
+    function countNoToolContinuationTurns(input: { messages: MessageV2.WithParts[]; lastHumanUser?: MessageV2.WithParts }) {
+      let count = 0
+      const start = input.lastHumanUser ? input.messages.findIndex((msg) => msg.info.id === input.lastHumanUser?.info.id) + 1 : 0
+      for (let index = Math.max(0, start); index < input.messages.length; index++) {
+        const msg = input.messages[index]
+        const isContinuation =
+          msg.info.role === "user" &&
+          msg.parts.some((part) => part.type === "text" && part.metadata?.ulmTurnEndContinuation === true)
+        if (!isContinuation) continue
+        const nextUser = input.messages.findIndex((candidate, candidateIndex) => candidateIndex > index && candidate.info.role === "user")
+        const end = nextUser === -1 ? input.messages.length : nextUser
+        const assistantWorked = input.messages.slice(index + 1, end).some((candidate) => assistantHasToolCall(candidate))
+        if (!assistantWorked) count++
+      }
+      return count
+    }
+
+    const maybeInjectTurnEndContinuation = Effect.fn("SessionPrompt.turnEndSupervisor")(function* (input: {
+      sessionID: SessionID
+      session: Session.Info
+      lastUser: MessageV2.User
+      lastAssistantMsg?: MessageV2.WithParts
+      messages: MessageV2.WithParts[]
+    }) {
+      const ctx = yield* InstanceState.context
+      const operation = yield* Effect.promise(() => activeOperationForContext(ctx))
+      if (!operation) return false
+      const continuation = effectiveULMContinuation(operation.goal, yield* Effect.promise(() => readULMConfig(ctx)))
+      if (!continuation.turnEndReview) return false
+      if (!continuation.enabled) return false
+
+      const review = yield* Effect.tryPromise(() =>
+        superviseOperation(operation.worktree, {
+          operationID: operation.operationID,
+          reviewKind: "turn_end",
+          maxActions: 1,
+          latestAssistantMessage: assistantText(input.lastAssistantMsg).slice(0, 2_000),
+        }),
+      ).pipe(Effect.orDie)
+      const top = review.decisions[0]
+      if (canStopAfterSupervisor(top?.action)) return false
+
+      const lastHumanUser = input.messages.findLast(
+        (msg) => msg.info.role === "user" && !msg.parts.every((part) => "synthetic" in part && part.synthetic),
+      )
+      const noToolContinuations = countNoToolContinuationTurns({ messages: input.messages, lastHumanUser })
+      if (noToolContinuations >= continuation.maxNoToolContinuationTurns) return false
+
+      yield* createUserMessage({
+        sessionID: input.sessionID,
+        agent: input.lastUser.agent,
+        model: input.lastUser.model,
+        variant: input.lastUser.model.variant,
+        parts: [
+          {
+            type: "text",
+            synthetic: true,
+            metadata: { ulmTurnEndContinuation: true, supervisorReview: review.files?.json },
+            text: continuationPrompt({
+              action: top?.action ?? "continue_execution",
+              reason: top?.reason ?? "active ULM operation is not complete",
+              nextTool: top?.requiredNextTool,
+              operationID: operation.operationID,
+              planPath: review.planExcerpt?.path,
+            }),
+          },
+        ],
+      })
+      return true
+    })
+
     const lastAssistant = Effect.fnUntraced(function* (sessionID: SessionID) {
       const match = yield* sessions.findMessage(sessionID, (m) => m.info.role !== "user")
       if (Option.isSome(match)) return match.value
@@ -1402,9 +1514,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       function* (sessionID: SessionID) {
         const ctx = yield* InstanceState.context
         const slog = elog.with({ sessionID })
-        let structured: unknown | undefined
+        let structured: unknown
         let step = 0
-        const session = yield* sessions.get(sessionID)
+        const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
           yield* status.set(sessionID, { type: "busy" })
@@ -1435,8 +1547,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           // Keep the loop running so tool results can be sent back to the model.
           // Skip provider-executed tool parts — those were fully handled within the
           // provider's stream (e.g. DWS Agent Platform) and don't need a re-loop.
-          const hasToolCalls =
-            lastAssistantMsg?.parts.some((part) => part.type === "tool" && !part.metadata?.providerExecuted) ?? false
+          const hasToolCalls = assistantHasToolCall(lastAssistantMsg)
 
           if (
             lastAssistant?.finish &&
@@ -1444,6 +1555,18 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             !hasToolCalls &&
             lastUser.id < lastAssistant.id
           ) {
+            if (
+              yield* maybeInjectTurnEndContinuation({
+                sessionID,
+                session,
+                lastUser,
+                lastAssistantMsg,
+                messages: msgs,
+              })
+            ) {
+              yield* slog.info("turn-end supervisor injected continuation")
+              continue
+            }
             yield* slog.info("exiting loop")
             break
           }

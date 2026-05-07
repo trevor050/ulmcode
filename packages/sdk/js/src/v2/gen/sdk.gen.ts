@@ -133,6 +133,7 @@ import type {
   SessionDeleteResponses,
   SessionDelivery,
   SessionDiffResponses,
+  SessionForkErrors,
   SessionForkResponses,
   SessionGetErrors,
   SessionGetResponses,
@@ -1026,7 +1027,7 @@ export class Workspace extends HeyApiClient {
     parameters?: {
       directory?: string
       workspace?: string
-      id?: string
+      id?: string | null
       sessionID?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -3361,7 +3362,7 @@ export class Session2 extends HeyApiClient {
         },
       ],
     )
-    return (options?.client ?? this.client).post<SessionForkResponses, unknown, ThrowOnError>({
+    return (options?.client ?? this.client).post<SessionForkResponses, SessionForkErrors, ThrowOnError>({
       url: "/session/{sessionID}/fork",
       ...options,
       ...params,

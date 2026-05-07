@@ -9,6 +9,9 @@ Use review kinds:
 - `pre_compaction`: before context compaction or handoff
 - `post_compaction`: after resume
 - `pre_handoff`: before claiming final readiness
+- `turn_end`: when the assistant is about to stop during an active operation
+- `reporting_gate`: before moving from execution into final reporting
+- `operator_timeout`: after unattended fallback handles a permission/question timeout
 - `manual`: operator-requested review
 
 The tool writes supervisor artifacts under `.ulmcode/operations/<operation-id>/supervisor/`. Treat these artifacts as durable state. Do not rely on a chat summary as the supervisor record.

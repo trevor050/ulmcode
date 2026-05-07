@@ -1,0 +1,5 @@
+Write a durable eval scorecard for a ULMCode operation.
+
+Use this when running benchmark-style labs, overnight readiness drills, or any operation where the result needs objective scoring rather than a narrative-only report. Record target, sandbox, allowed profiles, success criteria, required artifacts, MITRE tags, budget, and concrete metrics such as validated findings, false positives, tool failures, retries, cost, and report quality.
+
+This writes `.ulmcode/operations/<operation>/deliverables/eval-scorecard.json` and `.md`.

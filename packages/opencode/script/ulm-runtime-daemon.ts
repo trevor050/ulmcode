@@ -6,6 +6,9 @@ import { spawn } from "child_process"
 import { closeSync, mkdirSync, openSync, writeFileSync } from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
+import type { OperationRunResult } from "../src/ulm/operation-run"
+import type { RuntimeDaemonInput } from "../src/ulm/runtime-daemon"
+import { buildCommandPlan, writeCommandPlan } from "../src/ulm/tool-manifest"
 
 type Args = {
   operationID: string
@@ -158,6 +161,7 @@ function parseArgs(argv: string[]): Args {
 
 const args = parseArgs(process.argv.slice(2))
 const operationID = slug(args.operationID, "operation")
+const packageRoot = path.resolve(fileURLToPath(import.meta.url), "..", "..")
 
 if (args.supervisor) {
   const result = await writeRuntimeSupervisor({
@@ -256,6 +260,106 @@ function formatDetachedLaunch(launch: {
   ].join("\n")
 }
 
+function launchRecordPath(kind: string, id: string) {
+  const dir = path.join(operationPath(process.cwd(), operationID), "scheduler", "cli-launches")
+  mkdirSync(dir, { recursive: true })
+  const stamp = new Date().toISOString().replace(/[^0-9A-Za-z]+/g, "-").replace(/^-+|-+$/g, "")
+  return path.join(dir, `${stamp}-${kind}-${id}.json`)
+}
+
+function writeLaunchRecord(kind: string, id: string, value: Record<string, unknown>) {
+  const file = launchRecordPath(kind, id)
+  writeFileSync(file, JSON.stringify({ operationID, kind, id, createdAt: new Date().toISOString(), ...value }, null, 2) + "\n")
+  return file
+}
+
+function launchModelLane(params: NonNullable<OperationRunResult["taskParams"]>) {
+  const jobID = `cli-model-lane-${params.laneID}`
+  const record = {
+    laneID: params.laneID,
+    agent: params.subagent_type,
+    modelRoute: params.modelRoute,
+    prompt: params.prompt,
+  }
+  if (process.env.ULMCODE_DAEMON_DRY_RUN_LAUNCHES === "1") {
+    writeLaunchRecord("model", params.laneID, { ...record, dryRun: true, jobID })
+    return Promise.resolve({ jobID })
+  }
+
+  const [provider, ...modelParts] = params.modelRoute.split("/")
+  const model = provider && modelParts.length ? params.modelRoute : undefined
+  const logPath = writeLaunchRecord("model", params.laneID, { ...record, dryRun: false, jobID })
+  const child = spawn(
+    process.execPath,
+    [
+      "run",
+      path.join(packageRoot, "src", "index.ts"),
+      "run",
+      "--dir",
+      process.cwd(),
+      "--agent",
+      params.subagent_type,
+      "--title",
+      `ULM ${operationID}:${params.laneID}`,
+      ...(model ? ["--model", model] : []),
+      params.prompt,
+    ],
+    {
+      cwd: packageRoot,
+      detached: true,
+      stdio: ["ignore", "ignore", "ignore"],
+      env: { ...process.env, ULMCODE_DAEMON_CHILD: "1" },
+    },
+  )
+  child.unref()
+  writeLaunchRecord("model-pid", params.laneID, { ...record, pid: child.pid, logPath, jobID })
+  return Promise.resolve({ jobID })
+}
+
+async function launchCommandWorkUnit(params: Parameters<NonNullable<RuntimeDaemonInput["launchCommandWorkUnit"]>>[0]) {
+  const jobID = `cli-command-${params.workUnitID ?? params.profileID}`
+  const plan = await buildCommandPlan({
+    worktree: process.cwd(),
+    operationID,
+    profileID: params.profileID,
+    variables: params.variables,
+    outputPrefix: params.outputPrefix,
+  })
+  await writeCommandPlan(plan)
+  writeLaunchRecord("command", params.workUnitID ?? params.profileID, {
+    profileID: params.profileID,
+    laneID: params.laneID,
+    workUnitID: params.workUnitID,
+    variables: params.variables,
+    outputPrefix: params.outputPrefix,
+    planPath: plan.planPath,
+    command: plan.command,
+    stdoutPath: plan.stdoutPath,
+    stderrPath: plan.stderrPath,
+    heartbeatPath: plan.heartbeatPath,
+    jobID,
+    dryRun: process.env.ULMCODE_DAEMON_DRY_RUN_LAUNCHES === "1",
+  })
+  if (process.env.ULMCODE_DAEMON_DRY_RUN_LAUNCHES === "1") return { jobID }
+
+  const child = spawn(process.execPath, ["run", path.join(packageRoot, "script", "ulm-command-worker.ts"), plan.planPath], {
+    cwd: packageRoot,
+    detached: true,
+    stdio: ["ignore", "ignore", "ignore"],
+    env: { ...process.env, ULMCODE_DAEMON_CHILD: "1" },
+  })
+  child.unref()
+  writeLaunchRecord("command-pid", params.workUnitID ?? params.profileID, {
+    profileID: params.profileID,
+    laneID: params.laneID,
+    workUnitID: params.workUnitID,
+    planPath: plan.planPath,
+    pid: child.pid,
+    jobID,
+  })
+  return { jobID }
+}
+
 const controller = new AbortController()
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => controller.abort(signal))
@@ -275,6 +379,8 @@ try {
     supervisorEnabled: args.supervisorEnabled,
     supervisorIntervalMinutes: args.supervisorIntervalMinutes,
     supervisorReviewKind: args.supervisorReviewKind,
+    launchModelLane,
+    launchCommandWorkUnit,
     signal: controller.signal,
   })
   console.log(args.json ? JSON.stringify(result, null, 2) : formatRuntimeDaemon(result))

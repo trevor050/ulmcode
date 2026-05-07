@@ -14,6 +14,7 @@ ULMCode needs to run authorized K-12 security work for 20-36 hours without relyi
 - `runtime_scheduler` is the short-cycle owner. It syncs background jobs, requeues stale command work, runs supervisor review on cadence, respects blockers, runs `operation_run`, and launches model/command lanes.
 - `runtime_daemon` is the wall-clock owner. It keeps the scheduler alive for the requested runtime, writes daemon heartbeats, recovers stale jobs, and can detach or generate launchd/systemd artifacts.
 - `operation_supervise` is the watchdog. It can continue, ask for a question, recover, schedule, queue validation work, compact, pause, block, or mark handoff ready.
+- The session loop runs a `turn_end` supervisor review before an active ULM operation is allowed to go idle. If execution or reporting is not complete, the loop writes a supervisor artifact and injects a synthetic continuation that names the required next tool. The continuation cap only counts injected turns where the assistant did no tool work; productive recovery turns can continue until the planned graph and reporting gates are satisfied.
 
 ## Duration-Aware Planning
 
@@ -46,7 +47,12 @@ Do not mark the operation complete until these artifacts exist and parse:
 - `deliverables/stage-gates/handoff.json`
 - `deliverables/operation-audit.json`
 
-Final reporting should run report writer, report reviewer, `report_lint`, `report_render`, `runtime_summary`, then `operation_audit`.
+Final reporting should run report writer, report reviewer, `report_lint`, `report_render`, `runtime_summary`, `eval_scorecard`, then `operation_audit`.
+Use `eval_scorecard` to keep the result objectively scored for target, sandbox, success criteria, MITRE tags, validated findings, false positives, tool failures, retries, cost, and report quality.
+
+## Unattended Operator Fallback
+
+During active unattended operations, permission and question prompts wait for the operator for 75 seconds by default. Permission prompts never auto-approve; timeout rejects with corrective feedback and records an artifact under `operator-timeouts/`. Question prompts answer conservatively, preferring skip, decline, unavailable, no, or cancel choices before recommended choices.
 
 ## Operator Commands
 

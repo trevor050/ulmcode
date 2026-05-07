@@ -1,0 +1,3 @@
+Write the K-12 district profile for an authorized operation.
+
+Use this to preserve district-level context that affects testing: domains, publicly named systems, departments, buildings, technology contacts, vendor mentions, and notes that help route recon or reporting. Keep it scoped to professional/public/engagement-relevant facts.

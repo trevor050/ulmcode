@@ -8,13 +8,12 @@ import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { PermissionID } from "../../src/permission/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
-import { Instance } from "../../src/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
 import { Project } from "../../src/project/project"
 import { Server } from "../../src/server/server"
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
 import { Session } from "@/session/session"
-import { MessageID, PartID, type SessionID } from "../../src/session/schema"
+import { MessageID, PartID, SessionID, type SessionID as SessionIDType } from "../../src/session/schema"
 import { MessageV2 } from "../../src/session/message-v2"
 import { Database } from "@/storage/db"
 import { SessionMessageTable, SessionTable } from "@/session/session.sql"
@@ -55,7 +54,7 @@ function createSession(directory: string, input?: Session.CreateInput) {
   )
 }
 
-function createTextMessage(directory: string, sessionID: SessionID, text: string) {
+function createTextMessage(directory: string, sessionID: SessionIDType, text: string) {
   return Effect.promise(
     async () =>
       await WithInstance.provide({
@@ -123,6 +122,10 @@ function json<T>(response: Response) {
     if (response.status !== 200) throw new Error(await response.text())
     return (await response.json()) as T
   })
+}
+
+function responseJson(response: Response) {
+  return Effect.promise(() => response.json())
 }
 
 function requestJson<T>(path: string, init?: RequestInit) {
@@ -211,6 +214,46 @@ describe("session HttpApi", () => {
             cache: { read: 0.25, write: 0.5 },
           })
         }),
+    ),
+  )
+
+  it.live(
+    "returns declared not found errors for read routes",
+    withTmp({ git: true, config: { formatter: false, lsp: false } }, (tmp) =>
+      Effect.gen(function* () {
+        const headers = { "x-opencode-directory": tmp.path }
+        const missingSession = SessionID.descending()
+        const missingSessionBody = {
+          name: "NotFoundError",
+          data: { message: `Session not found: ${missingSession}` },
+        }
+
+        const get = yield* request(pathFor(SessionPaths.get, { sessionID: missingSession }), { headers })
+        expect(get.status).toBe(404)
+        expect(yield* responseJson(get)).toEqual(missingSessionBody)
+
+        const messages = yield* request(pathFor(SessionPaths.messages, { sessionID: missingSession }), { headers })
+        expect(messages.status).toBe(404)
+        expect(yield* responseJson(messages)).toEqual(missingSessionBody)
+
+        const remove = yield* request(pathFor(SessionPaths.remove, { sessionID: missingSession }), {
+          headers,
+          method: "DELETE",
+        })
+        expect(remove.status).toBe(404)
+        expect(yield* responseJson(remove)).toEqual(missingSessionBody)
+
+        const session = yield* createSession(tmp.path, { title: "missing message" })
+        const missingMessage = MessageID.ascending()
+        const message = yield* request(pathFor(SessionPaths.message, { sessionID: session.id, messageID: missingMessage }), {
+          headers,
+        })
+        expect(message.status).toBe(404)
+        expect(yield* responseJson(message)).toEqual({
+          name: "NotFoundError",
+          data: { message: `Message not found: ${missingMessage}` },
+        })
+      }),
     ),
   )
 

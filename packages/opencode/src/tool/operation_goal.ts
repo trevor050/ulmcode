@@ -15,6 +15,11 @@ const Continuation = Schema.Struct({
   enabled: Schema.optional(Schema.Boolean),
   idleMinutesBeforeReview: Schema.optional(Schema.Number),
   maxNoToolContinuationTurns: Schema.optional(Schema.Number),
+  turnEndReview: Schema.optional(Schema.Boolean),
+  injectPlanMaxChars: Schema.optional(Schema.Number),
+  operatorFallbackTimeoutSeconds: Schema.optional(Schema.Number),
+  operatorFallbackEnabled: Schema.optional(Schema.Boolean),
+  maxRepeatedOperatorTimeoutsPerKind: Schema.optional(Schema.Number),
 })
 
 export const Parameters = Schema.Struct({

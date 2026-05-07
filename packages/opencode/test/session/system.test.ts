@@ -174,6 +174,9 @@ describe("session.system", () => {
         expect(output).toContain("next_tool=operation_plan")
         expect(output).toContain("tool_inventory: missing; call tool_inventory before broad discovery")
         expect(output).toContain("foreground_command_policy")
+        expect(output).toContain("operator_availability_policy")
+        expect(output).toContain("assume the operator is unavailable after execution starts")
+        expect(output).toContain("do not wait for new operator input")
       }),
     ),
   )

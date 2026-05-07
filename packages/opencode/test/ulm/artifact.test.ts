@@ -16,9 +16,13 @@ import {
   renderReport,
   validateFinding,
   writeFinding,
+  writeDistrictProfile,
   writeEvidence,
+  writeIdentityGraph,
   writeOperationCheckpoint,
   writeOperationPlan,
+  writeEvalScorecard,
+  writePersonProfile,
   writeReportOutline,
   writeRuntimeSummary,
 } from "@/ulm/artifact"
@@ -57,7 +61,9 @@ async function completeGraphForHandoff(worktree: string, operationID = "school")
                 "complete ".repeat(20),
                 "## Scope, Authorization, and Methodology",
                 "complete ".repeat(20),
-                "## Environment Overview",
+                "## District Profile and Environment Overview",
+                "complete ".repeat(20),
+                "## People, Roles, and Identity Graph",
                 "complete ".repeat(20),
                 "## Attack Path Narrative",
                 "complete ".repeat(20),
@@ -229,6 +235,40 @@ describe("ULM artifact ledger", () => {
     const result = await lintReport(worktree, "school")
     expect(result.ok).toBe(true)
     expect(result.counts.reportReady).toBe(1)
+  })
+
+  test("writes operation eval scorecards for objective harness scoring", async () => {
+    const worktree = await tmpdir()
+    const result = await writeEvalScorecard(worktree, {
+      operationID: "school",
+      target: "District portal lab",
+      sandbox: "local-docker",
+      allowedProfiles: ["non_destructive"],
+      successCriteria: ["validated finding reproduced", "report rendered"],
+      artifactRequirements: ["evidence-index.json", "deliverables/final/report.html"],
+      mitreTags: ["T1190"],
+      budget: { maxHours: 10, maxUSD: 25 },
+      metrics: {
+        passed: true,
+        timeToFirstSignalMs: 1200,
+        validatedFindings: 2,
+        falsePositives: 0,
+        toolFailures: 1,
+        retries: 2,
+        costUSD: 3.25,
+        reportQuality: "passed",
+      },
+    })
+
+    const record = JSON.parse(await fs.readFile(result.json, "utf8"))
+    const markdown = await fs.readFile(result.markdown, "utf8")
+
+    expect(result.operationID).toBe("school")
+    expect(record.metrics.validatedFindings).toBe(2)
+    expect(record.mitreTags).toEqual(["T1190"])
+    expect(markdown).toContain("# ULM Eval Scorecard")
+    expect(markdown).toContain("validated finding reproduced")
+    expect((await readOperationStatus(worktree, "school")).evalScorecard).toBe(true)
   })
 
   test("lints reportable findings that cite unrecorded evidence", async () => {
@@ -1511,6 +1551,79 @@ describe("ULM artifact ledger", () => {
     expect(await fs.readFile(result.markdown, "utf8")).toContain("authorization decisions stay with primary operator")
     expect(JSON.parse(await fs.readFile(result.json, "utf8")).phases).toHaveLength(2)
     expect((await readOperationStatus(worktree, "school")).plans.operation).toBe(true)
+  })
+
+  test("operation graph includes district profile, person recon, identity graph, and multistage report lanes", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "intake",
+      status: "planned",
+      summary: "Initial authorization captured.",
+    })
+
+    const graph = await writeOperationGraph(worktree, { operationID: "school", budgetUSD: 10 })
+    const parsed = JSON.parse(await fs.readFile(graph.json, "utf8"))
+    const lanes = parsed.lanes.map((lane: { id: string }) => lane.id)
+
+    expect(lanes).toContain("district_profile")
+    expect(lanes).toContain("person_recon")
+    expect(lanes).toContain("identity_graph")
+    expect(lanes).toContain("report_evidence_index")
+    expect(lanes).toContain("report_technical_review")
+    expect(lanes).toContain("report_executive_review")
+    expect(parsed.lanes.find((lane: { id: string; agent: string }) => lane.id === "person_recon").agent).toBe("person-recon")
+  })
+
+  test("writes K-12 district, person, and identity graph artifacts for recon lanes", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "recon",
+      status: "running",
+      summary: "Recon is mapping district people, systems, and access paths.",
+    })
+
+    const district = await writeDistrictProfile(worktree, {
+      operationID: "school",
+      name: "Example Unified School District",
+      domains: ["example.edu"],
+      systems: [{ name: "SIS Portal", category: "sis", source: "district site" }],
+      departments: [{ name: "Technology", source: "staff directory" }],
+      notes: ["Public website names the SIS and technology department."],
+    })
+    const person = await writePersonProfile(worktree, {
+      operationID: "school",
+      name: "Alex Principal",
+      role: "High School Principal",
+      organization: "Example High School",
+      roleCategory: "school_leadership",
+      whyTheyMatter: "Likely approval authority for student discipline and guardian communications workflows.",
+      likelyAccess: ["SIS discipline", "guardian messaging"],
+      publicContacts: [{ type: "email", value: "alex.principal@example.edu", source: "district staff directory" }],
+      sources: [{ title: "Staff Directory", url: "https://example.edu/staff", summary: "District-published role and email." }],
+      validationIdeas: ["Check whether principal accounts receive elevated SIS roles in authorized identity exports."],
+      excludedPrivateInfo: ["Ignored personal social media because it was not needed for the engagement."],
+    })
+    const graph = await writeIdentityGraph(worktree, {
+      operationID: "school",
+      nodes: [
+        { id: "person:alex-principal", kind: "person", label: "Alex Principal" },
+        { id: "app:sis", kind: "application", label: "SIS Portal" },
+        { id: "role:principal", kind: "role", label: "Principal" },
+      ],
+      edges: [
+        { from: "person:alex-principal", to: "role:principal", relationship: "has_role", evidence: ["person:alex-principal"] },
+        { from: "role:principal", to: "app:sis", relationship: "likely_access", evidence: ["public profile"] },
+      ],
+      notes: ["Identity graph is based on public role evidence until export validation is available."],
+    })
+
+    expect(await fs.readFile(district.markdown, "utf8")).toContain("SIS Portal")
+    expect(await fs.readFile(person.markdown, "utf8")).toContain("Excluded Private/Irrelevant Information")
+    expect(JSON.parse(await fs.readFile(graph.json, "utf8")).edges).toHaveLength(2)
   })
 
   test("rejects vague operation plans", async () => {

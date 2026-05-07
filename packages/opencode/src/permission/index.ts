@@ -15,6 +15,9 @@ import { Deferred, Effect, Layer, Schema, Context } from "effect"
 import os from "os"
 import { evaluate as evalRule } from "./evaluate"
 import { PermissionID } from "./schema"
+import { activeOperationForContext, operationAllowsUnattendedFallback } from "@/ulm/operation-context"
+import { isSensitiveOperatorPrompt, operatorFallbackTimeoutMillis, recordOperatorTimeout } from "@/ulm/operator-timeout"
+import { readULMConfig } from "@/ulm/config"
 
 const log = Log.create({ service: "permission" })
 
@@ -205,8 +208,57 @@ export const layer = Layer.effect(
       const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
       pending.set(id, { info, deferred })
       yield* bus.publish(Event.Asked, info)
+      const ctx = yield* InstanceState.context
+      const operation = yield* Effect.promise(() => activeOperationForContext(ctx))
+      const ulmConfig = yield* Effect.promise(() => readULMConfig(ctx))
+      const activeOperation = operation && operationAllowsUnattendedFallback(operation.goal, ulmConfig) ? operation : undefined
+      const timeoutMillis =
+        activeOperation !== undefined
+          ? operatorFallbackTimeoutMillis(activeOperation.goal, ulmConfig)
+          : undefined
+      const timeout =
+        activeOperation === undefined || timeoutMillis === undefined
+          ? undefined
+          : Effect.sleep(`${timeoutMillis} millis`).pipe(
+              Effect.flatMap(() =>
+                Effect.gen(function* () {
+                  if (!pending.has(id)) return
+                  pending.delete(id)
+                  const sensitive = isSensitiveOperatorPrompt(
+                    [info.permission, ...info.patterns, JSON.stringify(info.metadata)].join(" "),
+                  )
+                  yield* Effect.promise(() =>
+                    recordOperatorTimeout(activeOperation.worktree, {
+                      operationID: activeOperation.operationID,
+                      kind: "permission",
+                      requestID: String(id),
+                      sessionID: info.sessionID,
+                      fallback: "reject",
+                      prompt: `${info.permission}: ${info.patterns.join(", ")}`,
+                      sensitive,
+                    }),
+                  )
+                  yield* bus.publish(Event.Replied, {
+                    sessionID: info.sessionID,
+                    requestID: info.id,
+                    reply: "reject",
+                  })
+                  yield* Deferred.fail(
+                    deferred,
+                    new CorrectedError({
+                      feedback:
+                        "The operator is absent. Permission timed out and was rejected by unattended ULM policy; continue within existing authorized scope without retrying this same request.",
+                    }),
+                  )
+                  return yield* new CorrectedError({
+                    feedback:
+                      "The operator is absent. Permission timed out and was rejected by unattended ULM policy; continue within existing authorized scope without retrying this same request.",
+                  })
+                }),
+              ),
+            )
       return yield* Effect.ensuring(
-        Deferred.await(deferred),
+        timeout ? Effect.raceFirst(Deferred.await(deferred), timeout) : Deferred.await(deferred),
         Effect.sync(() => {
           pending.delete(id)
         }),
