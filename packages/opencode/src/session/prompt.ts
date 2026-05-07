@@ -1426,6 +1426,27 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       ].join("\n")
     }
 
+    function assistantHasToolCall(message: MessageV2.WithParts | undefined) {
+      return message?.parts.some((part) => part.type === "tool" && !part.metadata?.providerExecuted) ?? false
+    }
+
+    function countNoToolContinuationTurns(input: { messages: MessageV2.WithParts[]; lastHumanUser?: MessageV2.WithParts }) {
+      let count = 0
+      const start = input.lastHumanUser ? input.messages.findIndex((msg) => msg.info.id === input.lastHumanUser?.info.id) + 1 : 0
+      for (let index = Math.max(0, start); index < input.messages.length; index++) {
+        const msg = input.messages[index]
+        const isContinuation =
+          msg.info.role === "user" &&
+          msg.parts.some((part) => part.type === "text" && part.metadata?.ulmTurnEndContinuation === true)
+        if (!isContinuation) continue
+        const nextUser = input.messages.findIndex((candidate, candidateIndex) => candidateIndex > index && candidate.info.role === "user")
+        const end = nextUser === -1 ? input.messages.length : nextUser
+        const assistantWorked = input.messages.slice(index + 1, end).some((candidate) => assistantHasToolCall(candidate))
+        if (!assistantWorked) count++
+      }
+      return count
+    }
+
     const maybeInjectTurnEndContinuation = Effect.fn("SessionPrompt.turnEndSupervisor")(function* (input: {
       sessionID: SessionID
       session: Session.Info
@@ -1453,13 +1474,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const lastHumanUser = input.messages.findLast(
         (msg) => msg.info.role === "user" && !msg.parts.every((part) => "synthetic" in part && part.synthetic),
       )
-      const previousContinuations = input.messages.filter(
-        (msg) =>
-          msg.info.role === "user" &&
-          (!lastHumanUser || msg.info.id > lastHumanUser.info.id) &&
-          msg.parts.some((part) => part.type === "text" && part.metadata?.ulmTurnEndContinuation === true),
-      ).length
-      if (previousContinuations >= (operation.goal.continuation?.maxNoToolContinuationTurns ?? 1)) return false
+      const noToolContinuations = countNoToolContinuationTurns({ messages: input.messages, lastHumanUser })
+      if (noToolContinuations >= (operation.goal.continuation?.maxNoToolContinuationTurns ?? 1)) return false
 
       yield* createUserMessage({
         sessionID: input.sessionID,
@@ -1529,8 +1545,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           // Keep the loop running so tool results can be sent back to the model.
           // Skip provider-executed tool parts — those were fully handled within the
           // provider's stream (e.g. DWS Agent Platform) and don't need a re-loop.
-          const hasToolCalls =
-            lastAssistantMsg?.parts.some((part) => part.type === "tool" && !part.metadata?.providerExecuted) ?? false
+          const hasToolCalls = assistantHasToolCall(lastAssistantMsg)
 
           if (
             lastAssistant?.finish &&

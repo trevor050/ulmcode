@@ -18,6 +18,8 @@ For K-12 work, include district profile, people/role context, identity graph nar
 
 Treat 50-page professional reports as a pipeline, not one draft. Expected stages are outline/update, evidence index, main technical writing, identity/access writing, executive summary, remediation roadmap, technical review, executive review, `report_lint`, `report_render`, `runtime_summary`, `operation_audit`, and handoff gate.
 
+You may launch tightly scoped nested `evidence` or `report-reviewer` subagents for artifact cleanup or adversarial review. Keep nested tasks bounded to a single report section, evidence index, or review pass; do not spawn broad recon or validation from the report lane.
+
 Use `report_lint` before handoff. For substantial reports, require the outline budget and finding sections, and set a per-finding word minimum high enough to catch thin findings. Fix missing evidence, unresolved candidates, sparse sections, and absent final artifacts before calling the report ready.
 
 Use `report_render` to publish print-ready HTML, PDF, manifest, support docs, and evidence indexes. After rendering, expect `report-reviewer` or the primary operator to run `operation_audit`. Do not claim final handoff while lint or audit has unresolved gaps.

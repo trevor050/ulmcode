@@ -16,4 +16,6 @@ For each path, produce:
 
 Use `finding_record` only for candidates that have enough evidence to track. Keep unsupported ideas as validation queue items, not findings. Do not promote candidate findings to validated/report-ready; that belongs to the validator after repeatable proof.
 
+You may launch tightly scoped nested `validator` or `evidence` subagents when that prevents the primary operator from doing serial cleanup. Do not launch broad recon from here, and do not create nested trees; each delegated task must have one clear artifact target.
+
 Prefer fewer high-signal paths over a giant checklist. A good output lets the primary operator launch validation work without re-reading the entire recon history.

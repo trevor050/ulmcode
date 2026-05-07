@@ -117,10 +117,9 @@ interface State {
 }
 
 function fallbackAnswer(question: Info): Answer {
-  const sensitive = isSensitiveOperatorPrompt(`${question.header} ${question.question}`)
-  const preferred = sensitive
-    ? question.options.find((option) => /\b(deny|denied|unavailable|no|skip|cancel)\b/i.test(option.label))
-    : question.options.find((option) => option.label.includes("(Recommended)"))
+  const preferred =
+    question.options.find((option) => /\b(deny|denied|unavailable|no|skip|cancel)\b/i.test(option.label)) ??
+    question.options.find((option) => option.label.includes("(Recommended)"))
   return [preferred?.label ?? question.options[0]?.label ?? "Unavailable"]
 }
 

@@ -257,6 +257,11 @@ export const layer = Layer.effect(
               defaults,
               Permission.fromConfig({
                 todowrite: "deny",
+                task: {
+                  "*": "deny",
+                  validator: "allow",
+                  evidence: "allow",
+                },
               }),
               user,
             ),
@@ -298,7 +303,17 @@ export const layer = Layer.effect(
             description:
               "ULMCode subagent for dense final report synthesis from operation artifacts, findings, and evidence.",
             prompt: PROMPT_ULM_REPORT_WRITER,
-            permission: Permission.merge(defaults, user),
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                task: {
+                  "*": "deny",
+                  evidence: "allow",
+                  "report-reviewer": "allow",
+                },
+              }),
+              user,
+            ),
             options: {},
             mode: "subagent",
             native: true,

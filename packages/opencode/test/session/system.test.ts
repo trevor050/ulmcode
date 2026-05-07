@@ -176,6 +176,7 @@ describe("session.system", () => {
         expect(output).toContain("foreground_command_policy")
         expect(output).toContain("operator_availability_policy")
         expect(output).toContain("assume the operator is unavailable after execution starts")
+        expect(output).toContain("do not wait for new operator input")
       }),
     ),
   )

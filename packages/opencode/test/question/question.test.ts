@@ -149,6 +149,39 @@ it.instance(
   { git: true },
 )
 
+it.instance(
+  "ask - active unattended ULM operation prefers skip or decline on timeout",
+  () =>
+    Effect.gen(function* () {
+      const ctx = yield* InstanceState.context
+      yield* Effect.promise(() =>
+        createOperationGoal(ctx.worktree, {
+          operationID: "school",
+          objective: "Authorized unattended run",
+          targetDurationHours: 20,
+          continuation: { operatorFallbackTimeoutSeconds: 0.01 },
+        }),
+      )
+
+      const answers = yield* askEffect({
+        sessionID: SessionID.make("ses_test"),
+        questions: [
+          {
+            question: "Which optional enrichment should run next?",
+            header: "Enrich",
+            options: [
+              { label: "Run (Recommended)", description: "Run optional enrichment" },
+              { label: "Skip", description: "Skip optional enrichment and continue core scope" },
+            ],
+          },
+        ],
+      })
+
+      expect(answers).toEqual([["Skip"]])
+    }),
+  { git: true },
+)
+
 // reply tests
 
 it.instance(
