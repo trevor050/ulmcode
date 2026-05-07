@@ -28,6 +28,10 @@ The second finding is that student export returns sensitive fields across distri
 
 Priority one is tenant scoping on the export API, because that directly limits blast radius and prevents cross-district disclosure. Priority two is mandatory administrator MFA with export step-up, because it reduces the likelihood of a stolen password reaching sensitive workflows. Priority three is elevated export audit logging with alerting, because the district needs fast detection and reliable incident reconstruction. These changes should be validated with regression tests that prove an administrator from one district cannot export another district's students, sensitive fields require explicit authorization, and all bulk exports create high-signal audit events.
 
+## Coverage, Browser Evidence, and Testing Limits
+
+Coverage was limited to the synthetic district portal API surfaces represented in the replay: administrator session policy, administrator login, student export policy, cross-district export response, and export audit events. The lab uses recorded HTTP evidence rather than live browser screenshots, so browser evidence is intentionally absent and should not be interpreted as proof that the real portal UI exposes or hides these workflows. Testing did not contact production systems, real identity providers, real student records, or district SIEM tooling. The useful confidence comes from the server-side evidence chain and the report-ready finding records, while UI workflow behavior remains a follow-up validation item for a real authorized assessment.
+
 ## Validation Limits and Known Unknowns
 
 This report is based on a synthetic replay and does not measure production exploitability, live identity-provider policy, real tenant data shape, or actual district logging pipelines. The lab does not attempt persistence, privilege escalation beyond the district-admin role, or destructive data changes. Those limits are intentional. A real assessment would add identity-provider configuration review, production-safe export authorization tests, alert delivery verification, and stakeholder confirmation that remediation sequencing matches district operational constraints.
@@ -35,6 +39,14 @@ This report is based on a synthetic replay and does not measure production explo
 ## Evidence Map
 
 The MFA finding cites `ev-district-session-policy` and `ev-district-admin-login`. The cross-district export finding cites `ev-student-export-policy`, `ev-cross-district-export`, and `ev-export-audit-gap`. The evidence map is intentionally short because this lab is designed to test report preservation and multi-finding handoff behavior, not to simulate a large engagement evidence archive. The important validation point is that authored prose, finding references, and risk sequencing survive `report_render` into both final HTML and PDF artifacts.
+
+## Operator Handoff Checklist
+
+- Review the two report-ready findings and confirm their evidence IDs are present in the final manifest before sharing the report.
+- Treat the authored-report marker as an automation check only; remove it before any client-style deliverable leaves the lab context.
+- Confirm `runtime-summary.json`, `operation-audit.json`, validation stage gate output, final HTML, final PDF, and evidence records are present in `deliverables/final/` or the operation deliverables folder.
+- Preserve the validation limits section so reviewers do not overstate synthetic replay confidence as production exploitability.
+- Do not include operation-local memory or internal replay notes in customer-facing material.
 
 ## Appendix: Raw Evidence Index
 

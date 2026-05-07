@@ -29,7 +29,8 @@ test("returns default native agents when no config", async () => {
     fn: async () => {
       const agents = await load(tmp.path, (svc) => svc.list())
       const names = agents.map((a) => a.name)
-      expect(names).toContain("build")
+      expect(names).toContain("action")
+      expect(agents.find((a) => a.name === "build")?.hidden).toBe(true)
       expect(names).toContain("plan")
       expect(names).toContain("general")
       expect(names).toContain("explore")
@@ -40,7 +41,24 @@ test("returns default native agents when no config", async () => {
   })
 })
 
-test("build agent has correct default properties", async () => {
+test("action agent has correct default properties", async () => {
+  await using tmp = await tmpdir()
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const action = await load(tmp.path, (svc) => svc.get("action"))
+      expect(action).toBeDefined()
+      expect(action?.mode).toBe("primary")
+      expect(action?.native).toBe(true)
+      expect(action?.hidden).toBeUndefined()
+      expect(evalPerm(action, "edit")).toBe("allow")
+      expect(evalPerm(action, "bash")).toBe("allow")
+      expect(evalPerm(action, "websearch")).toBe("allow")
+    },
+  })
+})
+
+test("build remains a hidden legacy alias for action", async () => {
   await using tmp = await tmpdir()
   await WithInstance.provide({
     directory: tmp.path,
@@ -49,8 +67,10 @@ test("build agent has correct default properties", async () => {
       expect(build).toBeDefined()
       expect(build?.mode).toBe("primary")
       expect(build?.native).toBe(true)
+      expect(build?.hidden).toBe(true)
       expect(evalPerm(build, "edit")).toBe("allow")
       expect(evalPerm(build, "bash")).toBe("allow")
+      expect(evalPerm(build, "websearch")).toBe("allow")
     },
   })
 })
@@ -616,13 +636,13 @@ description: Permission skill.
   }
 })
 
-test("defaultAgent returns build when no default_agent config", async () => {
+test("defaultAgent returns action when no default_agent config", async () => {
   await using tmp = await tmpdir()
   await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const agent = await load(tmp.path, (svc) => svc.defaultAgent())
-      expect(agent).toBe("build")
+      expect(agent).toBe("action")
     },
   })
 })
@@ -706,10 +726,11 @@ test("defaultAgent throws when default_agent points to non-existent agent", asyn
   })
 })
 
-test("defaultAgent returns plan when build is disabled and default_agent not set", async () => {
+test("defaultAgent returns plan when action and build are disabled and default_agent not set", async () => {
   await using tmp = await tmpdir({
     config: {
       agent: {
+        action: { disable: true },
         build: { disable: true },
       },
     },
@@ -718,7 +739,7 @@ test("defaultAgent returns plan when build is disabled and default_agent not set
     directory: tmp.path,
     fn: async () => {
       const agent = await load(tmp.path, (svc) => svc.defaultAgent())
-      // build is disabled, so it should return plan (next primary agent)
+      // action/build are disabled, so it should return plan (next primary agent)
       expect(agent).toBe("plan")
     },
   })
@@ -728,6 +749,7 @@ test("defaultAgent throws when all primary agents are disabled", async () => {
   await using tmp = await tmpdir({
     config: {
       agent: {
+        action: { disable: true },
         build: { disable: true },
         plan: { disable: true },
         pentest: { disable: true },
@@ -737,7 +759,7 @@ test("defaultAgent throws when all primary agents are disabled", async () => {
   await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
-      // build, plan, and ULM's pentest primary are disabled, so no primary-capable agents remain.
+      // action/build, plan, and ULM's pentest primary are disabled, so no primary-capable agents remain.
       await expect(load(tmp.path, (svc) => svc.defaultAgent())).rejects.toThrow("no primary visible agent found")
     },
   })

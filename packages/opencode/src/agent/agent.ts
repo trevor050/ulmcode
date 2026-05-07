@@ -8,6 +8,7 @@ import { Auth } from "../auth"
 import { ProviderTransform } from "@/provider/transform"
 
 import PROMPT_GENERATE from "./generate.txt"
+import PROMPT_ULM_ACTION from "./prompt/action.txt"
 import PROMPT_ULM_ATTACK_MAP from "./prompt/attack-map.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
@@ -117,15 +118,41 @@ export const layer = Layer.effect(
         const user = Permission.fromConfig(cfg.permission ?? {})
 
         const agents: Record<string, Info> = {
-          build: {
-            name: "build",
-            description: "The default agent. Executes tools based on configured permissions.",
+          action: {
+            name: "action",
+            description:
+              "ULMCode focused execution mode for one-off tasks, small fixes, quick research, and narrow security checks.",
+            prompt: PROMPT_ULM_ACTION,
             options: {},
             permission: Permission.merge(
               defaults,
               Permission.fromConfig({
                 question: "allow",
                 plan_enter: "allow",
+                task: "allow",
+                webfetch: "allow",
+                websearch: "allow",
+              }),
+              user,
+            ),
+            mode: "primary",
+            native: true,
+            color: "info",
+          },
+          build: {
+            name: "build",
+            description: "Deprecated alias for action.",
+            prompt: PROMPT_ULM_ACTION,
+            hidden: true,
+            options: {},
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                question: "allow",
+                plan_enter: "allow",
+                task: "allow",
+                webfetch: "allow",
+                websearch: "allow",
               }),
               user,
             ),
@@ -439,7 +466,7 @@ export const layer = Layer.effect(
             agents,
             values(),
             sortBy(
-              [(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "build"), "desc"],
+              [(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "action"), "desc"],
               [(x) => x.name, "asc"],
             ),
           )

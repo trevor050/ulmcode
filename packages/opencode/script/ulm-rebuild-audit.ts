@@ -570,9 +570,14 @@ async function auditProfileRouting() {
   const profileConfig = await read("tools/ulmcode-profile/opencode.json")
   const omoConfig = await read("tools/ulmcode-profile/oh-my-openagent.jsonc")
   const shellStrategy = await read("tools/ulmcode-profile/plugins/shell-strategy/shell_strategy.md")
+  const pentestPrompt = await read("packages/opencode/src/agent/prompt/pentest.txt")
+  const reconPrompt = await read("packages/opencode/src/agent/prompt/recon.txt")
+  const actionPrompt = await read("packages/opencode/src/agent/prompt/action.txt")
   requireText("packages/opencode/script/ulm-profile-skills.ts", profileSkills, [
     "profile model must default to GPT-5.5 Fast",
     "profile small_model must use GPT-5.4 Mini Fast",
+    "action must use medium reasoning",
+    "websearch must route through the Exa remote MCP",
     "validator must use xhigh reasoning",
     "report-reviewer must use xhigh reasoning",
     "routing: ok",
@@ -581,6 +586,9 @@ async function auditProfileRouting() {
     '"model": "openai/gpt-5.5-fast"',
     '"small_model": "openai/gpt-5.4-mini-fast"',
     '"default_agent": "pentest"',
+    '"action"',
+    '"websearch"',
+    "web_search_exa",
     '"enable_sse_json_repair": true',
     "__ULMCODE_PROFILE_DIR__/plugins/shell-strategy/shell_strategy.md",
   ])
@@ -589,8 +597,29 @@ async function auditProfileRouting() {
     '"xhigh-court"',
     '"reasoningEffort": "xhigh"',
   ])
+  requireText("packages/opencode/src/agent/prompt/action.txt", actionPrompt, [
+    "focused, one-off",
+    "switching to `pentest`",
+    "operation_memory",
+    "quick repo fixes",
+  ])
+  requireText("packages/opencode/src/agent/prompt/pentest.txt", pentestPrompt, [
+    "Use `operation_memory` as operation-local working memory",
+    "Use `action` for focused one-off tasks",
+    "prefer `websearch` first",
+    "Record runtime/system constraints early",
+    "treat it as stale",
+  ])
+  requireText("packages/opencode/src/agent/prompt/recon.txt", reconPrompt, [
+    "Read `operation_memory`",
+    "use `websearch` to find candidate sources",
+    "Kali tools",
+    "Docker availability",
+  ])
   assert(!profileConfig.includes('"oh-my-openagent"'), "profile must not load Oh My OpenAgent")
   assert(!profileConfig.includes('"oh-my-opencode"'), "profile must not load legacy Oh My OpenCode")
+  assert(!profileConfig.includes('"vercel"'), "profile must not include unrelated Vercel MCP")
+  assert(!profileConfig.includes('"context7"'), "profile must not include unrelated context7 MCP")
   requireText("tools/ulmcode-profile/plugins/shell-strategy/shell_strategy.md", shellStrategy, [
     "Shell Non-Interactive Strategy",
     "GIT_TERMINAL_PROMPT",
@@ -634,6 +663,7 @@ async function auditProfileRuntime() {
   ])
   requireText("tools/ulmcode-profile/scripts/install-profile.sh", installer, [
     "ulmcode-launch.sh",
+    "websearch,agent_browser,playwright,pentestMCP",
     "rm -f \"$TARGET_DIR/oh-my-openagent.jsonc\"",
     "rm -f \"$TARGET_DIR/.opencode/oh-my-openagent.jsonc\"",
     "tool-manifest.json",

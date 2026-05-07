@@ -16,6 +16,13 @@
     "__ULMCODE_PROFILE_DIR__/plugins/shell-strategy/shell_strategy.md"
   ],
   "agent": {
+    "action": {
+      "model": "openai/gpt-5.5-fast",
+      "mode": "primary",
+      "options": {
+        "reasoningEffort": "medium"
+      }
+    },
     "pentest": {
       "model": "openai/gpt-5.5-fast",
       "mode": "primary",
@@ -96,6 +103,12 @@
     "@khalilgharbaoui/opencode-claude-code-plugin"
   ],
   "mcp": {
+    "websearch": {
+      "type": "remote",
+      "url": "https://mcp.exa.ai/mcp?tools=web_search_exa",
+      "enabled": true,
+      "oauth": false
+    },
     "agent_browser": {
       "type": "local",
       "command": [

@@ -30,6 +30,10 @@ The third finding is excessive vendor sync scope without elevated audit coverage
 
 Priority one is server-side tenant scoping and sensitive-field restriction on roster exports, because it directly limits bulk student-data exposure even if an administrator session is compromised. Priority two is SSO hardening: remove localhost callbacks from production, require signed RelayState, and mandate administrator MFA plus step-up for exports and vendor sync. Priority three is vendor-scope governance with explicit approvals and short-lived, purpose-limited tokens. Priority four is audit elevation for chained workflows, especially when a new session quickly performs export and vendor synchronization actions.
 
+## Coverage, Browser Evidence, and Testing Limits
+
+Coverage was limited to the synthetic SSO callback, assertion exchange, roster export, vendor synchronization, and audit-event APIs represented by the replay harness. The lab uses HTTP evidence artifacts and authored report preservation checks rather than live browser automation, so browser screenshots are not expected for this scenario. Testing did not contact production identity providers, real roster data, real vendor integrations, district SIEM destinations, or guardian communication systems. The chain is valuable because it proves ULMCode can preserve multi-step evidence and report-ready findings, but production validation would still need authorized IdP configuration review, UI workflow checks, scoped export testing, and alert-delivery confirmation.
+
 ## Validation Limits and Known Unknowns
 
 This lab is synthetic and does not prove exploitability in a real district environment. It does not test a production IdP, real SAML or OIDC signing behavior, true tenant data models, vendor contract requirements, alert delivery paths, or incident response playbooks. It also does not attempt persistence, destructive data modification, or privilege escalation beyond the fabricated district-admin role. A real engagement would add production-safe configuration review, controlled identity-provider validation, stakeholder-approved export tests, SIEM alert confirmation, and vendor authorization review.
@@ -37,6 +41,14 @@ This lab is synthetic and does not prove exploitability in a real district envir
 ## Evidence Map
 
 The SSO finding cites `ev-sso-config` and `ev-sso-exchange`. The roster export finding cites `ev-sso-exchange` and `ev-roster-export`. The vendor and audit finding cites `ev-vendor-sync` and `ev-chain-audit-gap`. The evidence set is intentionally compact but covers the full chain: configuration, session creation, data export, vendor synchronization, and audit weakness. This makes the lab useful for testing whether ULMCode can preserve a multi-finding narrative and still produce report artifacts with clear evidence attribution.
+
+## Operator Handoff Checklist
+
+- Verify the final report includes all three report-ready findings with their evidence IDs before treating the lab as a passing handoff.
+- Confirm final HTML, final PDF text, manifest metadata, operation audit output, validation stage gate output, runtime summary, and evidence records are present.
+- Keep the synthetic-only scope language intact so the report does not imply live district exploitability.
+- Review vendor-scope and audit findings together, because the important risk is the chained workflow rather than isolated endpoint behavior.
+- Do not include operation-local memory, replay scratch notes, or internal automation markers in customer-facing material.
 
 ## Appendix: Raw Evidence Index
 

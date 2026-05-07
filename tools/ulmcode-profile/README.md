@@ -18,13 +18,14 @@ It also runs the bundled lab replay catalog, proving the manifest-driven replay 
 
 ## Runtime Defaults
 
-- `pentest` is the default primary agent.
+- `pentest` is the default primary agent for operations.
+- `action` is the focused primary mode for one-off fixes, quick research, and narrow security checks. The old `build` mode remains hidden as a compatibility alias.
 - `gpt-5.4-mini-fast` handles quick recon and evidence normalization.
 - `gpt-5.5-fast` handles operation control, attack-path mapping, validation, reporting, report review, and hard reasoning lanes.
 - Session retries are capped with `max_retries: 8` so a long unattended operation can ride out transient provider failures without spinning forever.
 - Skills are allowlisted to the bundled K-12 pentest profile, including a dedicated long-report production skill for dense report drafting and sparse-report prevention.
-- Agent Browser, Playwright, and pentest MCP are configured. `agent_browser` is the preferred browser automation MCP; Playwright is the fallback.
-- The plugin stack is intentionally small: the ULM runtime guard, the Claude Code bridge plugin, Agent Browser MCP, Playwright MCP, pentest MCP, and LAN LM Studio fallback models.
+- Websearch, Agent Browser, Playwright, and pentest MCP are configured. `websearch` uses the Exa remote MCP for current research without loading Oh My OpenAgent. `agent_browser` is the preferred browser automation MCP; Playwright is the fallback.
+- The plugin stack is intentionally small: the ULM runtime guard, the Claude Code bridge plugin, Websearch MCP, Agent Browser MCP, Playwright MCP, pentest MCP, and LAN LM Studio fallback models.
 - The profile includes a local `ulmcode-runtime-guard` server plugin that injects ULM operation-resume, background-task, report-lint, runtime-summary, and final-handoff guardrails into the runtime without depending on npm availability. It also bundles the local shell non-interactive strategy as a profile instruction so long unattended runs avoid prompt-prone shell commands.
 - Third-party plugin source is vendored for audit/fork work under `plugins/vendor/`; currently this includes `@khalilgharbaoui/opencode-claude-code-plugin@0.2.2` and `oh-my-openagent@3.17.12`. Oh My OpenAgent is not loaded by the ULMCode profile; the vendored copy is retained only for future audit/fork work.
 - Bundled commands include `ulm-resume`, `ulm-final-handoff`, and `ulm-test-plan`. General personal OpenCode agents, prompts, Feature Forge, and Sisyphus/OpenCode-Builder surfaces must stay out of the installed ULM profile.

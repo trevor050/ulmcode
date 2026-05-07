@@ -29,6 +29,9 @@ grep -q '"defaultSafetyMode": "non_destructive"' "$PROFILE_DIR/tool-manifest.jso
 grep -q '"destructiveSafetyMode": "interactive_destructive"' "$PROFILE_DIR/tool-manifest.json"
 grep -q '"commandProfiles"' "$PROFILE_DIR/tool-manifest.json"
 grep -q '"agent-browser"' "$PROFILE_DIR/tool-manifest.json"
+grep -q '"action"' "$PROFILE_DIR/opencode.json"
+grep -q '"websearch"' "$PROFILE_DIR/opencode.json"
+grep -q 'web_search_exa' "$PROFILE_DIR/opencode.json"
 if grep -q '"vercel"' "$PROFILE_DIR/opencode.json" || grep -q '"context7"' "$PROFILE_DIR/opencode.json"; then
   echo "profile must not include unrelated Vercel/context7 MCP servers" >&2
   exit 1
@@ -55,6 +58,8 @@ test -f "$install_dir/plugins/vendor/oh-my-openagent-3.17.12/package.json"
 grep -q 'file:plugins/vendor/oh-my-openagent-3.17.12' "$install_dir/package.json"
 test -f "$install_dir/tool-manifest.json"
 grep -q '"commandProfiles"' "$install_dir/tool-manifest.json"
+grep -q '"action"' "$install_dir/opencode.json"
+grep -q '"websearch"' "$install_dir/opencode.json"
 test -f "$install_dir/commands/ulm-resume.md"
 if [ -e "$install_dir/.opencode/agents" ] || [ -e "$install_dir/.opencode/prompts" ] || [ -e "$install_dir/.opencode/commands" ]; then
   echo "profile installer must not copy personal/general OpenCode agents, prompts, or commands" >&2

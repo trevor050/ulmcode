@@ -163,6 +163,12 @@ function validateRouting() {
   assertRoute("opencode.json", "pentest", opencodeConfig.agent?.pentest, {
     model: "openai/gpt-5.5-fast",
   })
+  assertRoute("opencode.json", "action", opencodeConfig.agent?.action, {
+    model: "openai/gpt-5.5-fast",
+  })
+  if (opencodeConfig.agent?.action?.options?.reasoningEffort !== "medium") {
+    throw new Error("opencode.json: action must use medium reasoning for focused one-off work")
+  }
   assertRoute("opencode.json", "recon", opencodeConfig.agent?.recon, {
     model: "openai/gpt-5.4-mini-fast",
   })
@@ -180,6 +186,13 @@ function validateRouting() {
   }
   if (opencodeConfig.plugin?.some((plugin) => plugin === "oh-my-openagent" || plugin === "oh-my-opencode")) {
     throw new Error("opencode.json: ULM profile must not load Oh My OpenAgent")
+  }
+  const mcpConfig = opencodeConfig as ProfileConfig & { mcp?: Record<string, { type?: string; url?: string }> }
+  if (mcpConfig.mcp?.websearch?.type !== "remote" || !mcpConfig.mcp.websearch.url?.includes("web_search_exa")) {
+    throw new Error("opencode.json: websearch must route through the Exa remote MCP without loading Oh My OpenAgent")
+  }
+  if (mcpConfig.mcp?.vercel || mcpConfig.mcp?.context7) {
+    throw new Error("opencode.json: ULM profile must not include unrelated Vercel/context7 MCP servers")
   }
 }
 
