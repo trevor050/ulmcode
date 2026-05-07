@@ -1,0 +1,15 @@
+{
+  "id": "scorecard-contract",
+  "capability": "longitudinal_scorecard",
+  "tier": "fast",
+  "objective": "Persist machine-readable and markdown scorecards for trend review.",
+  "checks": [
+    "scorecard.json is written",
+    "scorecard.md is written",
+    "Coverage includes all required capabilities"
+  ],
+  "acceptance": [
+    "The scorecard reports longitudinal_scorecard coverage",
+    "Each run records pass, fail, missing, duration, and scenario details"
+  ]
+}

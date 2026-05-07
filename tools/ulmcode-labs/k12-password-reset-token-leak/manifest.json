@@ -1,0 +1,179 @@
+{
+  "id": "k12-password-reset-token-leak",
+  "operationID": "k12-password-reset-token-leak",
+  "objective": "Replay a synthetic authorized K-12 password-reset privacy assessment with exposed reset tokens in support audit logs.",
+  "assumptions": [
+    "The lab uses synthetic evidence only.",
+    "No real external target is contacted.",
+    "Users, reset tokens, and support audit events are intentionally fake."
+  ],
+  "plan": {
+    "phases": [
+      {
+        "stage": "recon",
+        "objective": "Map password-reset and support audit surfaces.",
+        "actions": [
+          "Request a synthetic password reset for a staff account",
+          "Inspect whether support audit logs are exposed without authorization"
+        ],
+        "successCriteria": [
+          "Reset request behavior and exposed audit-log evidence are recorded"
+        ],
+        "subagents": [
+          "recon"
+        ],
+        "noSubagents": [
+          "account-takeover impact scoping stays with the primary operator"
+        ]
+      },
+      {
+        "stage": "validation",
+        "objective": "Validate reset-token reuse from exposed logs.",
+        "actions": [
+          "Extract the synthetic reset token from the exposed audit log",
+          "Use the token to complete a reset without mailbox or help-desk verification",
+          "Record the missing token redaction and reset confirmation controls"
+        ],
+        "successCriteria": [
+          "A report-ready finding cites reset request, exposed log, and token-use evidence"
+        ],
+        "subagents": [
+          "validator",
+          "evidence"
+        ],
+        "noSubagents": [
+          "final severity and disclosure wording stay with the primary operator"
+        ]
+      },
+      {
+        "stage": "reporting",
+        "objective": "Render final handoff artifacts.",
+        "actions": [
+          "Run report_lint",
+          "Run report_render",
+          "Run runtime_summary"
+        ],
+        "successCriteria": [
+          "Final handoff lint passes"
+        ],
+        "subagents": [
+          "report-writer"
+        ],
+        "noSubagents": [
+          "client-facing delivery approval is manual"
+        ]
+      }
+    ],
+    "reportingCloseout": [
+      "Run report_lint",
+      "Run report_render",
+      "Run runtime_summary"
+    ]
+  },
+  "report": {
+    "targetPages": 3,
+    "minOutlineWordsPerPage": 80
+  },
+  "evidence": [
+    {
+      "evidenceID": "ev-reset-request",
+      "title": "Synthetic password reset request response",
+      "kind": "http_response",
+      "summary": "A password-reset request for a synthetic staff account returned a generic success response while creating a reset token in the audit stream.",
+      "url": "http://127.0.0.1/api/password-reset/request",
+      "content": "{\"accepted\":true,\"delivery\":\"email\",\"account\":\"teacher-reset@district.test\",\"labFinding\":null}"
+    },
+    {
+      "evidenceID": "ev-reset-audit-log-token",
+      "title": "Synthetic exposed reset token audit log",
+      "kind": "http_response",
+      "summary": "An unauthenticated support audit-log endpoint returned the active password-reset token in clear text.",
+      "url": "http://127.0.0.1/api/support/audit-log?account=teacher-reset@district.test",
+      "content": "{\"authenticated\":false,\"events\":[{\"type\":\"password_reset_requested\",\"account\":\"teacher-reset@district.test\",\"resetToken\":\"reset-lab-token-7142\"}],\"labFinding\":\"password_reset_token_leak\"}"
+    },
+    {
+      "evidenceID": "ev-reset-token-use",
+      "title": "Synthetic leaked reset token password change",
+      "kind": "http_response",
+      "summary": "The leaked reset token changed the synthetic staff account password without additional mailbox, staff, or help-desk verification.",
+      "url": "http://127.0.0.1/api/password-reset/complete",
+      "content": "{\"reset\":true,\"account\":\"teacher-reset@district.test\",\"additionalVerification\":false,\"labFinding\":\"password_reset_token_reuse\"}"
+    }
+  ],
+  "findings": [
+    {
+      "findingID": "password-reset-token-leak",
+      "title": "Password reset tokens leak through support audit logs",
+      "state": "report_ready",
+      "severity": "critical",
+      "confidence": 0.91,
+      "affectedAssets": [
+        "Password reset workflow",
+        "Support audit log endpoint",
+        "Staff account recovery controls"
+      ],
+      "evidence": [
+        {
+          "id": "ev-reset-request",
+          "path": "evidence/raw/ev-reset-request.txt"
+        },
+        {
+          "id": "ev-reset-audit-log-token",
+          "path": "evidence/raw/ev-reset-audit-log-token.txt"
+        },
+        {
+          "id": "ev-reset-token-use",
+          "path": "evidence/raw/ev-reset-token-use.txt"
+        }
+      ],
+      "description": "The synthetic support audit-log endpoint exposes active password-reset tokens and the reset completion endpoint accepts those tokens without an additional verification step.",
+      "impact": "An attacker who can reach the audit-log endpoint could reset a staff account and gain access to student, classroom, or administrative data protected by that account.",
+      "remediation": "Remove secrets from audit responses, require authorization for support logs, store only token hashes, expire tokens quickly, and require mailbox or help-desk verification before completing high-risk resets."
+    }
+  ],
+  "runtime": {
+    "sessionMessages": [
+      {
+        "role": "assistant",
+        "agent": "pentest",
+        "modelID": "gpt-5.5",
+        "providerID": "openai",
+        "cost": 0.52,
+        "tokens": {
+          "input": 1450,
+          "output": 620,
+          "reasoning": 420,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "role": "assistant",
+        "agent": "validator",
+        "modelID": "gpt-5.4-mini",
+        "providerID": "openai",
+        "cost": 0.16,
+        "tokens": {
+          "input": 760,
+          "output": 340,
+          "reasoning": 160,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      }
+    ]
+  },
+  "expected": {
+    "reportableFindings": 1,
+    "evidence": 3,
+    "dashboardIncludes": [
+      "# k12-password-reset-token-leak - handoff/complete",
+      "risk: high",
+      "findings: 1 total"
+    ]
+  }
+}

@@ -1,0 +1,1652 @@
+import { afterEach, describe, expect, test } from "bun:test"
+import fs from "fs/promises"
+import os from "os"
+import path from "path"
+import { Bus } from "@/bus"
+import { WithInstance } from "@/project/with-instance"
+import {
+  buildOperationAudit,
+  buildOperationResumeBrief,
+  buildOperationStageGate,
+  formatOperationStatusDashboard,
+  formatOperationResumeBrief,
+  listOperationStatuses,
+  lintReport,
+  readOperationStatus,
+  renderReport,
+  validateFinding,
+  writeFinding,
+  writeDistrictProfile,
+  writeEvidence,
+  writeIdentityGraph,
+  writeOperationCheckpoint,
+  writeOperationPlan,
+  writePersonProfile,
+  writeReportOutline,
+  writeRuntimeSummary,
+} from "@/ulm/artifact"
+import { OperationEvent } from "@/ulm/event"
+import { writeOperationGraph } from "@/ulm/operation-graph"
+import { disposeAllInstances } from "../fixture/fixture"
+
+async function tmpdir() {
+  return fs.mkdtemp(path.join(os.tmpdir(), "ulm-artifact-"))
+}
+
+async function completeGraphForHandoff(worktree: string, operationID = "school") {
+  const graph = await writeOperationGraph(worktree, { operationID, budgetUSD: 10 })
+  const parsed = JSON.parse(await fs.readFile(graph.json, "utf8"))
+  const root = path.join(worktree, ".ulmcode", "operations", operationID)
+  for (const lane of parsed.lanes) {
+    lane.status = "complete"
+    for (const artifact of lane.expectedArtifacts) {
+      const target = path.join(root, artifact.replace(/\/+$/g, ""))
+      if (artifact.endsWith("/")) {
+        await fs.mkdir(target, { recursive: true })
+        await fs.writeFile(path.join(target, ".keep"), "complete\n")
+      } else {
+        await fs.mkdir(path.dirname(target), { recursive: true })
+        try {
+          const stat = await fs.stat(target)
+          if (stat.size > 0) continue
+        } catch {}
+        await fs.writeFile(
+          target,
+          artifact === "reports/report.md"
+            ? [
+                "# Assessment Report",
+                "",
+                "## Executive Summary",
+                "complete ".repeat(20),
+                "## Scope, Authorization, and Methodology",
+                "complete ".repeat(20),
+                "## District Profile and Environment Overview",
+                "complete ".repeat(20),
+                "## People, Roles, and Identity Graph",
+                "complete ".repeat(20),
+                "## Attack Path Narrative",
+                "complete ".repeat(20),
+                "## Findings Detail",
+                "complete ".repeat(20),
+                "## Risk Register and Prioritized Roadmap",
+                "complete ".repeat(20),
+                "## Validation Limits and Known Unknowns",
+                "complete ".repeat(20),
+                "## Evidence Map",
+                "complete ".repeat(20),
+                "## Appendix: Raw Evidence Index",
+                "complete ".repeat(20),
+              ].join("\n")
+            : "complete\n",
+        )
+      }
+    }
+  }
+  await fs.writeFile(graph.json, JSON.stringify(parsed, null, 2))
+  await fs.mkdir(path.join(root, "lane-complete"), { recursive: true })
+  for (const lane of parsed.lanes) {
+    await fs.writeFile(
+      path.join(root, "lane-complete", `${lane.id}.json`),
+      JSON.stringify(
+        {
+          operationID,
+          laneID: lane.id,
+          status: "complete",
+          completedAt: new Date().toISOString(),
+          summary: `${lane.id} complete.`,
+          artifacts: lane.expectedArtifacts,
+          evidenceRefs: ["ev-1"],
+        },
+        null,
+        2,
+      ),
+    )
+  }
+}
+
+describe("ULM artifact ledger", () => {
+  afterEach(() => disposeAllInstances())
+
+  test("writes resumable operation checkpoints", async () => {
+    const worktree = await tmpdir()
+    const result = await writeOperationCheckpoint(worktree, {
+      operationID: "School Assessment",
+      objective: "Authorized school assessment",
+      stage: "recon",
+      status: "running",
+      summary: "Recon lane started.",
+      nextActions: ["Map exposed services"],
+      activeTasks: ["task-1"],
+      evidence: [{ id: "ev-1", path: "evidence/raw/nmap.txt", summary: "Initial scan" }],
+    })
+
+    expect(result.record.operationID).toBe("school-assessment")
+    expect(await fs.readFile(path.join(result.root, "status.md"), "utf8")).toContain("Recon lane started.")
+    expect(await fs.readFile(path.join(result.root, "events.jsonl"), "utf8")).toContain("\"type\":\"checkpoint\"")
+  })
+
+  test("publishes operation update events after durable writes", async () => {
+    const worktree = await tmpdir()
+    const received: Array<{ operationID: string; artifact: string; path?: string }> = []
+
+    await WithInstance.provide({
+      directory: worktree,
+      fn: async () => {
+        Bus.subscribe(OperationEvent.Updated, (evt) => {
+          received.push(evt.properties)
+        })
+        await Bun.sleep(10)
+        await writeOperationCheckpoint(worktree, {
+          operationID: "School Assessment",
+          objective: "Authorized school assessment",
+          stage: "recon",
+          status: "running",
+          summary: "Recon lane started.",
+        })
+        await Bun.sleep(10)
+      },
+    })
+
+    expect(received).toContainEqual(
+      expect.objectContaining({
+        operationID: "school-assessment",
+        artifact: "checkpoint",
+        operation: expect.objectContaining({
+          stage: "recon",
+          status: "running",
+          summary: "Recon lane started.",
+        }),
+        findings: { total: 0 },
+        evidence: { total: 0 },
+      }),
+    )
+  })
+
+  test("requires evidence before validated findings", () => {
+    const gaps = validateFinding({
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "validated",
+      severity: "high",
+      confidence: 0.8,
+      affectedAssets: ["IdP"],
+      evidence: [],
+      description: "MFA is not enforced for administrators.",
+    })
+
+    expect(gaps).toContain("validated findings require at least one evidence reference")
+  })
+
+  test("writes durable evidence records and raw content", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "recon",
+      status: "running",
+      summary: "Recon is collecting evidence.",
+    })
+
+    const result = await writeEvidence(worktree, {
+      operationID: "school",
+      title: "IdP policy export",
+      kind: "command_output",
+      summary: "Policy export shows privileged MFA is optional.",
+      command: "idpctl policy export --json",
+      content: "{\"adminMfa\":\"optional\"}",
+    })
+
+    expect(await fs.readFile(result.rawPath!, "utf8")).toContain("adminMfa")
+    expect(JSON.parse(await fs.readFile(result.json, "utf8")).path).toBe("evidence/raw/idp-policy-export.txt")
+    expect((await readOperationStatus(worktree, "school")).evidence.total).toBe(1)
+  })
+
+  test("lints findings before report handoff", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "reporting",
+      status: "running",
+      summary: "Reporting started.",
+    })
+    await writeEvidence(worktree, {
+      operationID: "school",
+      evidenceID: "ev-1",
+      title: "IdP policy export",
+      kind: "file",
+      summary: "MFA policy export.",
+      path: "evidence/raw/idp-policy.json",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "report_ready",
+      severity: "high",
+      confidence: 0.9,
+      affectedAssets: ["IdP"],
+      evidence: [{ id: "ev-1", path: "evidence/raw/idp-policy.json" }],
+      description: "MFA is not enforced for administrators.",
+      impact: "Administrator takeover is more likely after password compromise.",
+      remediation: "Require phishing-resistant MFA for privileged accounts.",
+    })
+
+    const result = await lintReport(worktree, "school")
+    expect(result.ok).toBe(true)
+    expect(result.counts.reportReady).toBe(1)
+  })
+
+  test("lints reportable findings that cite unrecorded evidence", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "reporting",
+      status: "running",
+      summary: "Reporting started.",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "report_ready",
+      severity: "high",
+      confidence: 0.9,
+      affectedAssets: ["IdP"],
+      evidence: [{ id: "ev-missing", path: "evidence/raw/missing.txt" }],
+      description: "MFA is not enforced for administrators.",
+      impact: "Administrator takeover is more likely after password compromise.",
+      remediation: "Require phishing-resistant MFA for privileged accounts.",
+    })
+
+    const result = await lintReport(worktree, "school")
+    expect(result.ok).toBe(false)
+    expect(result.gaps).toContain("weak-mfa-coverage: evidence reference ev-missing is not recorded")
+  })
+
+  test("writes a dense report outline and catches sparse reports", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "reporting",
+      status: "running",
+      summary: "Reporting started.",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "report_ready",
+      severity: "high",
+      confidence: 0.9,
+      affectedAssets: ["IdP"],
+      evidence: [{ id: "ev-1", path: "evidence/raw/idp-policy.json" }],
+      description: "MFA is not enforced for administrators.",
+      impact: "Administrator takeover is more likely after password compromise.",
+      remediation: "Require phishing-resistant MFA for privileged accounts.",
+    })
+
+    const outline = await writeReportOutline(worktree, { operationID: "school", targetPages: 40 })
+    expect(await fs.readFile(outline.file, "utf8")).toContain("target_pages: 40")
+
+    await fs.writeFile(path.join(outline.root, "reports", "report.md"), "too short")
+    const result = await lintReport(worktree, "school", { requireReport: true, minWords: 100 })
+    expect(result.ok).toBe(false)
+    expect(result.gaps.some((gap) => gap.includes("too sparse"))).toBe(true)
+  })
+
+  test("lints reports that miss the outline page budget", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "reporting",
+      status: "running",
+      summary: "Reporting started.",
+    })
+    await writeEvidence(worktree, {
+      operationID: "school",
+      evidenceID: "ev-1",
+      title: "IdP policy export",
+      kind: "file",
+      summary: "MFA policy export.",
+      path: "evidence/raw/idp-policy.json",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "report_ready",
+      severity: "high",
+      confidence: 0.9,
+      affectedAssets: ["IdP"],
+      evidence: [{ id: "ev-1", path: "evidence/raw/idp-policy.json" }],
+      description: "MFA is not enforced for administrators.",
+      impact: "Administrator takeover is more likely after password compromise.",
+      remediation: "Require phishing-resistant MFA for privileged accounts.",
+    })
+
+    const outline = await writeReportOutline(worktree, { operationID: "school", targetPages: 4 })
+    await fs.writeFile(path.join(outline.root, "reports", "report.md"), `# Report\n\n${"detail ".repeat(150)}`)
+
+    const result = await lintReport(worktree, "school", {
+      requireReport: true,
+      requireOutlineBudget: true,
+      minOutlineWordsPerPage: 100,
+    })
+    expect(result.ok).toBe(false)
+    expect(result.gaps).toContain("report misses outline budget: 152 words, expected at least 400 for 4 target pages")
+  })
+
+  test("lints missing outline report sections even when total report is long", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "reporting",
+      status: "running",
+      summary: "Reporting started.",
+    })
+    await writeEvidence(worktree, {
+      operationID: "school",
+      evidenceID: "ev-1",
+      title: "IdP policy export",
+      kind: "file",
+      summary: "MFA policy export.",
+      path: "evidence/raw/idp-policy.json",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "report_ready",
+      severity: "high",
+      confidence: 0.9,
+      affectedAssets: ["IdP"],
+      evidence: [{ id: "ev-1", path: "evidence/raw/idp-policy.json" }],
+      description: "MFA is not enforced for administrators.",
+      impact: "Administrator takeover is more likely after password compromise.",
+      remediation: "Require phishing-resistant MFA for privileged accounts.",
+    })
+
+    const outline = await writeReportOutline(worktree, { operationID: "school", targetPages: 4 })
+    await fs.writeFile(
+      path.join(outline.root, "reports", "report.md"),
+      ["# Report", "", "## Methodology", "methodology ".repeat(500)].join("\n"),
+    )
+
+    const result = await lintReport(worktree, "school", {
+      requireReport: true,
+      requireOutlineSections: true,
+      minOutlineSectionWords: 25,
+    })
+    expect(result.ok).toBe(false)
+    expect(result.gaps).toContain("Executive Summary: outline section is missing")
+  })
+
+  test("lints sparse outline report sections even when total report is long", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "reporting",
+      status: "running",
+      summary: "Reporting started.",
+    })
+    await writeEvidence(worktree, {
+      operationID: "school",
+      evidenceID: "ev-1",
+      title: "IdP policy export",
+      kind: "file",
+      summary: "MFA policy export.",
+      path: "evidence/raw/idp-policy.json",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "report_ready",
+      severity: "high",
+      confidence: 0.9,
+      affectedAssets: ["IdP"],
+      evidence: [{ id: "ev-1", path: "evidence/raw/idp-policy.json" }],
+      description: "MFA is not enforced for administrators.",
+      impact: "Administrator takeover is more likely after password compromise.",
+      remediation: "Require phishing-resistant MFA for privileged accounts.",
+    })
+
+    const outline = await writeReportOutline(worktree, { operationID: "school", targetPages: 4 })
+    await fs.writeFile(
+      path.join(outline.root, "reports", "report.md"),
+      [
+        "# Report",
+        "",
+        "## Executive Summary",
+        "Too thin.",
+        "",
+        "## Scope, Authorization, and Methodology",
+        "methodology ".repeat(500),
+      ].join("\n"),
+    )
+
+    const result = await lintReport(worktree, "school", {
+      requireReport: true,
+      requireOutlineSections: true,
+      minOutlineSectionWords: 25,
+    })
+    expect(result.ok).toBe(false)
+    expect(result.gaps).toContain("Executive Summary: outline section is too sparse: 2 words, expected at least 25")
+  })
+
+  test("lints sparse per-finding report sections even when total report is long", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "reporting",
+      status: "running",
+      summary: "Reporting started.",
+    })
+    await writeEvidence(worktree, {
+      operationID: "school",
+      evidenceID: "ev-1",
+      title: "IdP policy export",
+      kind: "file",
+      summary: "MFA policy export.",
+      path: "evidence/raw/idp-policy.json",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "report_ready",
+      severity: "high",
+      confidence: 0.9,
+      affectedAssets: ["IdP"],
+      evidence: [{ id: "ev-1", path: "evidence/raw/idp-policy.json" }],
+      description: "MFA is not enforced for administrators.",
+      impact: "Administrator takeover is more likely after password compromise.",
+      remediation: "Require phishing-resistant MFA for privileged accounts.",
+    })
+
+    const root = path.join(worktree, ".ulmcode", "operations", "school")
+    await fs.mkdir(path.join(root, "reports"), { recursive: true })
+    await fs.writeFile(
+      path.join(root, "reports", "report.md"),
+      [
+        "# Report",
+        "",
+        "## Methodology",
+        "methodology ".repeat(150),
+        "",
+        "## Weak MFA coverage",
+        "Admins lack MFA.",
+      ].join("\n"),
+    )
+
+    const result = await lintReport(worktree, "school", {
+      requireReport: true,
+      minWords: 100,
+      requireFindingSections: true,
+      minFindingWords: 50,
+    })
+    expect(result.ok).toBe(false)
+    expect(result.gaps).toContain("weak-mfa-coverage: report section is too sparse: 3 words, expected at least 50")
+  })
+
+  test("reads operation status for resumable runs", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "validation",
+      status: "running",
+      summary: "Validation running.",
+    })
+
+    const status = await readOperationStatus(worktree, "school")
+    expect(status.operation?.stage).toBe("validation")
+    expect(status.findings.total).toBe(0)
+    expect(status.lastEvents).toHaveLength(1)
+  })
+
+  test("reads operation graph and lane proof health in operation status", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "recon",
+      status: "running",
+      summary: "Recon running.",
+    })
+    const graph = await writeOperationGraph(worktree, { operationID: "school", budgetUSD: 10 })
+    const parsed = JSON.parse(await fs.readFile(graph.json, "utf8"))
+    parsed.lanes.find((lane: { id: string }) => lane.id === "recon").status = "complete"
+    await fs.writeFile(graph.json, JSON.stringify(parsed, null, 2))
+
+    const status = await readOperationStatus(worktree, "school")
+
+    expect(status.graph?.lanes.byStatus.complete).toBe(1)
+    expect(status.graph?.lanes.missingProofs).toContain("recon")
+  })
+
+  test("lists operation statuses for CLI dashboards", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "beta",
+      objective: "Beta school assessment",
+      stage: "recon",
+      status: "running",
+      summary: "Recon running.",
+    })
+    await writeOperationCheckpoint(worktree, {
+      operationID: "alpha",
+      objective: "Alpha school assessment",
+      stage: "handoff",
+      status: "complete",
+      summary: "Handoff complete.",
+    })
+
+    const statuses = await listOperationStatuses(worktree)
+    expect(statuses.map((status) => status.operationID)).toEqual(["alpha", "beta"])
+    expect(statuses[0]?.operation?.status).toBe("complete")
+    expect(statuses[1]?.operation?.stage).toBe("recon")
+  })
+
+  test("formats a compact operation status dashboard", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "validation",
+      status: "running",
+      riskLevel: "high",
+      summary: "Validation running.",
+      nextActions: ["Promote confirmed findings"],
+      blockers: ["Waiting on VPN window"],
+      activeTasks: ["task-recon-1"],
+    })
+    await writeEvidence(worktree, {
+      operationID: "school",
+      evidenceID: "ev-1",
+      title: "IdP policy export",
+      kind: "file",
+      summary: "MFA policy export.",
+      path: "evidence/raw/idp-policy.json",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "report_ready",
+      severity: "high",
+      confidence: 0.9,
+      affectedAssets: ["IdP"],
+      evidence: [{ id: "ev-1", path: "evidence/raw/idp-policy.json" }],
+      description: "MFA is not enforced for administrators.",
+      impact: "Administrator takeover is more likely after password compromise.",
+      remediation: "Require phishing-resistant MFA for privileged accounts.",
+    })
+    await writeRuntimeSummary(worktree, {
+      operationID: "school",
+      modelCalls: { total: 3, byModel: { "gpt-5.5": 2, "gpt-5.4-mini": 1 } },
+      usage: { totalTokens: 4200, costUSD: 0.75, remainingUSD: 9.25 },
+      backgroundTasks: [
+        { id: "task-recon-1", agent: "recon", status: "running", summary: "Enumerating login surface." },
+      ],
+      notes: ["runtime blind spot: background task task-old has no readable session ledger."],
+    })
+
+    const dashboard = formatOperationStatusDashboard(await readOperationStatus(worktree, "school"))
+    expect(dashboard).toContain("school - validation/running")
+    expect(dashboard).toContain("risk: high")
+    expect(dashboard).toContain("findings: 1 total")
+    expect(dashboard).toContain("evidence: 1 total")
+    expect(dashboard).toContain("runtime: 3 calls, 4200 tokens, $0.75")
+    expect(dashboard).toContain("models: gpt-5.5=2, gpt-5.4-mini=1")
+    expect(dashboard).toContain("- task-recon-1 running (recon)")
+    expect(dashboard).toContain("runtime_notes:")
+    expect(dashboard).toContain("- runtime blind spot: background task task-old has no readable session ledger.")
+    expect(dashboard).toContain("blockers:")
+  })
+
+  test("renders final report deliverables", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "handoff",
+      status: "complete",
+      summary: "Testing identified one report-ready finding.",
+    })
+    await writeOperationPlan(worktree, {
+      operationID: "school",
+      assumptions: ["Testing is authorized."],
+      phases: [
+        {
+          stage: "reporting",
+          objective: "Finalize report.",
+          actions: ["Render deliverables"],
+          successCriteria: ["Manifest includes handoff artifacts"],
+          subagents: ["report-writer"],
+          noSubagents: ["risk acceptance"],
+        },
+      ],
+      reportingCloseout: ["Run report_lint", "Run report_render", "Run runtime_summary"],
+    })
+    await writeEvidence(worktree, {
+      operationID: "school",
+      evidenceID: "ev-1",
+      title: "IdP policy export",
+      kind: "file",
+      summary: "MFA policy export.",
+      path: "evidence/raw/idp-policy.json",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "report_ready",
+      severity: "high",
+      confidence: 0.9,
+      affectedAssets: ["IdP"],
+      evidence: [{ id: "ev-1", path: "evidence/raw/idp-policy.json" }],
+      description: "MFA is not enforced for administrators.",
+      impact: "Administrator takeover is more likely after password compromise.",
+      remediation: "Require phishing-resistant MFA for privileged accounts.",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Legacy TLS suspicion",
+      state: "rejected",
+      severity: "medium",
+      confidence: 0.2,
+      affectedAssets: ["vpn.example.edu"],
+      evidence: [],
+      description: "Initial suspicion was rejected during validation.",
+    })
+
+    const result = await renderReport(worktree, { operationID: "school", title: "Assessment Report" })
+    const html = await fs.readFile(result.html, "utf8")
+    expect(html).toContain("Weak MFA coverage")
+    expect(html).toContain("Evidence Index")
+    expect(html).toContain("Legacy TLS suspicion")
+    const pdf = await fs.readFile(result.pdf, "utf8")
+    expect(pdf).toStartWith("%PDF-")
+    expect(pdf).toContain("Scope, Authorization, and Methodology")
+    expect(pdf).toContain("Risk Register and Prioritized Roadmap")
+    const readme = await fs.readFile(result.readme, "utf8")
+    expect(readme).toContain("Assessment Report")
+    expect(readme).toContain("Non-Reportable Findings")
+    expect(readme).toContain("findings.json")
+    const findingsJson = JSON.parse(await fs.readFile(result.findingsJson, "utf8"))
+    expect(findingsJson.reportable[0]?.findingID).toBe("weak-mfa-coverage")
+    expect(findingsJson.retained[0]?.findingID).toBe("legacy-tls-suspicion")
+    const evidenceIndex = JSON.parse(await fs.readFile(result.evidenceIndex, "utf8"))
+    expect(evidenceIndex.evidence[0]?.referencedBy).toEqual(["weak-mfa-coverage"])
+    expect(await fs.readFile(result.operatorReview, "utf8")).toContain("runtime summary present: no")
+    expect(await fs.readFile(result.executiveSummary, "utf8")).toContain("Weak MFA coverage")
+    expect(await fs.readFile(result.technicalAppendix, "utf8")).toContain("ev-1")
+    expect(await fs.readFile(result.runtimeSummaryMarkdown, "utf8")).toContain("No runtime summary was recorded")
+    const manifest = JSON.parse(await fs.readFile(result.manifest, "utf8"))
+    expect(manifest.findings).toEqual(["weak-mfa-coverage"])
+    expect(manifest.nonReportableFindings).toEqual(["legacy-tls-suspicion"])
+    expect(manifest.artifacts.operationPlan).toContain("operation-plan.json")
+    expect(manifest.artifacts.findingsJson).toBe(result.findingsJson)
+    expect(manifest.artifacts.evidenceIndex).toBe(result.evidenceIndex)
+    expect(manifest.artifacts.operatorReview).toBe(result.operatorReview)
+    expect(manifest.artifacts.executiveSummary).toBe(result.executiveSummary)
+    expect(manifest.artifacts.technicalAppendix).toBe(result.technicalAppendix)
+    expect(manifest.artifacts.runtimeSummaryMarkdown).toBe(result.runtimeSummaryMarkdown)
+    expect(manifest.counts.findings).toBe(2)
+    expect(manifest.counts.reportableFindings).toBe(1)
+    expect(manifest.counts.byState.rejected).toBe(1)
+    expect(manifest.counts.evidence).toBe(1)
+    const status = await readOperationStatus(worktree, "school")
+    expect(status.reports.pdf).toBe(true)
+    expect(status.reports.readme).toBe(true)
+    expect(status.reports.manifest).toBe(true)
+
+    await writeRuntimeSummary(worktree, {
+      operationID: "school",
+      modelCalls: { total: 5, byModel: { "gpt-5.5": 5 } },
+      compaction: { count: 0, pressure: "low" },
+      fetches: { total: 2, repeatedTargets: [] },
+      backgroundTasks: [],
+    })
+    const rerendered = await renderReport(worktree, { operationID: "school", title: "Assessment Report" })
+    expect(await fs.readFile(rerendered.runtimeSummaryMarkdown, "utf8")).toContain("gpt-5.5")
+    await completeGraphForHandoff(worktree)
+    const handoffLint = await lintReport(worktree, "school", { finalHandoff: true })
+    expect(handoffLint.ok).toBe(true)
+  })
+
+  test("final handoff lint rejects corrupt rendered package integrity", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "handoff",
+      status: "complete",
+      summary: "Testing identified one report-ready finding.",
+    })
+    await writeOperationPlan(worktree, {
+      operationID: "school",
+      assumptions: ["Testing is authorized."],
+      phases: [
+        {
+          stage: "reporting",
+          objective: "Finalize report.",
+          actions: ["Render deliverables"],
+          successCriteria: ["Manifest includes handoff artifacts"],
+          subagents: ["report-writer"],
+          noSubagents: ["risk acceptance"],
+        },
+      ],
+      reportingCloseout: ["Run report_lint", "Run report_render", "Run runtime_summary"],
+    })
+    await writeEvidence(worktree, {
+      operationID: "school",
+      evidenceID: "ev-1",
+      title: "IdP policy export",
+      kind: "file",
+      summary: "MFA policy export.",
+      path: "evidence/raw/idp-policy.json",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "report_ready",
+      severity: "high",
+      confidence: 0.9,
+      affectedAssets: ["IdP"],
+      evidence: [{ id: "ev-1", path: "evidence/raw/idp-policy.json" }],
+      description: "MFA is not enforced for administrators.",
+      impact: "Administrator takeover is more likely after password compromise.",
+      remediation: "Require phishing-resistant MFA for privileged accounts.",
+    })
+    await writeRuntimeSummary(worktree, {
+      operationID: "school",
+      modelCalls: { total: 5, byModel: { "gpt-5.5": 5 } },
+      compaction: { count: 0, pressure: "low" },
+      fetches: { total: 2, repeatedTargets: [] },
+      backgroundTasks: [],
+    })
+    const result = await renderReport(worktree, { operationID: "school", title: "Assessment Report" })
+    await completeGraphForHandoff(worktree)
+
+    const cleanLint = await lintReport(worktree, "school", { finalHandoff: true })
+    expect(cleanLint.ok).toBe(true)
+
+    await fs.writeFile(result.pdf, "not a pdf\n")
+    let lint = await lintReport(worktree, "school", { finalHandoff: true })
+    expect(lint.ok).toBe(false)
+    expect(lint.gaps).toContain("deliverables/final/report.pdf is not a readable PDF")
+
+    await renderReport(worktree, { operationID: "school", title: "Assessment Report" })
+    await fs.writeFile(
+      result.manifest,
+      JSON.stringify({ operationID: "school", artifacts: { html: "/tmp/missing.html" }, counts: {} }, null, 2),
+    )
+    lint = await lintReport(worktree, "school", { finalHandoff: true })
+    expect(lint.ok).toBe(false)
+    expect(lint.gaps).toContain("deliverables/final/manifest.json missing artifact path: pdf")
+    expect(lint.gaps).toContain("deliverables/final/manifest.json artifact html does not match report.html")
+  })
+
+  test("rendered reports satisfy outline section lint", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "handoff",
+      status: "complete",
+      summary: "Testing identified one report-ready finding.",
+    })
+    await writeOperationPlan(worktree, {
+      operationID: "school",
+      assumptions: ["Testing is authorized."],
+      phases: [
+        {
+          stage: "reporting",
+          objective: "Finalize report.",
+          actions: ["Render deliverables"],
+          successCriteria: ["Manifest includes handoff artifacts"],
+          subagents: ["report-writer"],
+          noSubagents: ["risk acceptance"],
+        },
+      ],
+      reportingCloseout: ["Run report_lint", "Run report_render", "Run runtime_summary"],
+    })
+    await writeEvidence(worktree, {
+      operationID: "school",
+      evidenceID: "ev-1",
+      title: "IdP policy export",
+      kind: "file",
+      summary: "MFA policy export shows privileged enforcement is optional.",
+      path: "evidence/raw/idp-policy.json",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "report_ready",
+      severity: "high",
+      confidence: 0.9,
+      affectedAssets: ["IdP"],
+      evidence: [{ id: "ev-1", path: "evidence/raw/idp-policy.json" }],
+      description: "MFA is not enforced for administrators.",
+      impact: "Administrator takeover is more likely after password compromise.",
+      remediation: "Require phishing-resistant MFA for privileged accounts.",
+    })
+    await writeReportOutline(worktree, { operationID: "school", targetPages: 4 })
+    await renderReport(worktree, { operationID: "school", title: "Assessment Report" })
+    await writeRuntimeSummary(worktree, { operationID: "school" })
+    await renderReport(worktree, { operationID: "school", title: "Assessment Report" })
+    await completeGraphForHandoff(worktree)
+
+    const lint = await lintReport(worktree, "school", {
+      finalHandoff: true,
+      requireOutlineSections: true,
+      minOutlineSectionWords: 15,
+    })
+
+    expect(lint.ok).toBe(true)
+  })
+
+  test("rendered reports preserve authored report markdown", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "handoff",
+      status: "complete",
+      summary: "Testing identified one report-ready finding.",
+    })
+    await writeOperationPlan(worktree, {
+      operationID: "school",
+      phases: [
+        {
+          stage: "reporting",
+          objective: "Finalize authored report.",
+          actions: ["Run report_lint", "Run report_render", "Run runtime_summary"],
+          successCriteria: ["Authored report content is preserved"],
+          subagents: ["report-writer"],
+          noSubagents: ["handoff approval"],
+        },
+      ],
+      reportingCloseout: ["Run report_lint", "Run report_render", "Run runtime_summary"],
+    })
+    await writeEvidence(worktree, {
+      operationID: "school",
+      evidenceID: "ev-1",
+      title: "IdP policy export",
+      kind: "file",
+      summary: "MFA policy export.",
+      path: "evidence/raw/idp-policy.json",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "report_ready",
+      severity: "high",
+      confidence: 0.9,
+      affectedAssets: ["IdP"],
+      evidence: [{ id: "ev-1", path: "evidence/raw/idp-policy.json" }],
+      description: "MFA is not enforced for administrators.",
+      impact: "Administrator takeover is more likely after password compromise.",
+      remediation: "Require phishing-resistant MFA for privileged accounts.",
+    })
+    const outline = await writeReportOutline(worktree, { operationID: "school", targetPages: 2 })
+    await fs.writeFile(
+      path.join(outline.root, "reports", "report.md"),
+      [
+        "# Authored Assessment Report",
+        "",
+        "## Custom Risk Narrative",
+        "",
+        "This authored report should survive report_render instead of being replaced by the synthetic template.",
+      ].join("\n"),
+    )
+
+    const result = await renderReport(worktree, { operationID: "school", title: "Assessment Report" })
+    const html = await fs.readFile(result.html, "utf8")
+    const pdf = await fs.readFile(result.pdf, "utf8")
+
+    expect(html).toContain("Custom Risk Narrative")
+    expect(html).toContain("This authored report should survive report_render")
+    expect(pdf).toContain("Custom Risk Narrative")
+  })
+
+  test("writes runtime summaries for long operation handoff", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "validation",
+      status: "running",
+      summary: "Validation is still running.",
+      nextActions: ["Finish exploit reproduction", "Promote confirmed findings"],
+      activeTasks: ["task-recon-1"],
+    })
+
+    const result = await writeRuntimeSummary(worktree, {
+      operationID: "school",
+      modelCalls: { total: 12, byModel: { "gpt-5.5": 8, "gpt-5.4-mini": 4 } },
+      usage: {
+        inputTokens: 9000,
+        outputTokens: 3000,
+        reasoningTokens: 1500,
+        totalTokens: 13500,
+        costUSD: 2.45,
+        budgetUSD: 10,
+        remainingUSD: 7.55,
+        byAgent: {
+          pentest: { calls: 5, totalTokens: 8000, costUSD: 1.6 },
+          recon: { calls: 7, totalTokens: 5500, costUSD: 0.85 },
+        },
+      },
+      compaction: { count: 2, pressure: "moderate", lastSummary: "Earlier recon was compacted." },
+      fetches: { total: 9, repeatedTargets: ["https://example.edu/login"] },
+      backgroundTasks: [
+        { id: "task-recon-1", agent: "recon", status: "running", summary: "Enumerating login surface." },
+      ],
+      notes: ["Continue from operation_status before launching new lanes."],
+    })
+
+    expect(JSON.parse(await fs.readFile(result.json, "utf8")).modelCalls.byModel["gpt-5.5"]).toBe(8)
+    expect(JSON.parse(await fs.readFile(result.json, "utf8")).usage.byAgent.pentest.totalTokens).toBe(8000)
+    const markdown = await fs.readFile(result.markdown, "utf8")
+    expect(markdown).toContain("task-recon-1")
+    expect(markdown).toContain("tokens_total: 13500")
+    expect(markdown).toContain("pentest: 5 calls, 8000 tokens, $1.6")
+    const status = await readOperationStatus(worktree, "school")
+    expect(status.runtimeSummary).toBe(true)
+    expect(status.runtime?.usage?.remainingUSD).toBe(7.55)
+    expect(status.runtime?.backgroundTasks?.[0]?.id).toBe("task-recon-1")
+  })
+
+  test("builds restart-ready operation resume briefs", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "validation",
+      status: "running",
+      summary: "Validation is still running.",
+      nextActions: ["Finish exploit reproduction", "Promote confirmed findings"],
+      activeTasks: ["task-recon-1"],
+    })
+    await writeRuntimeSummary(worktree, {
+      operationID: "school",
+      modelCalls: { total: 3, byModel: { "gpt-5.5": 2, "gpt-5.4-mini": 1 } },
+      usage: { totalTokens: 4200, costUSD: 0.85 },
+      backgroundTasks: [
+        { id: "task-recon-1", agent: "recon", status: "running", summary: "Enumerating login surface." },
+      ],
+    })
+
+    const brief = await buildOperationResumeBrief(worktree, "school")
+    expect(brief.operationID).toBe("school")
+    expect(brief.checkpoint?.stage).toBe("validation")
+    expect(brief.health.ready).toBe(false)
+    expect(brief.health.gaps).toContain("operation plan is missing")
+    expect(brief.recommendedTools).toContain("operation_status")
+    expect(brief.recommendedTools).toContain("operation_plan")
+    expect(brief.recommendedTools).toContain("task_list")
+    expect(brief.recommendedTools).toContain("task_status")
+    expect(brief.continuationPrompt).toContain("Resume ULMCode operation school")
+    expect(brief.continuationPrompt).toContain("Finish exploit reproduction")
+
+    const markdown = formatOperationResumeBrief(brief)
+    expect(markdown).toStartWith("# Resume school")
+    expect(markdown).toContain("health: attention_required")
+    expect(markdown).toContain("task-recon-1 running (recon) - Enumerating login surface.")
+    expect(markdown).toContain("operation_status")
+    expect(markdown).toContain("task_list operationID=school")
+  })
+
+  test("marks stale running operations and tasks in resume briefs", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "validation",
+      status: "running",
+      summary: "Validation is still running.",
+      nextActions: ["Check stale subagent output"],
+      activeTasks: ["task-recon-1"],
+    })
+    const operationFile = path.join(worktree, ".ulmcode", "operations", "school", "operation.json")
+    const operation = JSON.parse(await fs.readFile(operationFile, "utf8"))
+    operation.time.updated = "2026-05-05T12:00:00.000Z"
+    await fs.writeFile(operationFile, JSON.stringify(operation, null, 2) + "\n")
+    await writeRuntimeSummary(worktree, {
+      operationID: "school",
+      backgroundTasks: [
+        {
+          id: "task-recon-1",
+          agent: "recon",
+          status: "stale",
+          summary: "No heartbeat after scan launch.",
+          restartArgs: {
+            task_id: "task-recon-1",
+            background: true,
+            description: "restart recon lane",
+            prompt: "resume recon lane",
+            subagent_type: "recon",
+            operationID: "school",
+          },
+        },
+      ],
+    })
+
+    const brief = await buildOperationResumeBrief(worktree, "school", {
+      now: "2026-05-05T14:30:00.000Z",
+      staleAfterMinutes: 60,
+    })
+
+    expect(brief.health.ready).toBe(false)
+    expect(brief.health.gaps).toContain("operation checkpoint is stale: last update was 150 minutes ago")
+    expect(brief.health.gaps).toContain("background task task-recon-1 is stale")
+    expect(brief.recommendedTools).toContain("operation_checkpoint")
+    expect(brief.recommendedTools).toContain("task_status")
+    expect(brief.recommendedTools).toContain("operation_resume")
+    expect(brief.recommendedTools).toContain("operation_recover")
+    expect(brief.recommendedTools).toContain("task_restart")
+    expect(formatOperationResumeBrief(brief)).toContain("operation checkpoint is stale")
+    expect(formatOperationResumeBrief(brief)).toContain("operation_resume operationID=school recoverStaleTasks=true")
+    expect(formatOperationResumeBrief(brief)).toContain("operation_recover operationID=school")
+    expect(formatOperationResumeBrief(brief)).toContain("task_restart task_id=task-recon-1")
+    expect(formatOperationResumeBrief(brief)).toContain('"prompt":"resume recon lane"')
+    expect(brief.continuationPrompt).toContain("recoverStaleTasks=true")
+  })
+
+  test("marks exhausted operation budgets in resume briefs", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "validation",
+      status: "running",
+      summary: "Validation is still running.",
+      nextActions: ["Continue validation"],
+    })
+    await writeRuntimeSummary(worktree, {
+      operationID: "school",
+      usage: {
+        totalTokens: 12_500,
+        costUSD: 12.4,
+        budgetUSD: 10,
+        remainingUSD: -2.4,
+      },
+    })
+
+    const brief = await buildOperationResumeBrief(worktree, "school")
+
+    expect(brief.health.ready).toBe(false)
+    expect(brief.health.gaps).toContain("runtime budget exhausted: spent $12.4 of $10")
+    expect(brief.recommendedTools).toContain("runtime_summary")
+    expect(formatOperationResumeBrief(brief)).toContain("runtime budget exhausted")
+  })
+
+  test("writes durable operation audits for final handoff gates", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "handoff",
+      status: "complete",
+      summary: "Ready for handoff review.",
+      nextActions: ["Review final package"],
+    })
+
+    const audit = await buildOperationAudit(worktree, "school", { finalHandoff: true })
+
+    expect(audit.ok).toBe(false)
+    expect(audit.blockers).toContain("resume: operation plan is missing")
+    expect(audit.blockers).toContain("final_handoff: plans/operation-plan.json is required")
+    expect(audit.recommendedTools).toContain("operation_plan")
+    expect(audit.recommendedTools).toContain("report_lint")
+    expect(audit.recommendedTools).toContain("report_render")
+    expect(audit.recommendedTools).toContain("runtime_summary")
+    expect(JSON.parse(await fs.readFile(audit.files.json, "utf8")).operationID).toBe("school")
+    expect(await fs.readFile(audit.files.markdown, "utf8")).toContain("final_handoff: attention_required")
+  })
+
+  test("operation audit blocks final handoff when graph lanes are incomplete or missing proof", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "handoff",
+      status: "complete",
+      summary: "Ready for handoff review.",
+    })
+    const graph = await writeOperationGraph(worktree, { operationID: "school", budgetUSD: 10 })
+    const parsed = JSON.parse(await fs.readFile(graph.json, "utf8"))
+    for (const lane of parsed.lanes) lane.status = "complete"
+    await fs.writeFile(graph.json, JSON.stringify(parsed, null, 2))
+
+    const audit = await buildOperationAudit(worktree, "school", { finalHandoff: true })
+
+    expect(audit.ok).toBe(false)
+    expect(audit.blockers).toContain("resume: operation lane recon is missing completion proof")
+    expect(audit.blockers).toContain("final_handoff: operation lane recon is missing completion proof")
+  })
+
+  test("operation audit forwards strict outline section gates", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "handoff",
+      status: "complete",
+      summary: "Ready for handoff review.",
+    })
+    await writeEvidence(worktree, {
+      operationID: "school",
+      evidenceID: "ev-1",
+      title: "IdP policy export",
+      kind: "file",
+      summary: "MFA policy export.",
+      path: "evidence/raw/idp-policy.json",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "report_ready",
+      severity: "high",
+      confidence: 0.9,
+      affectedAssets: ["IdP"],
+      evidence: [{ id: "ev-1", path: "evidence/raw/idp-policy.json" }],
+      description: "MFA is not enforced for administrators.",
+      impact: "Administrator takeover is more likely after password compromise.",
+      remediation: "Require phishing-resistant MFA for privileged accounts.",
+    })
+
+    const outline = await writeReportOutline(worktree, { operationID: "school", targetPages: 4 })
+    await fs.writeFile(
+      path.join(outline.root, "reports", "report.md"),
+      ["# Report", "", "## Methodology", "methodology ".repeat(500)].join("\n"),
+    )
+
+    const audit = await buildOperationAudit(worktree, "school", {
+      finalHandoff: true,
+      requireOutlineSections: true,
+      minOutlineSectionWords: 25,
+    })
+
+    expect(audit.ok).toBe(false)
+    expect(audit.blockers).toContain("final_handoff: Executive Summary: outline section is missing")
+    expect(audit.recommendedTools).toContain("report_outline")
+  })
+
+  test("blocks validation stage gates until findings are report-ready", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "validation",
+      status: "running",
+      summary: "Validation is reviewing evidence.",
+      nextActions: ["Validate candidate findings"],
+    })
+    await writeOperationPlan(worktree, {
+      operationID: "school",
+      phases: [
+        {
+          stage: "validation",
+          objective: "Validate candidate weaknesses.",
+          actions: ["Check evidence", "Promote confirmed findings"],
+          successCriteria: ["Confirmed findings cite evidence"],
+          subagents: ["validator"],
+          noSubagents: ["risk acceptance stays with primary operator"],
+        },
+      ],
+      reportingCloseout: [
+        "Run report_lint before final handoff.",
+        "Run report_render to produce final deliverables.",
+        "Run runtime_summary and operation_audit before handoff.",
+      ],
+    })
+    await writeEvidence(worktree, {
+      operationID: "school",
+      evidenceID: "ev-1",
+      title: "Policy export",
+      kind: "file",
+      summary: "MFA policy export.",
+      path: "evidence/raw/policy.json",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "candidate",
+      severity: "high",
+      confidence: 0.6,
+      affectedAssets: ["IdP"],
+      evidence: [],
+      description: "MFA may not be enforced for administrators.",
+    })
+
+    const gate = await buildOperationStageGate(worktree, "school", { stage: "validation" })
+
+    expect(gate.ok).toBe(false)
+    expect(gate.gaps).toContain("validation has no validated or report-ready findings")
+    expect(gate.gaps).toContain("validation has unresolved candidate or needs-validation findings")
+    expect(gate.recommendedTools).toContain("finding_record")
+    expect(JSON.parse(await fs.readFile(gate.files.json, "utf8")).stage).toBe("validation")
+    expect(await fs.readFile(gate.files.markdown, "utf8")).toContain("validation has no validated")
+  })
+
+  test("stage gates block exhausted runtime budgets", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "validation",
+      status: "running",
+      summary: "Validation is reviewing evidence.",
+      nextActions: ["Continue validation"],
+    })
+    await writeOperationPlan(worktree, {
+      operationID: "school",
+      phases: [
+        {
+          stage: "validation",
+          objective: "Validate candidate weaknesses.",
+          actions: ["Check evidence", "Promote confirmed findings"],
+          successCriteria: ["Confirmed findings cite evidence"],
+          subagents: ["validator"],
+          noSubagents: ["risk acceptance stays with primary operator"],
+        },
+      ],
+      reportingCloseout: ["Run report_lint", "Run report_render", "Run runtime_summary"],
+    })
+    await writeEvidence(worktree, {
+      operationID: "school",
+      evidenceID: "ev-1",
+      title: "Policy export",
+      kind: "file",
+      summary: "MFA policy export.",
+      path: "evidence/raw/policy.json",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "report_ready",
+      severity: "high",
+      confidence: 0.9,
+      affectedAssets: ["IdP"],
+      evidence: [{ id: "ev-1", path: "evidence/raw/policy.json" }],
+      description: "MFA is not enforced for administrators.",
+      impact: "Administrator takeover is more likely after password compromise.",
+      remediation: "Require phishing-resistant MFA for privileged accounts.",
+    })
+    await writeRuntimeSummary(worktree, {
+      operationID: "school",
+      usage: { totalTokens: 12_500, costUSD: 12.4, budgetUSD: 10, remainingUSD: -2.4 },
+    })
+
+    const gate = await buildOperationStageGate(worktree, "school", { stage: "validation" })
+
+    expect(gate.ok).toBe(false)
+    expect(gate.gaps).toContain("runtime budget exhausted: spent $12.4 of $10")
+    expect(gate.recommendedTools).toContain("runtime_summary")
+  })
+
+  test("handoff stage gate forwards strict outline section gates", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "handoff",
+      status: "complete",
+      summary: "Ready for handoff review.",
+    })
+    await writeOperationPlan(worktree, {
+      operationID: "school",
+      phases: [
+        {
+          stage: "reporting",
+          objective: "Finalize report.",
+          actions: ["Run report_lint", "Render final deliverables"],
+          successCriteria: ["Final lint gates are clean"],
+          subagents: ["report-writer"],
+          noSubagents: ["client-facing approval remains manual"],
+        },
+      ],
+      reportingCloseout: ["Run report_lint", "Run report_render", "Run runtime_summary"],
+    })
+    await writeEvidence(worktree, {
+      operationID: "school",
+      evidenceID: "ev-1",
+      title: "IdP policy export",
+      kind: "file",
+      summary: "MFA policy export.",
+      path: "evidence/raw/idp-policy.json",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "report_ready",
+      severity: "high",
+      confidence: 0.9,
+      affectedAssets: ["IdP"],
+      evidence: [{ id: "ev-1", path: "evidence/raw/idp-policy.json" }],
+      description: "MFA is not enforced for administrators.",
+      impact: "Administrator takeover is more likely after password compromise.",
+      remediation: "Require phishing-resistant MFA for privileged accounts.",
+    })
+
+    const outline = await writeReportOutline(worktree, { operationID: "school", targetPages: 4 })
+    await fs.writeFile(
+      path.join(outline.root, "reports", "report.md"),
+      ["# Report", "", "## Methodology", "methodology ".repeat(500)].join("\n"),
+    )
+    await renderReport(worktree, { operationID: "school" })
+    await writeRuntimeSummary(worktree, { operationID: "school" })
+
+    const gate = await buildOperationStageGate(worktree, "school", {
+      stage: "handoff",
+      requireOutlineSections: true,
+      minOutlineSectionWords: 25,
+    })
+
+    expect(gate.ok).toBe(false)
+    expect(gate.gaps).toContain("Executive Summary: outline section is missing")
+    expect(gate.recommendedTools).toContain("report_outline")
+  })
+
+  test("derives runtime usage from assistant messages when usage is not provided", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "validation",
+      status: "running",
+      summary: "Validation is still running.",
+    })
+
+    const result = await writeRuntimeSummary(worktree, {
+      operationID: "school",
+      sessionMessages: [
+        {
+          role: "assistant",
+          agent: "pentest",
+          modelID: "gpt-5.5",
+          providerID: "openai",
+          cost: 1.25,
+          tokens: {
+            input: 3000,
+            output: 1200,
+            reasoning: 500,
+            cache: { read: 200, write: 100 },
+          },
+        },
+        {
+          role: "assistant",
+          agent: "recon",
+          modelID: "gpt-5.4-mini",
+          providerID: "openai",
+          cost: 0.15,
+          tokens: {
+            total: 1800,
+            input: 1000,
+            output: 600,
+            reasoning: 100,
+            cache: { read: 100, write: 0 },
+          },
+        },
+        {
+          role: "user",
+          agent: "user",
+        },
+      ],
+      compaction: { count: 0, pressure: "low" },
+    })
+
+    const record = JSON.parse(await fs.readFile(result.json, "utf8"))
+    expect(record.modelCalls.total).toBe(2)
+    expect(record.modelCalls.byModel["gpt-5.5"]).toBe(1)
+    expect(record.modelCalls.byModel["gpt-5.4-mini"]).toBe(1)
+    expect(record.usage.inputTokens).toBe(4000)
+    expect(record.usage.outputTokens).toBe(1800)
+    expect(record.usage.reasoningTokens).toBe(600)
+    expect(record.usage.cacheReadTokens).toBe(300)
+    expect(record.usage.cacheWriteTokens).toBe(100)
+    expect(record.usage.totalTokens).toBe(6500)
+    expect(record.usage.costUSD).toBe(1.4)
+    expect(record.usage.byAgent.pentest.calls).toBe(1)
+    expect(record.usage.byAgent.pentest.totalTokens).toBe(4700)
+    expect(record.usage.byAgent.recon.costUSD).toBe(0.15)
+  })
+
+  test("computes remaining runtime budget from derived usage", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "validation",
+      status: "running",
+      summary: "Validation is still running.",
+    })
+
+    const result = await writeRuntimeSummary(worktree, {
+      operationID: "school",
+      usage: { budgetUSD: 1 },
+      sessionMessages: [
+        {
+          role: "assistant",
+          agent: "validator",
+          modelID: "gpt-5.5",
+          providerID: "openai",
+          cost: 0.37,
+          tokens: {
+            input: 500,
+            output: 150,
+            reasoning: 100,
+            cache: { read: 0, write: 0 },
+          },
+        },
+      ],
+    })
+
+    const record = JSON.parse(await fs.readFile(result.json, "utf8"))
+    expect(record.usage.costUSD).toBe(0.37)
+    expect(record.usage.budgetUSD).toBe(1)
+    expect(record.usage.remainingUSD).toBe(0.63)
+    expect(await fs.readFile(result.markdown, "utf8")).toContain("- remaining_usd: 0.63")
+  })
+
+  test("derives compaction pressure from session messages when compaction is not provided", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "validation",
+      status: "running",
+      summary: "Validation is still running.",
+    })
+
+    const result = await writeRuntimeSummary(worktree, {
+      operationID: "school",
+      sessionMessages: [
+        { role: "user", parts: [{ type: "compaction", auto: true, overflow: true }] },
+        { role: "assistant", summary: true },
+        { role: "user", parts: [{ type: "compaction", auto: true }] },
+      ],
+    })
+
+    const record = JSON.parse(await fs.readFile(result.json, "utf8"))
+    expect(record.compaction.count).toBe(2)
+    expect(record.compaction.pressure).toBe("moderate")
+  })
+
+  test("writes execution-ready operation plans with subagent policy", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "intake",
+      status: "planned",
+      summary: "Initial authorization captured.",
+    })
+
+    const result = await writeOperationPlan(worktree, {
+      operationID: "school",
+      assumptions: ["Testing is limited to approved school-owned systems."],
+      phases: [
+        {
+          stage: "recon",
+          objective: "Map externally exposed services.",
+          actions: ["Enumerate DNS", "Identify login surfaces"],
+          successCriteria: ["All in-scope hostnames are classified"],
+          subagents: ["recon"],
+          noSubagents: ["authorization decisions stay with primary operator"],
+        },
+        {
+          stage: "reporting",
+          objective: "Produce final report package.",
+          actions: ["Run report_lint", "Render final deliverables"],
+          successCriteria: ["HTML, PDF, manifest, and runtime summary exist"],
+          subagents: ["report-writer"],
+          noSubagents: ["final risk acceptance remains manual"],
+        },
+      ],
+      reportingCloseout: [
+        "Run report_outline before drafting.",
+        "Run report_lint and fix all gaps.",
+        "Run report_render and runtime_summary before handoff.",
+      ],
+    })
+
+    expect(await fs.readFile(result.markdown, "utf8")).toContain("authorization decisions stay with primary operator")
+    expect(JSON.parse(await fs.readFile(result.json, "utf8")).phases).toHaveLength(2)
+    expect((await readOperationStatus(worktree, "school")).plans.operation).toBe(true)
+  })
+
+  test("operation graph includes district profile, person recon, identity graph, and multistage report lanes", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "intake",
+      status: "planned",
+      summary: "Initial authorization captured.",
+    })
+
+    const graph = await writeOperationGraph(worktree, { operationID: "school", budgetUSD: 10 })
+    const parsed = JSON.parse(await fs.readFile(graph.json, "utf8"))
+    const lanes = parsed.lanes.map((lane: { id: string }) => lane.id)
+
+    expect(lanes).toContain("district_profile")
+    expect(lanes).toContain("person_recon")
+    expect(lanes).toContain("identity_graph")
+    expect(lanes).toContain("report_evidence_index")
+    expect(lanes).toContain("report_technical_review")
+    expect(lanes).toContain("report_executive_review")
+    expect(parsed.lanes.find((lane: { id: string; agent: string }) => lane.id === "person_recon").agent).toBe("person-recon")
+  })
+
+  test("writes K-12 district, person, and identity graph artifacts for recon lanes", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "recon",
+      status: "running",
+      summary: "Recon is mapping district people, systems, and access paths.",
+    })
+
+    const district = await writeDistrictProfile(worktree, {
+      operationID: "school",
+      name: "Example Unified School District",
+      domains: ["example.edu"],
+      systems: [{ name: "SIS Portal", category: "sis", source: "district site" }],
+      departments: [{ name: "Technology", source: "staff directory" }],
+      notes: ["Public website names the SIS and technology department."],
+    })
+    const person = await writePersonProfile(worktree, {
+      operationID: "school",
+      name: "Alex Principal",
+      role: "High School Principal",
+      organization: "Example High School",
+      roleCategory: "school_leadership",
+      whyTheyMatter: "Likely approval authority for student discipline and guardian communications workflows.",
+      likelyAccess: ["SIS discipline", "guardian messaging"],
+      publicContacts: [{ type: "email", value: "alex.principal@example.edu", source: "district staff directory" }],
+      sources: [{ title: "Staff Directory", url: "https://example.edu/staff", summary: "District-published role and email." }],
+      validationIdeas: ["Check whether principal accounts receive elevated SIS roles in authorized identity exports."],
+      excludedPrivateInfo: ["Ignored personal social media because it was not needed for the engagement."],
+    })
+    const graph = await writeIdentityGraph(worktree, {
+      operationID: "school",
+      nodes: [
+        { id: "person:alex-principal", kind: "person", label: "Alex Principal" },
+        { id: "app:sis", kind: "application", label: "SIS Portal" },
+        { id: "role:principal", kind: "role", label: "Principal" },
+      ],
+      edges: [
+        { from: "person:alex-principal", to: "role:principal", relationship: "has_role", evidence: ["person:alex-principal"] },
+        { from: "role:principal", to: "app:sis", relationship: "likely_access", evidence: ["public profile"] },
+      ],
+      notes: ["Identity graph is based on public role evidence until export validation is available."],
+    })
+
+    expect(await fs.readFile(district.markdown, "utf8")).toContain("SIS Portal")
+    expect(await fs.readFile(person.markdown, "utf8")).toContain("Excluded Private/Irrelevant Information")
+    expect(JSON.parse(await fs.readFile(graph.json, "utf8")).edges).toHaveLength(2)
+  })
+
+  test("rejects vague operation plans", async () => {
+    const worktree = await tmpdir()
+    await expect(
+      writeOperationPlan(worktree, {
+        operationID: "school",
+        phases: [
+          {
+            stage: "recon",
+            objective: "Look around.",
+            actions: [],
+            successCriteria: [],
+            subagents: [],
+            noSubagents: [],
+          },
+        ],
+        reportingCloseout: ["Write report."],
+      }),
+    ).rejects.toThrow("phase 1 requires at least one action")
+  })
+
+  test("lints missing final handoff artifacts when required", async () => {
+    const worktree = await tmpdir()
+    await writeOperationCheckpoint(worktree, {
+      operationID: "school",
+      objective: "Authorized school assessment",
+      stage: "handoff",
+      status: "complete",
+      summary: "Ready for final handoff.",
+    })
+    await writeFinding(worktree, {
+      operationID: "school",
+      title: "Weak MFA coverage",
+      state: "report_ready",
+      severity: "high",
+      confidence: 0.9,
+      affectedAssets: ["IdP"],
+      evidence: [{ id: "ev-1", path: "evidence/raw/idp-policy.json" }],
+      description: "MFA is not enforced for administrators.",
+      impact: "Administrator takeover is more likely after password compromise.",
+      remediation: "Require phishing-resistant MFA for privileged accounts.",
+    })
+
+    const result = await lintReport(worktree, "school", {
+      finalHandoff: true,
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.gaps).toContain("plans/operation-plan.json is required")
+    expect(result.gaps).toContain("deliverables/final/report.pdf is required")
+    expect(result.gaps).toContain("deliverables/final/README.md is required")
+    expect(result.gaps).toContain("deliverables/final/findings.json is required")
+    expect(result.gaps).toContain("deliverables/final/evidence-index.json is required")
+    expect(result.gaps).toContain("deliverables/final/operator-review.md is required")
+    expect(result.gaps).toContain("deliverables/final/executive-summary.md is required")
+    expect(result.gaps).toContain("deliverables/final/technical-appendix.md is required")
+    expect(result.gaps).toContain("deliverables/final/runtime-summary.md is required")
+    expect(result.gaps).toContain("deliverables/runtime-summary.json is required")
+  })
+})

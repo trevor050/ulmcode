@@ -13,6 +13,11 @@ import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
 import { Filesystem } from "@/util/filesystem"
 
+function isRGBA(value: unknown): value is RGBA {
+  if (!value || typeof value !== "object") return false
+  return ["r", "g", "b", "a"].every((key) => typeof (value as Record<string, unknown>)[key] === "number")
+}
+
 export function parseModel(model: string) {
   const [providerID, ...rest] = model.split("/")
   return {
@@ -93,7 +98,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             const color = agent.color
             if (color.startsWith("#")) return RGBA.fromHex(color)
             // already validated by config, just satisfying TS here
-            return theme[color as keyof typeof theme] as RGBA
+            const themed = theme[color as keyof typeof theme]
+            if (isRGBA(themed)) return themed
+            return colors()[index % colors().length] ?? theme.primary
           }
           return colors()[index % colors().length]
         },

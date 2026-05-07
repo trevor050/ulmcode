@@ -460,20 +460,20 @@ describe("session.compaction.isOverflow", () => {
     ),
   )
 
-  // ─── Bug reproduction tests ───────────────────────────────────────────
-  // These tests demonstrate that when limit.input is set, isOverflow()
-  // does not subtract any headroom for the next model response. This means
-  // compaction only triggers AFTER we've already consumed the full input
-  // budget, leaving zero room for the next API call's output tokens.
+  // ─── Input-Limit Headroom Regression Tests ────────────────────────────
+  // These tests lock the fixed behavior for models that report limit.input.
+  // Compaction must trigger before the full input budget is consumed so the
+  // next request still has room for provider-specific framing, cache metadata,
+  // and response generation.
   //
   // Compare: without limit.input, usable = context - output (reserves space).
-  // With limit.input, usable = limit.input (reserves nothing).
+  // With limit.input, usable = limit.input - reserved buffer.
   //
   // Related issues: #10634, #8089, #11086, #12621
   // Open PRs: #6875, #12924
 
   it.live(
-    "BUG: no headroom when limit.input is set — compaction should trigger near boundary but does not",
+    "reserves headroom when limit.input is set",
     provideTmpdirInstance(() =>
       Effect.gen(function* () {
         const compact = yield* SessionCompaction.Service
@@ -485,21 +485,18 @@ describe("session.compaction.isOverflow", () => {
         // plus the model needs room to generate output — this WILL overflow.
         const tokens = { input: 180_000, output: 15_000, reasoning: 0, cache: { read: 3_000, write: 0 } }
         // count = 180K + 3K + 15K = 198K
-        // usable = limit.input = 200K (no output subtracted!)
-        // 198K > 200K = false → no compaction triggered
+        // usable = limit.input - reserved buffer, so compaction triggers before
+        // the request reaches the hard input ceiling.
 
-        // WITHOUT limit.input: usable = 200K - 32K = 168K, and 198K > 168K = true ✓
-        // WITH limit.input: usable = 200K, and 198K > 200K = false ✗
-
-        // With 198K used and only 2K headroom, the next turn will overflow.
-        // Compaction MUST trigger here.
+        // With 198K used and only 2K hard-limit headroom, compaction must
+        // trigger here.
         expect(yield* compact.isOverflow({ tokens, model })).toBe(true)
       }),
     ),
   )
 
   it.live(
-    "BUG: without limit.input, same token count correctly triggers compaction",
+    "keeps output-limit headroom when limit.input is absent",
     provideTmpdirInstance(() =>
       Effect.gen(function* () {
         const compact = yield* SessionCompaction.Service
@@ -519,7 +516,7 @@ describe("session.compaction.isOverflow", () => {
   )
 
   it.live(
-    "BUG: asymmetry — limit.input model allows 30K more usage before compaction than equivalent model without it",
+    "input-limited and context-limited models both compact near the response boundary",
     provideTmpdirInstance(() =>
       Effect.gen(function* () {
         const compact = yield* SessionCompaction.Service
@@ -1218,7 +1215,9 @@ describe("session.compaction.process", () => {
           expect(captured).not.toContain("keep tail")
 
           const filtered = MessageV2.filterCompacted(MessageV2.stream(session.id))
-          expect(filtered[0]?.info.id).toBe(keep.id)
+          expect(filtered.map((msg) => msg.info.id).slice(0, 3)).toEqual([parent!, expect.any(String), keep.id])
+          expect(filtered[1]?.info.role).toBe("assistant")
+          expect(filtered[1]?.info.role === "assistant" ? filtered[1].info.summary : false).toBe(true)
           expect(filtered.map((msg) => msg.info.id)).not.toContain(large.id)
         } finally {
           await rt.dispose()

@@ -7,11 +7,44 @@ import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
 import { ReadTool } from "./read"
 import { TaskTool } from "./task"
+import { TaskListTool } from "./task_list"
+import { TaskRestartTool } from "./task_restart"
+import { TaskStatusTool } from "./task_status"
 import { TodoWriteTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
+import { OperationAuditTool } from "./operation_audit"
+import { OperationCheckpointTool } from "./operation_checkpoint"
+import { OperationGoalTool } from "./operation_goal"
+import { OperationGovernorTool } from "./operation_governor"
+import { OperationNextTool } from "./operation_next"
+import { OperationPlanTool } from "./operation_plan"
+import { OperationQueueTool } from "./operation_queue"
+import { OperationQueueNextTool } from "./operation_queue_next"
+import { OperationRecoverTool } from "./operation_recover"
+import { OperationResumeTool } from "./operation_resume"
+import { OperationRunTool } from "./operation_run"
+import { OperationScheduleTool } from "./operation_schedule"
+import { OperationSuperviseTool } from "./operation_supervise"
+import { OperationStageGateTool } from "./operation_stage_gate"
+import { OperationStatusTool } from "./operation_status"
+import { EvidenceRecordTool } from "./evidence_record"
+import { EvidenceNormalizeTool } from "./evidence_normalize"
+import { FindingRecordTool } from "./finding_record"
+import { DistrictProfileTool } from "./district_profile"
+import { IdentityGraphTool } from "./identity_graph"
+import { PersonProfileTool } from "./person_profile"
+import { ReportLintTool } from "./report_lint"
+import { ReportOutlineTool } from "./report_outline"
+import { ReportRenderTool } from "./report_render"
+import { RuntimeSummaryTool } from "./runtime_summary"
+import { RuntimeSchedulerTool } from "./runtime_scheduler"
+import { RuntimeDaemonTool } from "./runtime_daemon"
+import { CommandSuperviseTool } from "./command_supervise"
+import { ToolAcquireTool } from "./tool_acquire"
+import { ToolInventoryTool } from "./tool_inventory"
 import * as Tool from "./tool"
 import { Config } from "@/config/config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
@@ -46,6 +79,8 @@ import { Bus } from "../bus"
 import { Agent } from "../agent/agent"
 import { Skill } from "../skill"
 import { Permission } from "@/permission"
+import { SessionStatus } from "@/session/status"
+import { BackgroundJob } from "@/background/job"
 
 const log = Log.create({ service: "tool.registry" })
 
@@ -78,11 +113,13 @@ export const layer: Layer.Layer<
   | Agent.Service
   | Skill.Service
   | Session.Service
+  | SessionStatus.Service
   | Provider.Service
   | LSP.Service
   | Instruction.Service
   | AppFileSystem.Service
   | Bus.Service
+  | BackgroundJob.Service
   | HttpClient.HttpClient
   | ChildProcessSpawner
   | Ripgrep.Service
@@ -99,6 +136,9 @@ export const layer: Layer.Layer<
 
     const invalid = yield* InvalidTool
     const task = yield* TaskTool
+    const taskList = yield* TaskListTool
+    const taskRestart = yield* TaskRestartTool
+    const taskStatus = yield* TaskStatusTool
     const read = yield* ReadTool
     const question = yield* QuestionTool
     const todo = yield* TodoWriteTool
@@ -113,6 +153,36 @@ export const layer: Layer.Layer<
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const operationAudit = yield* OperationAuditTool
+    const operationCheckpoint = yield* OperationCheckpointTool
+    const operationGoal = yield* OperationGoalTool
+    const operationGovernor = yield* OperationGovernorTool
+    const operationNext = yield* OperationNextTool
+    const operationPlan = yield* OperationPlanTool
+    const operationQueue = yield* OperationQueueTool
+    const operationQueueNext = yield* OperationQueueNextTool
+    const operationRecover = yield* OperationRecoverTool
+    const operationResume = yield* OperationResumeTool
+    const operationRun = yield* OperationRunTool
+    const operationSchedule = yield* OperationScheduleTool
+    const operationSupervise = yield* OperationSuperviseTool
+    const operationStageGate = yield* OperationStageGateTool
+    const operationStatus = yield* OperationStatusTool
+    const evidenceRecord = yield* EvidenceRecordTool
+    const evidenceNormalize = yield* EvidenceNormalizeTool
+    const findingRecord = yield* FindingRecordTool
+    const districtProfile = yield* DistrictProfileTool
+    const identityGraph = yield* IdentityGraphTool
+    const personProfile = yield* PersonProfileTool
+    const reportLint = yield* ReportLintTool
+    const reportOutline = yield* ReportOutlineTool
+    const reportRender = yield* ReportRenderTool
+    const runtimeSummary = yield* RuntimeSummaryTool
+    const runtimeScheduler = yield* RuntimeSchedulerTool
+    const runtimeDaemon = yield* RuntimeDaemonTool
+    const commandSupervise = yield* CommandSuperviseTool
+    const toolAcquire = yield* ToolAcquireTool
+    const toolInventory = yield* ToolInventoryTool
     const agent = yield* Agent.Service
 
     const state = yield* InstanceState.make<State>(
@@ -202,10 +272,43 @@ export const layer: Layer.Layer<
           edit: Tool.init(edit),
           write: Tool.init(writetool),
           task: Tool.init(task),
+          taskList: Tool.init(taskList),
+          taskRestart: Tool.init(taskRestart),
+          taskStatus: Tool.init(taskStatus),
           fetch: Tool.init(webfetch),
           todo: Tool.init(todo),
           search: Tool.init(websearch),
           skill: Tool.init(skilltool),
+          operationAudit: Tool.init(operationAudit),
+          operationCheckpoint: Tool.init(operationCheckpoint),
+          operationGoal: Tool.init(operationGoal),
+          operationGovernor: Tool.init(operationGovernor),
+          operationNext: Tool.init(operationNext),
+          operationPlan: Tool.init(operationPlan),
+          operationQueue: Tool.init(operationQueue),
+          operationQueueNext: Tool.init(operationQueueNext),
+          operationRecover: Tool.init(operationRecover),
+          operationResume: Tool.init(operationResume),
+          operationRun: Tool.init(operationRun),
+          operationSchedule: Tool.init(operationSchedule),
+          operationSupervise: Tool.init(operationSupervise),
+          operationStageGate: Tool.init(operationStageGate),
+          operationStatus: Tool.init(operationStatus),
+          evidenceRecord: Tool.init(evidenceRecord),
+          evidenceNormalize: Tool.init(evidenceNormalize),
+          findingRecord: Tool.init(findingRecord),
+          districtProfile: Tool.init(districtProfile),
+          identityGraph: Tool.init(identityGraph),
+          personProfile: Tool.init(personProfile),
+          reportLint: Tool.init(reportLint),
+          reportOutline: Tool.init(reportOutline),
+          reportRender: Tool.init(reportRender),
+          runtimeSummary: Tool.init(runtimeSummary),
+          runtimeScheduler: Tool.init(runtimeScheduler),
+          runtimeDaemon: Tool.init(runtimeDaemon),
+          commandSupervise: Tool.init(commandSupervise),
+          toolAcquire: Tool.init(toolAcquire),
+          toolInventory: Tool.init(toolInventory),
           patch: Tool.init(patchtool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
@@ -224,10 +327,43 @@ export const layer: Layer.Layer<
             tool.edit,
             tool.write,
             tool.task,
+            tool.taskList,
+            tool.taskRestart,
+            tool.taskStatus,
             tool.fetch,
             tool.todo,
             tool.search,
             tool.skill,
+            tool.operationAudit,
+            tool.operationCheckpoint,
+            tool.operationGoal,
+            tool.operationGovernor,
+            tool.operationNext,
+            tool.operationPlan,
+            tool.operationQueue,
+            tool.operationQueueNext,
+            tool.operationRecover,
+            tool.operationResume,
+            tool.operationRun,
+            tool.operationSchedule,
+            tool.operationSupervise,
+            tool.operationStageGate,
+            tool.operationStatus,
+            tool.evidenceRecord,
+            tool.evidenceNormalize,
+            tool.findingRecord,
+            tool.districtProfile,
+            tool.identityGraph,
+            tool.personProfile,
+            tool.reportLint,
+            tool.reportOutline,
+            tool.reportRender,
+            tool.runtimeSummary,
+            tool.runtimeScheduler,
+            tool.runtimeDaemon,
+            tool.commandSupervise,
+            tool.toolAcquire,
+            tool.toolInventory,
             tool.patch,
             ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [tool.lsp] : []),
             ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [tool.plan] : []),
@@ -340,6 +476,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Skill.defaultLayer),
     Layer.provide(Agent.defaultLayer),
     Layer.provide(Session.defaultLayer),
+    Layer.provide(SessionStatus.defaultLayer),
     Layer.provide(Provider.defaultLayer),
     Layer.provide(LSP.defaultLayer),
     Layer.provide(Instruction.defaultLayer),
@@ -350,6 +487,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(CrossSpawnSpawner.defaultLayer),
     Layer.provide(Ripgrep.defaultLayer),
     Layer.provide(Truncate.defaultLayer),
+    Layer.provide(BackgroundJob.defaultLayer),
   ),
 )
 

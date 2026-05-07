@@ -1,0 +1,3 @@
+Evaluate model, budget, context, and lane readiness before launching more autonomous work.
+
+Use this before starting a new background lane, after compaction, after a provider failure, and before overnight continuation. It reads the durable operation graph plus runtime summary and returns continue/compact/stop guidance, selected lane model route, remaining budget, lane budget, context pressure, blockers, and recommended recovery tools.

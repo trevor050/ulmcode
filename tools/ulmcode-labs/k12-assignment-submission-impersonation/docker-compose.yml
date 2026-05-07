@@ -1,0 +1,8 @@
+services:
+  k12-assignment-submission-impersonation:
+    build:
+      context: ./service
+    ports:
+      - "18089:8080"
+    environment:
+      PORT: "8080"

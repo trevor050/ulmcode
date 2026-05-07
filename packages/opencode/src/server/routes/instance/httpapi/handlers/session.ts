@@ -86,6 +86,10 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return yield* session.children(ctx.params.sessionID)
     })
 
+    const cost = Effect.fn("SessionHttpApi.cost")(function* (ctx: { params: { sessionID: SessionID } }) {
+      return yield* mapNotFound(session.cost(ctx.params.sessionID))
+    })
+
     const todo = Effect.fn("SessionHttpApi.todo")(function* (ctx: { params: { sessionID: SessionID } }) {
       return yield* todoSvc.get(ctx.params.sessionID)
     })
@@ -328,8 +332,9 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
 
     const deleteMessage = Effect.fn("SessionHttpApi.deleteMessage")(function* (ctx: {
       params: { sessionID: SessionID; messageID: MessageID }
+      query: { force?: boolean }
     }) {
-      yield* runState.assertNotBusy(ctx.params.sessionID)
+      if (!ctx.query.force) yield* runState.assertNotBusy(ctx.params.sessionID)
       yield* session.removeMessage(ctx.params)
       return true
     })
@@ -363,6 +368,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("status", status)
       .handle("get", get)
       .handle("children", children)
+      .handle("cost", cost)
       .handle("todo", todo)
       .handle("diff", diff)
       .handle("messages", messages)

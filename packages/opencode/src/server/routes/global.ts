@@ -16,35 +16,42 @@ import { lazy } from "../../util/lazy"
 import { Config } from "@/config/config"
 import { errors } from "../error"
 import { disposeAllInstancesAndEmitGlobalDisposed } from "../global-lifecycle"
+import { globalEventReplay } from "../global-event-replay"
+import { parseLastEventId, type StoredEvent } from "../sse-replay"
 
 const log = Log.create({ service: "server" })
 
-async function streamEvents(c: Context, subscribe: (q: AsyncQueue<string | null>) => () => void) {
-  return streamSSE(c, async (stream) => {
-    const q = new AsyncQueue<string | null>()
-    let done = false
+type QueueItem = { id?: number; data: string }
 
-    q.push(
-      JSON.stringify({
+async function streamEvents(c: Context) {
+  return streamSSE(c, async (stream) => {
+    const q = new AsyncQueue<QueueItem | null>()
+    let done = false
+    let lastSentId = 0
+
+    const unsub = globalEventReplay.subscribe((entry: StoredEvent) => q.push(entry))
+
+    q.push({
+      data: JSON.stringify({
         payload: {
           id: Bus.createID(),
           type: "server.connected",
           properties: {},
         },
       }),
-    )
+    })
 
     // Send heartbeat every 10s to prevent stalled proxy streams.
     const heartbeat = setInterval(() => {
-      q.push(
-        JSON.stringify({
+      q.push({
+        data: JSON.stringify({
           payload: {
             id: Bus.createID(),
             type: "server.heartbeat",
             properties: {},
           },
         }),
-      )
+      })
     }, 10_000)
 
     const stop = () => {
@@ -56,14 +63,28 @@ async function streamEvents(c: Context, subscribe: (q: AsyncQueue<string | null>
       log.info("global event disconnected")
     }
 
-    const unsub = subscribe(q)
-
     stream.onAbort(stop)
 
     try {
-      for await (const data of q) {
-        if (data === null) return
-        await stream.writeSSE({ data })
+      const lastEventId = parseLastEventId(c.req.header("Last-Event-ID"))
+      if (lastEventId > 0) {
+        const missed = globalEventReplay.eventsAfter(lastEventId)
+        if (missed.length > 0) log.info("global event replay", { lastEventId, replayed: missed.length })
+        for (const event of missed) {
+          await stream.writeSSE({ id: String(event.id), data: event.data })
+          lastSentId = event.id
+        }
+      }
+
+      for await (const item of q) {
+        if (item === null) return
+        if (item.id !== undefined) {
+          if (item.id <= lastSentId) continue
+          lastSentId = item.id
+          await stream.writeSSE({ id: String(item.id), data: item.data })
+          continue
+        }
+        await stream.writeSSE({ data: item.data })
       }
     } finally {
       stop()
@@ -128,13 +149,7 @@ export const GlobalRoutes = lazy(() =>
         c.header("X-Accel-Buffering", "no")
         c.header("X-Content-Type-Options", "nosniff")
 
-        return streamEvents(c, (q) => {
-          async function handler(event: any) {
-            q.push(JSON.stringify(event))
-          }
-          GlobalBus.on("event", handler)
-          return () => GlobalBus.off("event", handler)
-        })
+        return streamEvents(c)
       },
     )
     .get(

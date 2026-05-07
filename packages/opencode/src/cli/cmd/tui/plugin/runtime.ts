@@ -518,6 +518,12 @@ function pluginApi(runtime: RuntimeState, plugin: PluginEntry, scope: PluginScop
     },
   }
 
+  const input: TuiPluginApi["input"] = {
+    intercept(handler) {
+      return scope.track(api.input.intercept(handler))
+    },
+  }
+
   let count = 0
 
   const slots: TuiPluginApi["slots"] = {
@@ -535,6 +541,7 @@ function pluginApi(runtime: RuntimeState, plugin: PluginEntry, scope: PluginScop
     route,
     ui: api.ui,
     keybind: api.keybind,
+    input,
     tuiConfig: api.tuiConfig,
     kv: api.kv,
     state: api.state,

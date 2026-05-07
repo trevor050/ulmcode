@@ -1,0 +1,10 @@
+Select queued work units and return exact `command_supervise` parameters.
+
+Use this after `operation_queue` writes `work-queue.json`. It returns queued
+units filtered by lane and formatted as safe `command_supervise` calls:
+`{ operationID, laneID, workUnitID, profileID, variables, outputPrefix, dryRun: true }`.
+
+Set `claim=true` when the parent is about to launch those commands; the selected
+units are marked running and attempts are incremented. Keep `dryRun=true` from
+the returned params until the operator/model explicitly decides to launch the
+non-destructive command with `command_supervise`.

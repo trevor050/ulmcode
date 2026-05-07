@@ -1,0 +1,179 @@
+{
+  "id": "k12-attendance-bulk-update-csrf",
+  "operationID": "k12-attendance-bulk-update-csrf",
+  "objective": "Replay a synthetic authorized K-12 attendance workflow assessment where a cross-site request can bulk-update attendance with a teacher cookie.",
+  "assumptions": [
+    "The lab uses synthetic evidence only.",
+    "No real external target is contacted.",
+    "Teacher sessions, students, and attendance records are intentionally fake."
+  ],
+  "plan": {
+    "phases": [
+      {
+        "stage": "recon",
+        "objective": "Map attendance state-change protections.",
+        "actions": [
+          "Load the synthetic CSRF and origin policy endpoint",
+          "Record baseline attendance state before replay"
+        ],
+        "successCriteria": [
+          "CSRF policy and baseline attendance state are recorded"
+        ],
+        "subagents": [
+          "recon"
+        ],
+        "noSubagents": [
+          "school operational impact stays with the primary operator"
+        ]
+      },
+      {
+        "stage": "validation",
+        "objective": "Validate cross-site attendance mutation with ambient teacher credentials.",
+        "actions": [
+          "Replay a synthetic attendance bulk update from an external Origin header with a teacher cookie",
+          "Confirm the target attendance records changed without CSRF verification",
+          "Record the missing origin and anti-CSRF controls"
+        ],
+        "successCriteria": [
+          "A report-ready finding cites policy, forged request, and changed attendance records"
+        ],
+        "subagents": [
+          "validator",
+          "evidence"
+        ],
+        "noSubagents": [
+          "final severity and remediation wording stay with the primary operator"
+        ]
+      },
+      {
+        "stage": "reporting",
+        "objective": "Render final handoff artifacts.",
+        "actions": [
+          "Run report_lint",
+          "Run report_render",
+          "Run runtime_summary"
+        ],
+        "successCriteria": [
+          "Final handoff lint passes"
+        ],
+        "subagents": [
+          "report-writer"
+        ],
+        "noSubagents": [
+          "client-facing delivery approval is manual"
+        ]
+      }
+    ],
+    "reportingCloseout": [
+      "Run report_lint",
+      "Run report_render",
+      "Run runtime_summary"
+    ]
+  },
+  "report": {
+    "targetPages": 3,
+    "minOutlineWordsPerPage": 80
+  },
+  "evidence": [
+    {
+      "evidenceID": "ev-attendance-csrf-policy",
+      "title": "Synthetic attendance CSRF policy response",
+      "kind": "http_response",
+      "summary": "The attendance workflow reports that anti-CSRF tokens and origin validation are disabled while cookies are sent cross-site.",
+      "url": "http://127.0.0.1/api/attendance/csrf-policy",
+      "content": "{\"csrfRequired\":false,\"originValidation\":\"disabled\",\"cookieSameSite\":\"none\",\"labFinding\":\"attendance_csrf_controls_missing\"}"
+    },
+    {
+      "evidenceID": "ev-attendance-cross-site-update",
+      "title": "Synthetic cross-site attendance bulk update accepted",
+      "kind": "http_response",
+      "summary": "A request from an external Origin header with a teacher cookie bulk-updated attendance records without CSRF verification.",
+      "url": "http://127.0.0.1/api/attendance/bulk-update",
+      "content": "{\"accepted\":true,\"updateCount\":2,\"origin\":\"https://evil.example.test\",\"cookieAccepted\":true,\"csrfVerified\":false,\"labFinding\":\"attendance_bulk_update_csrf\"}"
+    },
+    {
+      "evidenceID": "ev-attendance-records-mutated",
+      "title": "Synthetic attendance records changed after cross-site update",
+      "kind": "http_response",
+      "summary": "The target attendance records reflected the forged bulk update after the cross-site request.",
+      "url": "http://127.0.0.1/api/attendance/records",
+      "content": "{\"records\":[{\"studentId\":\"student-7101\",\"status\":\"absent\",\"reason\":\"forged field trip\"},{\"studentId\":\"student-7102\",\"status\":\"absent\",\"reason\":\"forged field trip\"}]}"
+    }
+  ],
+  "findings": [
+    {
+      "findingID": "attendance-bulk-update-csrf",
+      "title": "Attendance bulk-update endpoint accepts cross-site state changes",
+      "state": "report_ready",
+      "severity": "high",
+      "confidence": 0.88,
+      "affectedAssets": [
+        "Attendance API",
+        "Teacher session workflow",
+        "Student attendance records"
+      ],
+      "evidence": [
+        {
+          "id": "ev-attendance-csrf-policy",
+          "path": "evidence/raw/ev-attendance-csrf-policy.txt"
+        },
+        {
+          "id": "ev-attendance-cross-site-update",
+          "path": "evidence/raw/ev-attendance-cross-site-update.txt"
+        },
+        {
+          "id": "ev-attendance-records-mutated",
+          "path": "evidence/raw/ev-attendance-records-mutated.txt"
+        }
+      ],
+      "description": "The synthetic attendance endpoint accepts bulk state changes using ambient teacher cookies without requiring an anti-CSRF token or validating the request Origin.",
+      "impact": "A teacher visiting a malicious page could unknowingly submit attendance changes, causing incorrect attendance records and downstream family notification, truancy, or safety workflows.",
+      "remediation": "Require SameSite=Lax or Strict cookies where possible, enforce anti-CSRF tokens for cookie-authenticated state changes, validate Origin and Referer headers, and require explicit server-side authorization for each class attendance mutation."
+    }
+  ],
+  "runtime": {
+    "sessionMessages": [
+      {
+        "role": "assistant",
+        "agent": "pentest",
+        "modelID": "gpt-5.5",
+        "providerID": "openai",
+        "cost": 0.46,
+        "tokens": {
+          "input": 1360,
+          "output": 560,
+          "reasoning": 360,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "role": "assistant",
+        "agent": "validator",
+        "modelID": "gpt-5.4-mini",
+        "providerID": "openai",
+        "cost": 0.14,
+        "tokens": {
+          "input": 720,
+          "output": 330,
+          "reasoning": 130,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      }
+    ]
+  },
+  "expected": {
+    "reportableFindings": 1,
+    "evidence": 3,
+    "dashboardIncludes": [
+      "# k12-attendance-bulk-update-csrf - handoff/complete",
+      "risk: high",
+      "findings: 1 total"
+    ]
+  }
+}

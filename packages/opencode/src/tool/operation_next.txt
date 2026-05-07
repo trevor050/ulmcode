@@ -1,0 +1,10 @@
+Select the next durable action for a long-running ULM operation.
+
+Use this after `operation_schedule`, after lane completion, after resume, and
+whenever the parent agent needs to decide whether to launch more parallel work,
+wait for running lanes, compact, stop, or repair missing runtime state.
+
+The tool reads the persisted operation graph and runtime summary, applies
+dependency and concurrency gates, consults the runtime governor, writes
+`.ulmcode/operations/<operation>/plans/next-action.json`, and returns the lane
+prompt plus the tools allowed for the next action.

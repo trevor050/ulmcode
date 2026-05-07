@@ -1,0 +1,15 @@
+{
+  "id": "model-loop-contract",
+  "capability": "model_loop_eval",
+  "tier": "fast",
+  "objective": "Prove the harness has a first-class slot for model/tool-loop evaluation instead of only direct artifact replay.",
+  "checks": [
+    "Session prompt surface exists",
+    "Tool registry surface exists",
+    "Lab replay currently records evidence, findings, and operation plans"
+  ],
+  "acceptance": [
+    "The scorecard reports model_loop_eval coverage",
+    "Future real-model runs can attach artifacts to this capability without changing the scorecard schema"
+  ]
+}

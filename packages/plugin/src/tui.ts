@@ -15,7 +15,7 @@ import type {
   TextPart,
   Config as SdkConfig,
 } from "@opencode-ai/sdk/v2"
-import type { CliRenderer, ParsedKey, RGBA, SlotMode } from "@opentui/core"
+import type { CliRenderer, ParsedKey, RGBA, SlotMode, TextareaRenderable } from "@opentui/core"
 import type { JSX, SolidPlugin } from "@opentui/solid"
 import type { Config as PluginConfig, PluginOptions } from "./index.js"
 
@@ -74,6 +74,12 @@ export type TuiKeybindSet = {
   get: (name: string) => string
   match: (name: string, evt: ParsedKey) => boolean
   print: (name: string) => string
+}
+
+export type TuiInputInterceptHandler = (event: ParsedKey, input: TextareaRenderable) => boolean | void
+
+export type TuiInput = {
+  intercept: (handler: TuiInputInterceptHandler) => () => void
 }
 
 export type TuiDialogProps = {
@@ -279,6 +285,8 @@ export type TuiState = {
     status: (sessionID: string) => SessionStatus | undefined
     permission: (sessionID: string) => ReadonlyArray<PermissionRequest>
     question: (sessionID: string) => ReadonlyArray<QuestionRequest>
+    cost: (sessionID: string) => TuiSessionCost | undefined
+    refreshCost: (sessionID: string) => void
   }
   part: (messageID: string) => ReadonlyArray<Part>
   lsp: () => ReadonlyArray<TuiSidebarLspItem>
@@ -306,6 +314,12 @@ export type TuiSidebarMcpItem = {
   name: string
   status: McpStatus["status"]
   error?: string
+}
+
+export type TuiSessionCost = {
+  readonly self: number
+  readonly subagents: number
+  readonly subagent_count: number
 }
 
 export type TuiSidebarLspItem = Pick<LspStatus, "id" | "root" | "status">
@@ -474,6 +488,7 @@ export type TuiPluginApi = {
     print: (key: string) => string
     create: (defaults: TuiKeybindMap, overrides?: Record<string, unknown>) => TuiKeybindSet
   }
+  input: TuiInput
   readonly tuiConfig: Frozen<TuiConfigView>
   kv: TuiKV
   state: TuiState

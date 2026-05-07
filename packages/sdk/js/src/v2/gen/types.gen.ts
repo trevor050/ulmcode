@@ -28,6 +28,7 @@ export type Event =
   | EventTuiCommandExecute
   | EventTuiToastShow1
   | EventTuiSessionSelect
+  | EventOperationUpdated
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
   | EventCommandExecuted
@@ -35,7 +36,6 @@ export type Event =
   | EventVcsBranchUpdated
   | EventWorkspaceReady
   | EventWorkspaceFailed
-  | EventWorkspaceRestore
   | EventWorkspaceStatus
   | EventWorktreeReady
   | EventWorktreeFailed
@@ -302,6 +302,7 @@ export type EventTuiCommandExecute = {
       | "prompt.clear"
       | "prompt.submit"
       | "agent.cycle"
+      | "ulm.operations"
       | string
   }
 }
@@ -794,6 +795,7 @@ export type GlobalEvent = {
     | EventTuiCommandExecute
     | EventTuiToastShow
     | EventTuiSessionSelect
+    | EventOperationUpdated
     | EventMcpToolsChanged
     | EventMcpBrowserOpenFailed
     | EventCommandExecuted
@@ -801,7 +803,6 @@ export type GlobalEvent = {
     | EventVcsBranchUpdated
     | EventWorkspaceReady
     | EventWorkspaceFailed
-    | EventWorkspaceRestore
     | EventWorkspaceStatus
     | EventWorktreeReady
     | EventWorktreeFailed
@@ -1144,6 +1145,7 @@ export type Config = {
   enabled_providers?: Array<string>
   model?: string
   small_model?: string
+  max_retries?: number
   default_agent?: string
   username?: string
   mode?: {
@@ -1231,6 +1233,7 @@ export type Config = {
   }
   experimental?: {
     disable_paste_summary?: boolean
+    enable_sse_json_repair?: boolean
     batch_tool?: boolean
     openTelemetry?: boolean
     primary_tools?: Array<string>
@@ -1697,6 +1700,7 @@ export type EventTuiCommandExecute2 = {
       | "prompt.clear"
       | "prompt.submit"
       | "agent.cycle"
+      | "ulm.operations"
       | string
   }
 }
@@ -1719,6 +1723,204 @@ export type EventTuiSessionSelect2 = {
      */
     sessionID: string
   }
+}
+
+export type UlmEvidenceRef = {
+  id: string
+  path?: string
+  summary?: string
+  command?: string
+  createdAt?: string
+}
+
+export type UlmOperationTime = {
+  created: string
+  updated: string
+}
+
+export type UlmOperationRecord = {
+  operationID: string
+  objective: string
+  stage: "intake" | "recon" | "mapping" | "validation" | "reporting" | "handoff"
+  status: "planned" | "running" | "blocked" | "paused" | "complete"
+  summary: string
+  nextActions: Array<string>
+  blockers: Array<string>
+  riskLevel: "low" | "medium" | "high" | "critical"
+  activeTasks: Array<string>
+  evidence: Array<UlmEvidenceRef>
+  notes?: string
+  time: UlmOperationTime
+}
+
+export type UlmOperationGoalStatus = {
+  status: string
+  objective: string
+  targetDurationHours?: number
+  updatedAt?: string
+  completedAt?: string
+}
+
+export type UlmSupervisorStatus = {
+  generatedAt?: string
+  action?: string
+  reason?: string
+  requiredNextTool?: string
+  blockers: Array<string>
+  nextTools: Array<string>
+}
+
+export type UlmToolInventoryStatus = {
+  generatedAt?: string
+  total: number
+  installed: number
+  missing: number
+  highValueMissing: number
+  installedHighValue: Array<string>
+  missingHighValue: Array<string>
+}
+
+export type UlmOperationPolicies = {
+  foregroundCommand: string
+}
+
+export type UlmPlanArtifacts = {
+  operation: boolean
+}
+
+export type UlmFindingCounts = {
+  total: number
+  byState: {
+    candidate: number
+    needs_validation: number
+    validated: number
+    report_ready: number
+    rejected: number
+  }
+  bySeverity: {
+    info: number
+    low: number
+    medium: number
+    high: number
+    critical: number
+  }
+}
+
+export type UlmEvidenceCounts = {
+  total: number
+  byKind: {
+    command_output: number
+    http_response: number
+    screenshot: number
+    file: number
+    note: number
+    log: number
+  }
+}
+
+export type UlmReportArtifacts = {
+  outline: boolean
+  markdown: boolean
+  html: boolean
+  pdf: boolean
+  readme: boolean
+  manifest: boolean
+}
+
+export type UlmRuntimeSnapshot = {
+  [key: string]: unknown
+}
+
+export type UlmOperationStatusSummary = {
+  operationID: string
+  root: string
+  operation?: UlmOperationRecord
+  goal?: UlmOperationGoalStatus
+  supervisor?: UlmSupervisorStatus
+  toolInventory?: UlmToolInventoryStatus
+  policies: UlmOperationPolicies
+  plans: UlmPlanArtifacts
+  findings: UlmFindingCounts
+  evidence: UlmEvidenceCounts
+  reports: UlmReportArtifacts
+  runtimeSummary: boolean
+  runtime?: UlmRuntimeSnapshot
+  lastEvents: Array<unknown>
+}
+
+export type UlmOperationCheckpointBrief = {
+  objective: string
+  stage: "intake" | "recon" | "mapping" | "validation" | "reporting" | "handoff"
+  status: "planned" | "running" | "blocked" | "paused" | "complete"
+  summary: string
+  riskLevel: "low" | "medium" | "high" | "critical"
+  nextActions: Array<string>
+  blockers: Array<string>
+  activeTasks: Array<string>
+  time: UlmOperationTime
+}
+
+export type UlmResumeHealth = {
+  ready: boolean
+  status: "ready" | "attention_required"
+  gaps: Array<string>
+}
+
+export type UlmResumeArtifacts = {
+  operation: boolean
+  reports: UlmReportArtifacts
+  runtimeSummary: boolean
+  findings: number
+  evidence: number
+}
+
+export type UlmOperationResumeBrief = {
+  operationID: string
+  root: string
+  generatedAt: string
+  checkpoint?: UlmOperationCheckpointBrief
+  health: UlmResumeHealth
+  artifacts: UlmResumeArtifacts
+  runtime?: UlmRuntimeSnapshot
+  recommendedTools: Array<string>
+  continuationPrompt: string
+  lastEvents: Array<unknown>
+}
+
+export type UlmAuditChecks = {
+  resume: {
+    ok: boolean
+    status: "ready" | "attention_required"
+    gaps: Array<string>
+  }
+  finalHandoff: {
+    ok: boolean
+    status: "ready" | "attention_required"
+    gaps: Array<string>
+    counts: {
+      findings: number
+      reportReady: number
+      validated: number
+      candidates: number
+      rejected: number
+    }
+  }
+}
+
+export type UlmAuditFiles = {
+  json: string
+  markdown: string
+}
+
+export type UlmOperationAuditResult = {
+  operationID: string
+  root: string
+  generatedAt: string
+  ok: boolean
+  checks: UlmAuditChecks
+  blockers: Array<string>
+  recommendedTools: Array<string>
+  files: UlmAuditFiles
 }
 
 export type Workspace = {
@@ -1877,9 +2079,11 @@ export type SyncEventSessionNextModelSwitched = {
   data: {
     timestamp: number
     sessionID: string
-    id: string
-    providerID: string
-    variant?: string
+    model: {
+      id: string
+      providerID: string
+      variant: string
+    }
   }
 }
 
@@ -1950,7 +2154,7 @@ export type SyncEventSessionNextStepStarted = {
     model: {
       id: string
       providerID: string
-      variant?: string
+      variant: string
     }
     snapshot?: string
   }
@@ -1989,10 +2193,7 @@ export type SyncEventSessionNextStepFailed = {
   data: {
     timestamp: number
     sessionID: string
-    error: {
-      type: string
-      message: string
-    }
+    error: SessionErrorUnknown
   }
 }
 
@@ -2190,10 +2391,7 @@ export type SyncEventSessionNextToolFailed = {
     timestamp: number
     sessionID: string
     callID: string
-    error: {
-      type: string
-      message: string
-    }
+    error: SessionErrorUnknown
     provider: {
       executed: boolean
       metadata?: {
@@ -2420,6 +2618,44 @@ export type EventSessionCompacted = {
   }
 }
 
+export type EventOperationUpdated = {
+  id: string
+  type: "operation.updated"
+  properties: {
+    operationID: string
+    artifact:
+      | "checkpoint"
+      | "operation_plan"
+      | "evidence"
+      | "finding"
+      | "report_outline"
+      | "report_render"
+      | "runtime_summary"
+      | "stage_gate"
+      | "operation_audit"
+    path?: string
+    operation?: {
+      objective?: string
+      stage?: string
+      status?: string
+      summary?: string
+      riskLevel?: string
+      nextActions?: Array<string>
+      blockers?: Array<string>
+    }
+    findings?: {
+      total: number
+    }
+    evidence?: {
+      total: number
+    }
+    reports?: {
+      [key: string]: boolean
+    }
+    runtimeSummary?: boolean
+  }
+}
+
 export type EventMcpToolsChanged = {
   id: string
   type: "mcp.tools.changed"
@@ -2475,17 +2711,6 @@ export type EventWorkspaceFailed = {
   type: "workspace.failed"
   properties: {
     message: string
-  }
-}
-
-export type EventWorkspaceRestore = {
-  id: string
-  type: "workspace.restore"
-  properties: {
-    workspaceID: string
-    sessionID: string
-    total: number
-    step: number
   }
 }
 
@@ -2629,9 +2854,11 @@ export type EventSessionNextModelSwitched = {
   properties: {
     timestamp: number
     sessionID: string
-    id: string
-    providerID: string
-    variant?: string
+    model: {
+      id: string
+      providerID: string
+      variant: string
+    }
   }
 }
 
@@ -2706,7 +2933,7 @@ export type EventSessionNextStepStarted = {
     model: {
       id: string
       providerID: string
-      variant?: string
+      variant: string
     }
     snapshot?: string
   }
@@ -2733,16 +2960,18 @@ export type EventSessionNextStepEnded = {
   }
 }
 
+export type SessionErrorUnknown = {
+  type: "unknown"
+  message: string
+}
+
 export type EventSessionNextStepFailed = {
   id: string
   type: "session.next.step.failed"
   properties: {
     timestamp: number
     sessionID: string
-    error: {
-      type: string
-      message: string
-    }
+    error: SessionErrorUnknown
   }
 }
 
@@ -2913,10 +3142,7 @@ export type EventSessionNextToolFailed = {
     timestamp: number
     sessionID: string
     callID: string
-    error: {
-      type: string
-      message: string
-    }
+    error: SessionErrorUnknown
     provider: {
       executed: boolean
       metadata?: {
@@ -3007,7 +3233,7 @@ export type SessionInfo = {
   model?: {
     id: string
     providerID: string
-    variant?: string
+    variant: string
   }
   time: {
     created: number
@@ -3043,7 +3269,7 @@ export type SessionMessageModelSwitched = {
   model: {
     id: string
     providerID: string
-    variant?: string
+    variant: string
   }
 }
 
@@ -3137,10 +3363,7 @@ export type SessionMessageToolStateError = {
   structured: {
     [key: string]: unknown
   }
-  error: {
-    type: string
-    message: string
-  }
+  error: SessionErrorUnknown
 }
 
 export type SessionMessageAssistantTool = {
@@ -3180,7 +3403,7 @@ export type SessionMessageAssistant = {
   model: {
     id: string
     providerID: string
-    variant?: string
+    variant: string
   }
   content: Array<SessionMessageAssistantText | SessionMessageAssistantReasoning | SessionMessageAssistantTool>
   snapshot?: {
@@ -3198,10 +3421,7 @@ export type SessionMessageAssistant = {
       write: number
     }
   }
-  error?: {
-    type: string
-    message: string
-  }
+  error?: SessionErrorUnknown
 }
 
 export type SessionMessageCompaction = {
@@ -3226,6 +3446,78 @@ export type SessionMessage =
   | SessionMessageShell
   | SessionMessageAssistant
   | SessionMessageCompaction
+
+export type ModelInfo = {
+  id: string
+  providerID: string
+  family?: string
+  name: string
+  endpoint:
+    | {
+        type: "openai/responses"
+        url: string
+        websocket?: boolean
+      }
+    | {
+        type: "openai/completions"
+        url: string
+        reasoning?:
+          | {
+              type: "reasoning_content"
+            }
+          | {
+              type: "reasoning_details"
+            }
+      }
+    | {
+        type: "anthropic/messages"
+        url: string
+      }
+  capabilities: {
+    tools: boolean
+    input: Array<string>
+    output: Array<string>
+  }
+  options: {
+    headers: {
+      [key: string]: string
+    }
+    body: {
+      [key: string]: unknown
+    }
+    variant?: string
+  }
+  variants: Array<{
+    id: string
+    headers: {
+      [key: string]: string
+    }
+    body: {
+      [key: string]: unknown
+    }
+  }>
+  time: {
+    released: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  cost: Array<{
+    tier?: {
+      type: "context"
+      size: number
+    }
+    input: number
+    output: number
+    cache: {
+      read: number
+      write: number
+    }
+  }>
+  status: "alpha" | "beta" | "deprecated" | "active"
+  limit: {
+    context: number
+    input?: number
+    output: number
+  }
+}
 
 export type EventTuiToastShow1 = {
   id: string
@@ -5216,6 +5508,44 @@ export type SessionChildrenResponses = {
 
 export type SessionChildrenResponse = SessionChildrenResponses[keyof SessionChildrenResponses]
 
+export type SessionCostData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/cost"
+}
+
+export type SessionCostErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionCostError = SessionCostErrors[keyof SessionCostErrors]
+
+export type SessionCostResponses = {
+  /**
+   * Cost rollup
+   */
+  200: {
+    self: number
+    subagents: number
+    subagent_count: number
+  }
+}
+
+export type SessionCostResponse = SessionCostResponses[keyof SessionCostResponses]
+
 export type SessionTodoData = {
   body?: never
   path: {
@@ -5372,6 +5702,7 @@ export type SessionDeleteMessageData = {
   query?: {
     directory?: string
     workspace?: string
+    force?: "true" | "false"
   }
   url: "/session/{sessionID}/message/{messageID}"
 }
@@ -6023,6 +6354,38 @@ export type SyncReplayResponses = {
 
 export type SyncReplayResponse = SyncReplayResponses[keyof SyncReplayResponses]
 
+export type SyncStealData = {
+  body?: {
+    sessionID: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/sync/steal"
+}
+
+export type SyncStealErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SyncStealError = SyncStealErrors[keyof SyncStealErrors]
+
+export type SyncStealResponses = {
+  /**
+   * Session stolen into workspace
+   */
+  200: {
+    sessionID: string
+  }
+}
+
+export type SyncStealResponse = SyncStealResponses[keyof SyncStealResponses]
+
 export type SyncHistoryListData = {
   body?: {
     [key: string]: number
@@ -6205,6 +6568,25 @@ export type V2SessionMessagesResponses = {
 }
 
 export type V2SessionMessagesResponse2 = V2SessionMessagesResponses[keyof V2SessionMessagesResponses]
+
+export type V2ModelListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/api/model"
+}
+
+export type V2ModelListResponses = {
+  /**
+   * Success
+   */
+  200: Array<ModelInfo>
+}
+
+export type V2ModelListResponse = V2ModelListResponses[keyof V2ModelListResponses]
 
 export type TuiAppendPromptData = {
   body?: {
@@ -6510,6 +6892,100 @@ export type TuiControlResponseResponses = {
 
 export type TuiControlResponseResponse = TuiControlResponseResponses[keyof TuiControlResponseResponses]
 
+export type UlmOperationListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    eventLimit?: string
+  }
+  url: "/ulm/operation"
+}
+
+export type UlmOperationListResponses = {
+  /**
+   * ULMCode operation status list
+   */
+  200: Array<UlmOperationStatusSummary>
+}
+
+export type UlmOperationListResponse = UlmOperationListResponses[keyof UlmOperationListResponses]
+
+export type UlmOperationStatusData = {
+  body?: never
+  path: {
+    operationID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+    eventLimit?: string
+  }
+  url: "/ulm/operation/{operationID}/status"
+}
+
+export type UlmOperationStatusResponses = {
+  /**
+   * ULMCode operation status
+   */
+  200: UlmOperationStatusSummary
+}
+
+export type UlmOperationStatusResponse = UlmOperationStatusResponses[keyof UlmOperationStatusResponses]
+
+export type UlmOperationResumeData = {
+  body?: never
+  path: {
+    operationID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+    eventLimit?: string
+    staleAfterMinutes?: string
+  }
+  url: "/ulm/operation/{operationID}/resume"
+}
+
+export type UlmOperationResumeResponses = {
+  /**
+   * ULMCode operation resume brief
+   */
+  200: UlmOperationResumeBrief
+}
+
+export type UlmOperationResumeResponse = UlmOperationResumeResponses[keyof UlmOperationResumeResponses]
+
+export type UlmOperationAuditData = {
+  body?: never
+  path: {
+    operationID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+    eventLimit?: string
+    staleAfterMinutes?: string
+    minWords?: string
+    requireOutlineBudget?: "true" | "false"
+    minOutlineWordsPerPage?: string
+    requireFindingSections?: "true" | "false"
+    minFindingWords?: string
+    finalHandoff?: "true" | "false"
+  }
+  url: "/ulm/operation/{operationID}/audit"
+}
+
+export type UlmOperationAuditResponses = {
+  /**
+   * ULMCode operation audit
+   */
+  200: UlmOperationAuditResult
+}
+
+export type UlmOperationAuditResponse = UlmOperationAuditResponses[keyof UlmOperationAuditResponses]
+
 export type ExperimentalWorkspaceAdapterListData = {
   body?: never
   path?: never
@@ -6644,41 +7120,37 @@ export type ExperimentalWorkspaceRemoveResponses = {
 export type ExperimentalWorkspaceRemoveResponse =
   ExperimentalWorkspaceRemoveResponses[keyof ExperimentalWorkspaceRemoveResponses]
 
-export type ExperimentalWorkspaceSessionRestoreData = {
+export type ExperimentalWorkspaceWarpData = {
   body?: {
+    id: string
     sessionID: string
   }
-  path: {
-    id: string
-  }
+  path?: never
   query?: {
     directory?: string
     workspace?: string
   }
-  url: "/experimental/workspace/{id}/session-restore"
+  url: "/experimental/workspace/warp"
 }
 
-export type ExperimentalWorkspaceSessionRestoreErrors = {
+export type ExperimentalWorkspaceWarpErrors = {
   /**
    * Bad request
    */
   400: BadRequestError
 }
 
-export type ExperimentalWorkspaceSessionRestoreError =
-  ExperimentalWorkspaceSessionRestoreErrors[keyof ExperimentalWorkspaceSessionRestoreErrors]
+export type ExperimentalWorkspaceWarpError = ExperimentalWorkspaceWarpErrors[keyof ExperimentalWorkspaceWarpErrors]
 
-export type ExperimentalWorkspaceSessionRestoreResponses = {
+export type ExperimentalWorkspaceWarpResponses = {
   /**
-   * Session replay started
+   * Session warped
    */
-  200: {
-    total: number
-  }
+  204: void
 }
 
-export type ExperimentalWorkspaceSessionRestoreResponse =
-  ExperimentalWorkspaceSessionRestoreResponses[keyof ExperimentalWorkspaceSessionRestoreResponses]
+export type ExperimentalWorkspaceWarpResponse =
+  ExperimentalWorkspaceWarpResponses[keyof ExperimentalWorkspaceWarpResponses]
 
 export type PtyConnectData = {
   body?: never

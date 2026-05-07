@@ -10,6 +10,8 @@ type Count = {
   route_drop: number
   command_add: number
   command_drop: number
+  input_add: number
+  input_drop: number
 }
 
 function themeCurrent(): HostPluginApi["theme"]["current"] {
@@ -255,6 +257,15 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
           return createPluginKeybind(key, defaults, over)
         }),
     },
+    input: {
+      intercept: () => {
+        if (count) count.input_add += 1
+        return () => {
+          if (!count) return
+          count.input_drop += 1
+        }
+      },
+    },
     tuiConfig: opts.tuiConfig ?? {},
     kv: {
       get: kvGet,
@@ -289,6 +300,8 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
         status: opts.state?.session?.status ?? (() => undefined),
         permission: opts.state?.session?.permission ?? (() => []),
         question: opts.state?.session?.question ?? (() => []),
+        cost: opts.state?.session?.cost ?? (() => undefined),
+        refreshCost: opts.state?.session?.refreshCost ?? (() => {}),
       },
       part: opts.state?.part ?? (() => []),
       lsp: opts.state?.lsp ?? (() => []),

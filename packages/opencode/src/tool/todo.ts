@@ -43,12 +43,13 @@ export const TodoWriteTool = Tool.define<typeof Parameters, Metadata, Todo.Servi
             sessionID: ctx.sessionID,
             todos: params.todos,
           })
+          const active = Todo.active(params.todos)
 
           return {
-            title: `${params.todos.filter((x) => x.status !== "completed").length} todos`,
-            output: JSON.stringify(params.todos, null, 2),
+            title: `${active.length} todos`,
+            output: JSON.stringify(active, null, 2),
             metadata: {
-              todos: params.todos,
+              todos: active,
             },
           }
         }),

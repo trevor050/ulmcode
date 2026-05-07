@@ -25,6 +25,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { isRecord } from "@/util/record"
 import { optionalOmitUndefined, withStatics } from "@/util/schema"
+import { repairSSE } from "./sse-repair"
 
 import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
@@ -138,6 +139,14 @@ function useLanguageModel(sdk: any) {
   return sdk.responses === undefined && sdk.chat === undefined
 }
 
+function selectAzureLanguageModel(sdk: any, modelID: string, useChat: boolean) {
+  if (useChat && sdk.chat) return sdk.chat(modelID)
+  if (sdk.responses) return sdk.responses(modelID)
+  if (sdk.messages) return sdk.messages(modelID)
+  if (sdk.chat) return sdk.chat(modelID)
+  return sdk.languageModel(modelID)
+}
+
 function custom(dep: CustomDep): Record<string, CustomLoader> {
   return {
     anthropic: () =>
@@ -222,12 +231,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
-          if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
-          if (options?.["useCompletionUrls"]) {
-            return sdk.chat(modelID)
-          } else {
-            return sdk.responses(modelID)
-          }
+          return selectAzureLanguageModel(sdk, modelID, Boolean(options?.["useCompletionUrls"]))
         },
         options: {
           resourceName: resource,
@@ -247,12 +251,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
-          if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
-          if (options?.["useCompletionUrls"]) {
-            return sdk.chat(modelID)
-          } else {
-            return sdk.responses(modelID)
-          }
+          return selectAzureLanguageModel(sdk, modelID, Boolean(options?.["useCompletionUrls"]))
         },
         options: {
           baseURL: resourceName ? `https://${resourceName}.cognitiveservices.azure.com/openai` : undefined,
@@ -1412,7 +1411,12 @@ const layer: Layer.Layer<
 
     const list = Effect.fn("Provider.list")(() => InstanceState.use(state, (s) => s.providers))
 
-    async function resolveSDK(model: Model, s: State, envs: Record<string, string | undefined>) {
+    async function resolveSDK(
+      model: Model,
+      s: State,
+      envs: Record<string, string | undefined>,
+      sdkOpts: { repairSSE: boolean },
+    ) {
       try {
         using _ = log.time("getSDK", {
           providerID: model.providerID,
@@ -1509,8 +1513,9 @@ const layer: Layer.Layer<
             timeout: false,
           })
 
-          if (!chunkAbortCtl) return res
-          return wrapSSE(res, chunkTimeout, chunkAbortCtl)
+          const maybeRepaired = sdkOpts.repairSSE ? repairSSE(res) : res
+          if (!chunkAbortCtl) return maybeRepaired
+          return wrapSSE(maybeRepaired, chunkTimeout, chunkAbortCtl)
         }
 
         const bundledLoader = BUNDLED_PROVIDERS[model.api.npm]
@@ -1582,10 +1587,12 @@ const layer: Layer.Layer<
       const envs = yield* env.all()
       const key = `${model.providerID}/${model.id}`
       if (s.models.has(key)) return s.models.get(key)!
+      const cfg = yield* config.get()
+      const sdkOpts = { repairSSE: cfg.experimental?.enable_sse_json_repair === true }
 
       return yield* Effect.promise(async () => {
         const provider = s.providers[model.providerID]
-        const sdk = await resolveSDK(model, s, envs)
+        const sdk = await resolveSDK(model, s, envs, sdkOpts)
 
         try {
           const language = s.modelLoaders[model.providerID]

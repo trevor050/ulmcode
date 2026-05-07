@@ -1,0 +1,6 @@
+services:
+  k12-guardian-invite-takeover:
+    build:
+      context: ./service
+    ports:
+      - "8086:8080"

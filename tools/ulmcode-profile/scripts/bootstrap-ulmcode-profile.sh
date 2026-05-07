@@ -72,8 +72,6 @@ cfg = {
     }
   },
   "mcp": {
-    "vercel": {"type": "remote", "url": "https://mcp.vercel.com"},
-    "context7": {"type": "remote", "url": "https://mcp.context7.com/mcp"},
     "playwright": {"type": "local", "command": ["npx", "@playwright/mcp@latest"]},
     "pentestMCP": {"type": "local", "command": ["docker", "run", "--rm", "-i", "ramgameer/pentest-mcp:latest"]}
   }

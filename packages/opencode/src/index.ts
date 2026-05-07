@@ -36,6 +36,7 @@ import { JsonMigration } from "@/storage/json-migration"
 import { Database } from "@/storage/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
+import { UlmCommand } from "./cli/cmd/ulm"
 import { Heap } from "./cli/heap"
 import { drizzle } from "drizzle-orm/bun-sqlite"
 import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process"
@@ -175,6 +176,7 @@ const cli = yargs(args)
   .command(GithubCommand)
   .command(PrCommand)
   .command(SessionCommand)
+  .command(UlmCommand)
   .command(PluginCommand)
   .command(DbCommand)
   .fail((msg, err) => {

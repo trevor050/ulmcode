@@ -1,4 +1,4 @@
-import type { APICallError, ModelMessage } from "ai"
+import type { ModelMessage } from "ai"
 import { mergeDeep, unique } from "remeda"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import type { JSONSchema } from "zod/v4/core"
@@ -122,7 +122,7 @@ function normalizeMessages(
     })
   }
   if (["@ai-sdk/anthropic", "@ai-sdk/google-vertex/anthropic"].includes(model.api.npm)) {
-    // Anthropic rejects assistant turns where tool_use blocks are followed by non-tool
+    // Anthropic rejects assistant turns where client tool_use blocks are followed by non-tool
     // content, e.g. [tool_use, tool_use, text], with:
     // `tool_use` ids were found without `tool_result` blocks immediately after...
     //
@@ -130,19 +130,26 @@ function normalizeMessages(
     // assistant messages are later merged by the provider/SDK, so preserving the
     // original [tool_use...] then [text] order still produces the invalid payload.
     //
-    // The root cause appears to be somewhere upstream where the stream is originally
-    // processed. We were unable to locate an exact narrower reproduction elsewhere,
-    // so we keep this transform in place for the time being.
+    // Provider-executed tools are different: the AI SDK intentionally represents
+    // their tool-call and tool-result together in assistant content.
     msgs = msgs.flatMap((msg) => {
       if (msg.role !== "assistant" || !Array.isArray(msg.content)) return [msg]
 
       const parts = msg.content
-      const first = parts.findIndex((part) => part.type === "tool-call")
+      const providerExecuted = new Set(
+        parts.flatMap((part) => (part.type === "tool-call" && part.providerExecuted === true ? [part.toolCallId] : [])),
+      )
+      const isClientToolPart = (part: (typeof parts)[number]) => {
+        if (part.type === "tool-call") return part.providerExecuted !== true
+        if (part.type === "tool-result") return !providerExecuted.has(part.toolCallId)
+        return false
+      }
+      const first = parts.findIndex((part) => part.type === "tool-call" && part.providerExecuted !== true)
       if (first === -1) return [msg]
-      if (!parts.slice(first).some((part) => part.type !== "tool-call")) return [msg]
+      if (!parts.slice(first).some((part) => !isClientToolPart(part))) return [msg]
       return [
-        { ...msg, content: parts.filter((part) => part.type !== "tool-call") },
-        { ...msg, content: parts.filter((part) => part.type === "tool-call") },
+        { ...msg, content: parts.filter((part) => !isClientToolPart(part)) },
+        { ...msg, content: parts.filter(isClientToolPart) },
       ]
     })
   }
@@ -1101,12 +1108,35 @@ export function schema(model: Provider.Model, schema: JSONSchema.BaseSchema | JS
   */
 
   if (model.providerID === "moonshotai" || model.api.id.toLowerCase().includes("kimi")) {
-    const sanitizeMoonshot = (obj: unknown): unknown => {
+    const MAX_DEPTH = 9
+
+    const isComplex = (node: Record<string, any>) => {
+      if (node.type && !["object", "array"].includes(node.type)) return false
+      return !!(
+        node.properties ||
+        node.anyOf ||
+        node.oneOf ||
+        node.allOf ||
+        node.items ||
+        node.$defs ||
+        node.definitions
+      )
+    }
+
+    const flatten = (node: Record<string, any>) => {
+      if (node.type === "array") return { type: "array", items: { type: "object", additionalProperties: true } }
+      return { type: "object", additionalProperties: true }
+    }
+
+    const sanitizeMoonshot = (obj: unknown, depth = 0): unknown => {
       if (obj === null || typeof obj !== "object") return obj
-      if (Array.isArray(obj)) return obj.map(sanitizeMoonshot)
+      if (Array.isArray(obj)) return obj.map((item) => sanitizeMoonshot(item, depth + 1))
       // Moonshot expands $ref before validation and rejects sibling keywords like description on the same node.
       if ("$ref" in obj && typeof obj.$ref === "string") return { $ref: obj.$ref }
-      const result = Object.fromEntries(Object.entries(obj).map(([key, value]) => [key, sanitizeMoonshot(value)]))
+      if (depth >= MAX_DEPTH && isComplex(obj as Record<string, any>)) return flatten(obj as Record<string, any>)
+      const result = Object.fromEntries(
+        Object.entries(obj).map(([key, value]) => [key, sanitizeMoonshot(value, depth + 1)]),
+      )
       // MFJS does not support tuple-style `items` arrays; it requires one schema object for all array items.
       if (Array.isArray(result.items)) result.items = result.items[0] ?? {}
       return result

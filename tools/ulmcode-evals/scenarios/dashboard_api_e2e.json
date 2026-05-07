@@ -1,0 +1,15 @@
+{
+  "id": "dashboard-api-contract",
+  "capability": "dashboard_api_e2e",
+  "tier": "fast",
+  "objective": "Verify operator-visible API and TUI surfaces stay connected to operation artifacts.",
+  "checks": [
+    "ULM HTTP handler exists",
+    "ULM TUI route exists",
+    "HTTP API tests cover operation listing and status"
+  ],
+  "acceptance": [
+    "The scorecard reports dashboard_api_e2e coverage",
+    "Dashboard/API drift breaks a named harness scenario"
+  ]
+}

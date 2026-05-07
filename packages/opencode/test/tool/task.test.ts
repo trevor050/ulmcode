@@ -1,19 +1,30 @@
 import { afterEach, describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import fs from "fs/promises"
+import path from "path"
+import { Deferred, Effect, Exit, Fiber, Layer, Option } from "effect"
 import { Agent } from "../../src/agent/agent"
 import { Config } from "@/config/config"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Instance } from "../../src/project/instance"
 import { Session } from "@/session/session"
+import { SessionStatus } from "@/session/status"
 import { MessageV2 } from "../../src/session/message-v2"
 import type { SessionPrompt } from "../../src/session/prompt"
-import { MessageID, PartID } from "../../src/session/schema"
+import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
+import { OperationRecoverTool } from "@/tool/operation_recover"
+import { OperationResumeTool } from "@/tool/operation_resume"
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
+import { TaskListTool } from "@/tool/task_list"
+import { TaskRestartTool } from "@/tool/task_restart"
+import { TaskStatusTool } from "@/tool/task_status"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
-import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
+import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { Bus } from "@/bus"
+import { BackgroundJob } from "@/background/job"
+import { Storage } from "@/storage/storage"
+import { readOperationStatus, writeOperationCheckpoint } from "@/ulm/artifact"
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -30,10 +41,22 @@ const it = testEffect(
     Config.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
     Session.defaultLayer,
+    SessionStatus.defaultLayer,
+    Bus.layer,
+    BackgroundJob.defaultLayer,
+    Storage.defaultLayer,
     Truncate.defaultLayer,
     ToolRegistry.defaultLayer,
   ),
 )
+
+function defer<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
 
 const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
   const session = yield* Session.Service
@@ -66,13 +89,14 @@ const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
 
 function stubOps(opts?: { onPrompt?: (input: SessionPrompt.PromptInput) => void; text?: string }): TaskPromptOps {
   return {
-    cancel() {},
+    cancel: () => Effect.void,
     resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
     prompt: (input) =>
       Effect.sync(() => {
         opts?.onPrompt?.(input)
         return reply(input, opts?.text ?? "done")
       }),
+    loop: (input) => Effect.succeed(reply({ sessionID: input.sessionID, parts: [] }, "looped")),
   }
 }
 
@@ -107,102 +131,271 @@ function reply(input: SessionPrompt.PromptInput, text: string): MessageV2.WithPa
 }
 
 describe("tool.task", () => {
-  it.live("description sorts subagents by name and is stable across calls", () =>
-    provideTmpdirInstance(
-      () =>
-        Effect.gen(function* () {
-          const agent = yield* Agent.Service
-          const build = yield* agent.get("build")
-          const registry = yield* ToolRegistry.Service
-          const get = Effect.fnUntraced(function* () {
-            const tools = yield* registry.tools({ ...ref, agent: build })
-            return tools.find((tool) => tool.id === TaskTool.id)?.description ?? ""
-          })
-          const first = yield* get()
-          const second = yield* get()
+  it.instance(
+    "description sorts subagents by name and is stable across calls",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* Agent.Service
+        const build = yield* agent.get("build")
+        const registry = yield* ToolRegistry.Service
+        const get = Effect.fnUntraced(function* () {
+          const tools = yield* registry.tools({ ...ref, agent: build })
+          return tools.find((tool) => tool.id === TaskTool.id)?.description ?? ""
+        })
+        const first = yield* get()
+        const second = yield* get()
 
-          expect(first).toBe(second)
+        expect(first).toBe(second)
 
-          const alpha = first.indexOf("- alpha: Alpha agent")
-          const explore = first.indexOf("- explore:")
-          const general = first.indexOf("- general:")
-          const zebra = first.indexOf("- zebra: Zebra agent")
+        const alpha = first.indexOf("- alpha: Alpha agent")
+        const explore = first.indexOf("- explore:")
+        const general = first.indexOf("- general:")
+        const zebra = first.indexOf("- zebra: Zebra agent")
 
-          expect(alpha).toBeGreaterThan(-1)
-          expect(explore).toBeGreaterThan(alpha)
-          expect(general).toBeGreaterThan(explore)
-          expect(zebra).toBeGreaterThan(general)
-        }),
-      {
-        config: {
-          agent: {
-            zebra: {
-              description: "Zebra agent",
-              mode: "subagent",
-            },
-            alpha: {
-              description: "Alpha agent",
-              mode: "subagent",
-            },
+        expect(alpha).toBeGreaterThan(-1)
+        expect(explore).toBeGreaterThan(alpha)
+        expect(general).toBeGreaterThan(explore)
+        expect(zebra).toBeGreaterThan(general)
+      }),
+    {
+      config: {
+        agent: {
+          zebra: {
+            description: "Zebra agent",
+            mode: "subagent",
+          },
+          alpha: {
+            description: "Alpha agent",
+            mode: "subagent",
           },
         },
       },
-    ),
+    },
   )
 
-  it.live("description hides denied subagents for the caller", () =>
-    provideTmpdirInstance(
-      () =>
-        Effect.gen(function* () {
-          const agent = yield* Agent.Service
-          const build = yield* agent.get("build")
-          const registry = yield* ToolRegistry.Service
-          const description =
-            (yield* registry.tools({ ...ref, agent: build })).find((tool) => tool.id === TaskTool.id)?.description ?? ""
+  it.instance(
+    "description hides denied subagents for the caller",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* Agent.Service
+        const build = yield* agent.get("build")
+        const registry = yield* ToolRegistry.Service
+        const description =
+          (yield* registry.tools({ ...ref, agent: build })).find((tool) => tool.id === TaskTool.id)?.description ?? ""
 
-          expect(description).toContain("- alpha: Alpha agent")
-          expect(description).not.toContain("- zebra: Zebra agent")
-        }),
-      {
-        config: {
-          permission: {
-            task: {
-              "*": "allow",
-              zebra: "deny",
-            },
+        expect(description).toContain("- alpha: Alpha agent")
+        expect(description).not.toContain("- zebra: Zebra agent")
+      }),
+    {
+      config: {
+        permission: {
+          task: {
+            "*": "allow",
+            zebra: "deny",
           },
-          agent: {
-            zebra: {
-              description: "Zebra agent",
-              mode: "subagent",
-            },
-            alpha: {
-              description: "Alpha agent",
-              mode: "subagent",
-            },
+        },
+        agent: {
+          zebra: {
+            description: "Zebra agent",
+            mode: "subagent",
+          },
+          alpha: {
+            description: "Alpha agent",
+            mode: "subagent",
           },
         },
       },
-    ),
+    },
   )
 
-  it.live("execute resumes an existing task session from task_id", () =>
-    provideTmpdirInstance(() =>
+  it.instance("execute resumes an existing task session from task_id", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const child = yield* sessions.create({ parentID: chat.id, title: "Existing child" })
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let seen: SessionPrompt.PromptInput | undefined
+      const promptOps = stubOps({ text: "resumed", onPrompt: (input) => (seen = input) })
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          task_id: child.id,
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      const kids = yield* sessions.children(chat.id)
+      expect(kids).toHaveLength(1)
+      expect(kids[0]?.id).toBe(child.id)
+      expect(result.metadata.sessionId).toBe(child.id)
+      expect(result.output).toContain(`task_id: ${child.id}`)
+      expect(seen?.sessionID).toBe(child.id)
+    }),
+  )
+
+  it.instance("execute asks by default and skips checks when bypassed", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const calls: unknown[] = []
+      const promptOps = stubOps()
+
+      const exec = (extra?: Record<string, any>) =>
+        def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps, ...extra },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: (input) =>
+              Effect.sync(() => {
+                calls.push(input)
+              }),
+          },
+        )
+
+      yield* exec()
+      yield* exec({ bypassAgentCheck: true })
+
+      expect(calls).toHaveLength(1)
+      expect(calls[0]).toEqual({
+        permission: "task",
+        patterns: ["general"],
+        always: ["*"],
+        metadata: {
+          description: "inspect bug",
+          subagent_type: "general",
+        },
+      })
+    }),
+  )
+
+  it.instance("execute cancels child session when abort signal fires", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const ready = defer<SessionPrompt.PromptInput>()
+      const cancelled = defer<SessionID>()
+      const abort = new AbortController()
+      const promptOps: TaskPromptOps = {
+        cancel: (sessionID) =>
+          Effect.sync(() => {
+            cancelled.resolve(sessionID)
+          }),
+        resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
+        prompt: (input) =>
+          Effect.promise(() => {
+            ready.resolve(input)
+            return cancelled.promise
+          }).pipe(Effect.as(reply(input, "cancelled"))),
+        loop: (input) => Effect.succeed(reply({ sessionID: input.sessionID, parts: [] }, "looped")),
+      }
+
+      const fiber = yield* def
+        .execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: abort.signal,
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+        .pipe(Effect.forkChild)
+
+      const input = yield* Effect.promise(() => ready.promise)
+      abort.abort()
+      expect(yield* Effect.promise(() => cancelled.promise)).toBe(input.sessionID)
+
+      const exit = yield* Fiber.await(fiber)
+      expect(Exit.isSuccess(exit)).toBe(true)
+    }),
+  )
+
+  it.instance("execute creates a child when task_id does not exist", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let seen: SessionPrompt.PromptInput | undefined
+      const promptOps = stubOps({ text: "created", onPrompt: (input) => (seen = input) })
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          task_id: "ses_missing",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      const kids = yield* sessions.children(chat.id)
+      expect(kids).toHaveLength(1)
+      expect(kids[0]?.id).toBe(result.metadata.sessionId)
+      expect(result.metadata.sessionId).not.toBe("ses_missing")
+      expect(result.output).toContain(`task_id: ${result.metadata.sessionId}`)
+      expect(seen?.sessionID).toBe(result.metadata.sessionId)
+    }),
+  )
+
+  it.instance(
+    "execute shapes child permissions for task, todowrite, and primary tools",
+    () =>
       Effect.gen(function* () {
         const sessions = yield* Session.Service
         const { chat, assistant } = yield* seed()
-        const child = yield* sessions.create({ parentID: chat.id, title: "Existing child" })
         const tool = yield* TaskTool
         const def = yield* tool.init()
         let seen: SessionPrompt.PromptInput | undefined
-        const promptOps = stubOps({ text: "resumed", onPrompt: (input) => (seen = input) })
+        const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
 
         const result = yield* def.execute(
           {
             description: "inspect bug",
             prompt: "look into the cache key path",
-            subagent_type: "general",
-            task_id: child.id,
+            subagent_type: "reviewer",
           },
           {
             sessionID: chat.id,
@@ -216,81 +409,398 @@ describe("tool.task", () => {
           },
         )
 
-        const kids = yield* sessions.children(chat.id)
-        expect(kids).toHaveLength(1)
-        expect(kids[0]?.id).toBe(child.id)
-        expect(result.metadata.sessionId).toBe(child.id)
-        expect(result.output).toContain(`task_id: ${child.id}`)
-        expect(seen?.sessionID).toBe(child.id)
-      }),
-    ),
-  )
-
-  it.live("execute asks by default and skips checks when bypassed", () =>
-    provideTmpdirInstance(() =>
-      Effect.gen(function* () {
-        const { chat, assistant } = yield* seed()
-        const tool = yield* TaskTool
-        const def = yield* tool.init()
-        const calls: unknown[] = []
-        const promptOps = stubOps()
-
-        const exec = (extra?: Record<string, any>) =>
-          def.execute(
-            {
-              description: "inspect bug",
-              prompt: "look into the cache key path",
-              subagent_type: "general",
-            },
-            {
-              sessionID: chat.id,
-              messageID: assistant.id,
-              agent: "build",
-              abort: new AbortController().signal,
-              extra: { promptOps, ...extra },
-              messages: [],
-              metadata: () => Effect.void,
-              ask: (input) =>
-                Effect.sync(() => {
-                  calls.push(input)
-                }),
-            },
-          )
-
-        yield* exec()
-        yield* exec({ bypassAgentCheck: true })
-
-        expect(calls).toHaveLength(1)
-        expect(calls[0]).toEqual({
-          permission: "task",
-          patterns: ["general"],
-          always: ["*"],
-          metadata: {
-            description: "inspect bug",
-            subagent_type: "general",
+        const child = yield* sessions.get(result.metadata.sessionId)
+        expect(child.parentID).toBe(chat.id)
+        expect(child.permission).toEqual([
+          {
+            permission: "todowrite",
+            pattern: "*",
+            action: "deny",
           },
+          {
+            permission: "bash",
+            pattern: "*",
+            action: "allow",
+          },
+          {
+            permission: "read",
+            pattern: "*",
+            action: "allow",
+          },
+        ])
+        expect(seen?.tools).toEqual({
+          todowrite: false,
+          bash: false,
+          read: false,
         })
       }),
-    ),
+    {
+      config: {
+        agent: {
+          reviewer: {
+            mode: "subagent",
+            permission: {
+              task: "allow",
+            },
+          },
+        },
+        experimental: {
+          primary_tools: ["bash", "read"],
+        },
+      },
+    },
   )
 
-  it.live("execute creates a child when task_id does not exist", () =>
-    provideTmpdirInstance(() =>
-      Effect.gen(function* () {
-        const sessions = yield* Session.Service
-        const { chat, assistant } = yield* seed()
-        const tool = yield* TaskTool
-        const def = yield* tool.init()
-        let seen: SessionPrompt.PromptInput | undefined
-        const promptOps = stubOps({ text: "created", onPrompt: (input) => (seen = input) })
+  it.instance("can launch a task in the background and poll it with task_status", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const task = yield* TaskTool
+      const taskDef = yield* task.init()
+      const status = yield* TaskStatusTool
+      const statusDef = yield* status.init()
+      const jobs = yield* BackgroundJob.Service
+      const promptOps = stubOps({ text: "background complete" })
+      const ctx = {
+        sessionID: chat.id,
+        messageID: assistant.id,
+        agent: "build",
+        abort: new AbortController().signal,
+        extra: { promptOps },
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      }
 
-        const result = yield* def.execute(
-          {
-            description: "inspect bug",
-            prompt: "look into the cache key path",
-            subagent_type: "general",
-            task_id: "ses_missing",
-          },
+      const result = yield* taskDef.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          background: true,
+          operationID: "school",
+        },
+        ctx,
+      )
+      expect(result.metadata.background).toBe(true)
+      expect(result.output).toContain("state: running")
+
+      const waited = yield* jobs.wait({ id: result.metadata.sessionId })
+      expect(waited.info?.status).toBe("completed")
+      expect(waited.info?.metadata?.operationID).toBe("school")
+      expect(waited.info?.metadata?.prompt).toBe("look into the cache key path")
+      expect(waited.info?.metadata?.subagent_type).toBe("general")
+
+      const polled = yield* statusDef.execute({ task_id: result.metadata.sessionId }, ctx)
+      expect(polled.output).toContain("state: completed")
+      expect(polled.output).toContain("background complete")
+    }),
+  )
+
+  it.instance("background job metadata survives BackgroundJob service reload", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const id = `tool_${crypto.randomUUID().replaceAll("-", "")}`
+      yield* Effect.addFinalizer(() => storage.remove(["background_job", id]).pipe(Effect.ignore))
+
+      const startAndComplete = Effect.gen(function* () {
+        const jobs = yield* BackgroundJob.Service
+        yield* jobs.start({
+          id,
+          type: "task",
+          title: "persisted background task",
+          run: Effect.succeed("persisted output"),
+        })
+        expect((yield* jobs.wait({ id })).info?.status).toBe("completed")
+      }).pipe(Effect.provide(Layer.fresh(BackgroundJob.layer)))
+
+      const reloadAndGet = Effect.gen(function* () {
+        const jobs = yield* BackgroundJob.Service
+        return yield* jobs.get(id)
+      }).pipe(Effect.provide(Layer.fresh(BackgroundJob.layer)))
+
+      yield* startAndComplete
+      const reloaded = yield* reloadAndGet
+
+      expect(reloaded?.id).toBe(id)
+      expect(reloaded?.status).toBe("completed")
+      expect(reloaded?.output).toBe("persisted output")
+    }),
+  )
+
+  it.instance("background job metadata updates survive BackgroundJob service reload", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const id = `tool_${crypto.randomUUID().replaceAll("-", "")}`
+      yield* Effect.addFinalizer(() => storage.remove(["background_job", id]).pipe(Effect.ignore))
+
+      const startAndUpdate = Effect.gen(function* () {
+        const jobs = yield* BackgroundJob.Service
+        yield* jobs.start({
+          id,
+          type: "task",
+          title: "runtime snapshot task",
+          metadata: { operationID: "school" },
+          run: Effect.succeed("runtime output"),
+        })
+        expect((yield* jobs.wait({ id })).info?.status).toBe("completed")
+        return yield* jobs.updateMetadata(id, {
+          runtimeUsage: { totalTokens: 123 },
+        })
+      }).pipe(Effect.provide(Layer.fresh(BackgroundJob.layer)))
+
+      const updatePersistedOnly = Effect.gen(function* () {
+        const jobs = yield* BackgroundJob.Service
+        return yield* jobs.updateMetadata(id, {
+          runtimeMessages: [{ role: "assistant", agent: "validator", modelID: "gpt-5.5", providerID: "openai" }],
+        })
+      }).pipe(Effect.provide(Layer.fresh(BackgroundJob.layer)))
+
+      const reloadAndGet = Effect.gen(function* () {
+        const jobs = yield* BackgroundJob.Service
+        return yield* jobs.get(id)
+      }).pipe(Effect.provide(Layer.fresh(BackgroundJob.layer)))
+
+      const activeUpdate = yield* startAndUpdate
+      expect(activeUpdate?.metadata?.operationID).toBe("school")
+      expect(activeUpdate?.metadata?.runtimeUsage).toEqual({ totalTokens: 123 })
+
+      const persistedUpdate = yield* updatePersistedOnly
+      expect(persistedUpdate?.metadata?.operationID).toBe("school")
+      expect(persistedUpdate?.metadata?.runtimeUsage).toEqual({ totalTokens: 123 })
+      expect(persistedUpdate?.metadata?.runtimeMessages).toEqual([
+        { role: "assistant", agent: "validator", modelID: "gpt-5.5", providerID: "openai" },
+      ])
+
+      const reloaded = yield* reloadAndGet
+      expect(reloaded?.metadata?.operationID).toBe("school")
+      expect(reloaded?.metadata?.runtimeUsage).toEqual({ totalTokens: 123 })
+      expect(reloaded?.metadata?.runtimeMessages).toEqual([
+        { role: "assistant", agent: "validator", modelID: "gpt-5.5", providerID: "openai" },
+      ])
+    }),
+  )
+
+  it.instance("task_status reads completed background metadata after BackgroundJob service reload", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const storage = yield* Storage.Service
+      const task = yield* TaskTool
+      const taskDef = yield* task.init()
+      const promptOps = stubOps({ text: "persisted status output" })
+      const ctx = {
+        sessionID: chat.id,
+        messageID: assistant.id,
+        agent: "build",
+        abort: new AbortController().signal,
+        extra: { promptOps },
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      }
+
+      const result = yield* taskDef.execute(
+        {
+          description: "inspect persistence",
+          prompt: "return persisted status output",
+          subagent_type: "general",
+          background: true,
+        },
+        ctx,
+      )
+      yield* Effect.addFinalizer(() =>
+        storage.remove(["background_job", result.metadata.sessionId]).pipe(Effect.ignore),
+      )
+
+      const jobs = yield* BackgroundJob.Service
+      expect((yield* jobs.wait({ id: result.metadata.sessionId })).info?.status).toBe("completed")
+
+      const polledAfterReload = yield* Effect.gen(function* () {
+        const status = yield* TaskStatusTool
+        const statusDef = yield* status.init()
+        return yield* statusDef.execute({ task_id: result.metadata.sessionId }, ctx)
+      }).pipe(Effect.provide(Layer.fresh(BackgroundJob.layer)))
+
+      expect(polledAfterReload.metadata.state).toBe("completed")
+      expect(polledAfterReload.output).toContain("persisted status output")
+    }),
+  )
+
+  it.instance("task_status marks orphaned running background jobs stale after BackgroundJob service reload", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const sessions = yield* Session.Service
+      const storage = yield* Storage.Service
+      const jobs = yield* BackgroundJob.Service
+      const taskSession = yield* sessions.create({ parentID: chat.id, title: "orphaned background task" })
+      yield* Effect.addFinalizer(() => storage.remove(["background_job", taskSession.id]).pipe(Effect.ignore))
+      yield* jobs.start({
+        id: taskSession.id,
+        type: "task",
+        title: "orphaned background task",
+        metadata: {
+          parentSessionID: chat.id,
+          sessionID: taskSession.id,
+          subagent: "validator",
+          subagent_type: "validator",
+          description: "orphaned background task",
+          prompt: "continue validating the stale operation lane",
+          operationID: "school",
+        },
+        run: Effect.never,
+      })
+      const ctx = {
+        sessionID: chat.id,
+        messageID: assistant.id,
+        agent: "build",
+        abort: new AbortController().signal,
+        extra: {},
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      }
+
+      const polledAfterReload = yield* Effect.gen(function* () {
+        const status = yield* TaskStatusTool
+        const statusDef = yield* status.init()
+        const list = yield* TaskListTool
+        const listDef = yield* list.init()
+        const listed = yield* listDef.execute({ status: "stale" }, ctx)
+        expect(listed.output).toContain(taskSession.id)
+        expect(listed.output).toContain("restartable: true")
+        expect(listed.output).toContain('"prompt":"continue validating the stale operation lane"')
+        expect(listed.output).toContain('"subagent_type":"validator"')
+        return yield* statusDef.execute({ task_id: taskSession.id }, ctx)
+      }).pipe(Effect.provide(Layer.fresh(BackgroundJob.layer)))
+
+      expect(polledAfterReload.metadata.state).toBe("stale")
+      expect(polledAfterReload.output).toContain("state: stale")
+      expect(polledAfterReload.output).toContain("lost its running fiber")
+      expect(polledAfterReload.output).toContain('"task_id":"' + taskSession.id + '"')
+      expect(polledAfterReload.output).toContain('"subagent_type":"validator"')
+      expect(polledAfterReload.output).toContain('"operationID":"school"')
+    }),
+  )
+
+  it.instance("task_list enumerates persisted background jobs", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const storage = yield* Storage.Service
+      const jobs = yield* BackgroundJob.Service
+      const id = `tool_${crypto.randomUUID().replaceAll("-", "")}`
+      yield* Effect.addFinalizer(() => storage.remove(["background_job", id]).pipe(Effect.ignore))
+      yield* jobs.start({
+        id,
+        type: "task",
+        title: "enumerable background task",
+        run: Effect.succeed("listed output"),
+      })
+      expect((yield* jobs.wait({ id })).info?.status).toBe("completed")
+
+      const tool = yield* TaskListTool
+      const def = yield* tool.init()
+      const listed = yield* def.execute(
+        { status: "completed" },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: {},
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(listed.output).toContain(id)
+      expect(listed.output).toContain("enumerable background task")
+      expect(listed.metadata.count).toBeGreaterThanOrEqual(1)
+    }),
+  )
+
+  it.instance("task_list filters persisted background jobs by operationID", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const storage = yield* Storage.Service
+      const jobs = yield* BackgroundJob.Service
+      const operationID = `school-${crypto.randomUUID()}`
+      const schoolID = `tool_${crypto.randomUUID().replaceAll("-", "")}`
+      const otherID = `tool_${crypto.randomUUID().replaceAll("-", "")}`
+      yield* Effect.addFinalizer(() =>
+        Effect.all([schoolID, otherID].map((id) => storage.remove(["background_job", id]).pipe(Effect.ignore))).pipe(
+          Effect.asVoid,
+        ),
+      )
+      yield* jobs.start({
+        id: schoolID,
+        type: "task",
+        title: "school background task",
+        metadata: { operationID },
+        run: Effect.succeed("school output"),
+      })
+      yield* jobs.start({
+        id: otherID,
+        type: "task",
+        title: "other background task",
+        metadata: { operationID: "other" },
+        run: Effect.succeed("other output"),
+      })
+      expect((yield* jobs.wait({ id: schoolID })).info?.status).toBe("completed")
+      expect((yield* jobs.wait({ id: otherID })).info?.status).toBe("completed")
+
+      const tool = yield* TaskListTool
+      const def = yield* tool.init()
+      const listed = yield* def.execute(
+        { operationID },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: {},
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(listed.output).toContain(schoolID)
+      expect(listed.output).not.toContain(otherID)
+      expect(listed.metadata.count).toBe(1)
+    }),
+  )
+
+  it.instance("task_restart relaunches a stale persisted background task", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const sessions = yield* Session.Service
+      const storage = yield* Storage.Service
+      const jobs = yield* BackgroundJob.Service
+      const taskSession = yield* sessions.create({ parentID: chat.id, title: "stale validation lane" })
+      yield* Effect.addFinalizer(() => storage.remove(["background_job", taskSession.id]).pipe(Effect.ignore))
+      yield* jobs.start({
+        id: taskSession.id,
+        type: "task",
+        title: "stale validation lane",
+        metadata: {
+          parentSessionID: chat.id,
+          sessionID: taskSession.id,
+          subagent: "validator",
+          subagent_type: "validator",
+          description: "stale validation lane",
+          prompt: "continue validating stale findings",
+          operationID: "school",
+        },
+        run: Effect.never,
+      })
+
+      const restarted = yield* Effect.gen(function* () {
+        const restart = yield* TaskRestartTool
+        const restartDef = yield* restart.init()
+        const jobsAfterReload = yield* BackgroundJob.Service
+        const promptOps = stubOps({ text: "restarted validation output" })
+        const result = yield* restartDef.execute(
+          { task_id: taskSession.id },
           {
             sessionID: chat.id,
             messageID: assistant.id,
@@ -302,86 +812,322 @@ describe("tool.task", () => {
             ask: () => Effect.void,
           },
         )
+        const waited = yield* jobsAfterReload.wait({ id: taskSession.id })
+        return { result, waited }
+      }).pipe(Effect.provide(Layer.fresh(BackgroundJob.layer)))
 
-        const kids = yield* sessions.children(chat.id)
-        expect(kids).toHaveLength(1)
-        expect(kids[0]?.id).toBe(result.metadata.sessionId)
-        expect(result.metadata.sessionId).not.toBe("ses_missing")
-        expect(result.output).toContain(`task_id: ${result.metadata.sessionId}`)
-        expect(seen?.sessionID).toBe(result.metadata.sessionId)
-      }),
-    ),
+      expect(restarted.result.metadata.previous_status).toBe("stale")
+      expect(restarted.result.metadata.restarted).toBe(true)
+      expect(restarted.result.output).toContain("state: running")
+      expect(restarted.waited.info?.status).toBe("completed")
+      expect(restarted.waited.info?.output).toBe("restarted validation output")
+      expect(restarted.waited.info?.metadata?.operationID).toBe("school")
+    }),
   )
 
-  it.live("execute shapes child permissions for task, todowrite, and primary tools", () =>
-    provideTmpdirInstance(
-      () =>
-        Effect.gen(function* () {
-          const sessions = yield* Session.Service
-          const { chat, assistant } = yield* seed()
-          const tool = yield* TaskTool
-          const def = yield* tool.init()
-          let seen: SessionPrompt.PromptInput | undefined
-          const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
-
-          const result = yield* def.execute(
-            {
-              description: "inspect bug",
-              prompt: "look into the cache key path",
-              subagent_type: "reviewer",
-            },
-            {
-              sessionID: chat.id,
-              messageID: assistant.id,
-              agent: "build",
-              abort: new AbortController().signal,
-              extra: { promptOps },
-              messages: [],
-              metadata: () => Effect.void,
-              ask: () => Effect.void,
-            },
-          )
-
-          const child = yield* sessions.get(result.metadata.sessionId)
-          expect(child.parentID).toBe(chat.id)
-          expect(child.permission).toEqual([
-            {
-              permission: "todowrite",
-              pattern: "*",
-              action: "deny",
-            },
-            {
-              permission: "bash",
-              pattern: "*",
-              action: "allow",
-            },
-            {
-              permission: "read",
-              pattern: "*",
-              action: "allow",
-            },
-          ])
-          expect(seen?.tools).toEqual({
-            todowrite: false,
-            bash: false,
-            read: false,
-          })
+  it.instance("operation_recover restarts stale background tasks for one operation", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const sessions = yield* Session.Service
+      const storage = yield* Storage.Service
+      const jobs = yield* BackgroundJob.Service
+      const schoolTask = yield* sessions.create({ parentID: chat.id, title: "school stale lane" })
+      const otherTask = yield* sessions.create({ parentID: chat.id, title: "other stale lane" })
+      const worktree = (yield* TestInstance).directory
+      yield* Effect.promise(() =>
+        writeOperationCheckpoint(worktree, {
+          operationID: "school",
+          objective: "Recover stale school validation lanes",
+          stage: "validation",
+          status: "running",
+          summary: "Validation lane was running before reload.",
+          nextActions: ["Recover stale validation lane"],
+          activeTasks: [schoolTask.id],
         }),
-      {
-        config: {
-          agent: {
-            reviewer: {
-              mode: "subagent",
-              permission: {
-                task: "allow",
-              },
-            },
-          },
-          experimental: {
-            primary_tools: ["bash", "read"],
-          },
+      )
+      yield* Effect.addFinalizer(() =>
+        Effect.all([schoolTask.id, otherTask.id].map((id) => storage.remove(["background_job", id]).pipe(Effect.ignore))).pipe(
+          Effect.ignore,
+        ),
+      )
+      yield* jobs.start({
+        id: schoolTask.id,
+        type: "task",
+        title: "school stale lane",
+        metadata: {
+          parentSessionID: chat.id,
+          sessionID: schoolTask.id,
+          subagent: "validator",
+          subagent_type: "validator",
+          description: "school stale lane",
+          prompt: "recover school validation",
+          operationID: "school",
+          worktree,
         },
-      },
-    ),
+        run: Effect.never,
+      })
+      yield* jobs.start({
+        id: otherTask.id,
+        type: "task",
+        title: "other stale lane",
+        metadata: {
+          parentSessionID: chat.id,
+          sessionID: otherTask.id,
+          subagent: "validator",
+          subagent_type: "validator",
+          description: "other stale lane",
+          prompt: "do not recover other operation",
+          operationID: "other",
+        },
+        run: Effect.never,
+      })
+
+      const recovered = yield* Effect.gen(function* () {
+        const recover = yield* OperationRecoverTool
+        const recoverDef = yield* recover.init()
+        const jobsAfterReload = yield* BackgroundJob.Service
+        const promptOps = stubOps({ text: "recovered school output" })
+        const result = yield* recoverDef.execute(
+          { operationID: "school" },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+        const school = yield* jobsAfterReload.wait({ id: schoolTask.id })
+        const other = yield* jobsAfterReload.get(otherTask.id)
+        const status = yield* Effect.promise(() => readOperationStatus(worktree, "school"))
+        return { result, school, other, status }
+      }).pipe(Effect.provide(Layer.fresh(BackgroundJob.layer)))
+
+      expect(recovered.result.metadata.operationID).toBe("school")
+      expect(recovered.result.metadata.restarted).toBe(1)
+      expect(recovered.result.metadata.skipped).toBe(0)
+      expect(recovered.result.metadata.checkpointUpdated).toBe(true)
+      expect(recovered.result.output).toContain(`task_id: ${schoolTask.id}`)
+      expect(recovered.result.output).toContain("operation_checkpoint: updated")
+      expect(recovered.school.info?.status).toBe("completed")
+      expect(recovered.school.info?.output).toBe("recovered school output")
+      expect(recovered.other?.status).toBe("stale")
+      expect(recovered.status.operation?.summary).toContain("Recovered 1 background lane")
+      expect(recovered.status.operation?.nextActions).toContain("Poll recovered background lanes with task_status")
+    }),
+  )
+
+  it.instance("operation_recover restarts stale supervised command jobs", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const storage = yield* Storage.Service
+      const jobs = yield* BackgroundJob.Service
+      const worktree = (yield* TestInstance).directory
+      const manifestPath = path.join(worktree, "tools", "ulmcode-profile", "tool-manifest.json")
+      yield* Effect.promise(async () => {
+        await writeOperationCheckpoint(worktree, {
+          operationID: "command-school",
+          objective: "Recover stale command lane",
+          stage: "recon",
+          status: "running",
+          summary: "Command lane was running before reload.",
+          nextActions: ["Recover stale command lane"],
+          activeTasks: ["tool_stale_command"],
+        })
+        await fs.mkdir(path.dirname(manifestPath), { recursive: true })
+        await fs.writeFile(
+          manifestPath,
+          JSON.stringify(
+            {
+              version: 1,
+              lastReviewed: "2026-05-05",
+              policy: {
+                defaultSafetyMode: "non_destructive",
+                destructiveSafetyMode: "interactive_destructive",
+                installFailureBehavior: "record_blocker_with_fallback",
+                notes: [],
+              },
+              tools: [
+                {
+                  id: "printf",
+                  purpose: "test command",
+                  safety: "non_destructive",
+                  install: [],
+                  validate: "printf --help",
+                  safeExamples: ["printf ok"],
+                  outputParsers: ["text"],
+                  fallbacks: [],
+                },
+              ],
+              commandProfiles: [
+                {
+                  id: "command-recovery",
+                  tool: "printf",
+                  safety: "non_destructive",
+                  template: "mkdir -p evidence/raw && printf recovered > {outputPrefix}.txt",
+                  heartbeatSeconds: 1,
+                  idleTimeoutSeconds: 5,
+                  hardTimeoutSeconds: 10,
+                  restartable: true,
+                  artifacts: [],
+                },
+              ],
+            },
+            null,
+            2,
+          ),
+        )
+      })
+      yield* Effect.addFinalizer(() => storage.remove(["background_job", "tool_stale_command"]).pipe(Effect.ignore))
+      yield* jobs.start({
+        id: "tool_stale_command",
+        type: "command_supervise",
+        title: "command recovery",
+        metadata: {
+          operationID: "command-school",
+          laneID: "recon",
+          workUnitID: "work-unit-command",
+          profileID: "command-recovery",
+          variables: {},
+          outputPrefix: "evidence/raw/recovered-command",
+          manifestPath,
+          worktree,
+        },
+        run: Effect.never,
+      })
+
+      const recovered = yield* Effect.gen(function* () {
+        const recover = yield* OperationRecoverTool
+        const recoverDef = yield* recover.init()
+        const jobsAfterReload = yield* BackgroundJob.Service
+        const result = yield* recoverDef.execute(
+          { operationID: "command-school" },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: {},
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+        const launchedID = result.output.match(/^job_id: (tool_[A-Za-z0-9]+)/m)?.[1]
+        const launched = launchedID ? yield* jobsAfterReload.wait({ id: launchedID }) : undefined
+        return { result, launched }
+      }).pipe(Effect.provide(Layer.fresh(BackgroundJob.layer)))
+
+      expect(recovered.result.metadata.restarted).toBe(1)
+      expect(recovered.result.output).toContain("command_job_id: tool_stale_command")
+      expect(recovered.result.output).toContain("profile_id: command-recovery")
+      expect(recovered.launched?.info?.status).toBe("completed")
+      expect(yield* Effect.promise(() => fs.readFile(path.join(worktree, ".ulmcode", "operations", "command-school", "evidence", "raw", "recovered-command.txt"), "utf8"))).toBe("recovered")
+    }),
+  )
+
+  it.instance("operation_resume can auto-recover stale background tasks for one operation", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const sessions = yield* Session.Service
+      const storage = yield* Storage.Service
+      const jobs = yield* BackgroundJob.Service
+      const schoolTask = yield* sessions.create({ parentID: chat.id, title: "school resume lane" })
+      const worktree = (yield* TestInstance).directory
+      yield* Effect.promise(() =>
+        writeOperationCheckpoint(worktree, {
+          operationID: "school",
+          objective: "Resume stale school validation lanes",
+          stage: "validation",
+          status: "running",
+          summary: "Validation lane was running before reload.",
+          nextActions: ["Recover stale validation lane"],
+          activeTasks: [schoolTask.id],
+        }),
+      )
+      yield* Effect.addFinalizer(() => storage.remove(["background_job", schoolTask.id]).pipe(Effect.ignore))
+      yield* jobs.start({
+        id: schoolTask.id,
+        type: "task",
+        title: "school resume lane",
+        metadata: {
+          parentSessionID: chat.id,
+          sessionID: schoolTask.id,
+          subagent: "validator",
+          subagent_type: "validator",
+          description: "school resume lane",
+          prompt: "resume school validation",
+          operationID: "school",
+          worktree,
+        },
+        run: Effect.never,
+      })
+
+      const resumed = yield* Effect.gen(function* () {
+        const resume = yield* OperationResumeTool
+        const resumeDef = yield* resume.init()
+        const jobsAfterReload = yield* BackgroundJob.Service
+        const promptOps = stubOps({ text: "auto-recovered school output" })
+        const result = yield* resumeDef.execute(
+          { operationID: "school", recoverStaleTasks: true },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+        const school = yield* jobsAfterReload.wait({ id: schoolTask.id })
+        const status = yield* Effect.promise(() => readOperationStatus(worktree, "school"))
+        return { result, school, status }
+      }).pipe(Effect.provide(Layer.fresh(BackgroundJob.layer)))
+
+      expect(resumed.result.metadata.operationID).toBe("school")
+      expect(resumed.result.metadata.recovery?.restarted).toBe(1)
+      expect(resumed.result.metadata.recovery?.checkpointUpdated).toBe(true)
+      expect(resumed.result.output).toContain("recovery:")
+      expect(resumed.result.output).toContain(`task_id: ${schoolTask.id}`)
+      expect(resumed.result.output).toContain("# Resume school")
+      expect(resumed.school.info?.status).toBe("completed")
+      expect(resumed.school.info?.output).toBe("auto-recovered school output")
+      expect(resumed.status.operation?.summary).toContain("Recovered 1 background lane during operation resume")
+      expect(resumed.status.operation?.nextActions).toContain("Poll recovered background lanes with task_status")
+    }),
+  )
+
+  it.instance("background job cancellation interrupts the running fiber", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const jobs = yield* BackgroundJob.Service
+      const id = `tool_${crypto.randomUUID().replaceAll("-", "")}`
+      const started = yield* Deferred.make<void>()
+      const interrupted = yield* Deferred.make<void>()
+      yield* Effect.addFinalizer(() => storage.remove(["background_job", id]).pipe(Effect.ignore))
+
+      yield* jobs.start({
+        id,
+        type: "task",
+        title: "cancellable background task",
+        run: Deferred.succeed(started, undefined).pipe(
+          Effect.andThen(Effect.never),
+          Effect.as("unreachable"),
+          Effect.ensuring(Deferred.succeed(interrupted, undefined)),
+        ),
+      })
+
+      yield* Deferred.await(started).pipe(Effect.timeout("1 second"))
+      const cancelled = yield* jobs.cancel(id)
+      const signal = yield* Deferred.await(interrupted).pipe(Effect.timeoutOption("1 second"))
+
+      expect(cancelled?.status).toBe("cancelled")
+      expect(Option.isSome(signal)).toBe(true)
+    }),
   )
 })

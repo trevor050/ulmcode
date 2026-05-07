@@ -13,4 +13,19 @@ describe("global paths", () => {
   test("tmp path is created on module load", async () => {
     expect((await fs.stat(Global.Path.tmp)).isDirectory()).toBe(true)
   })
+
+  test("app name can be overridden for forked distributions", async () => {
+    const result = Bun.spawnSync({
+      cmd: [
+        process.execPath,
+        "-e",
+        "process.env.OPENCODE_APP_NAME='ulmcode'; const mod = await import('./src/global.ts'); console.log(mod.Global.Path.tmp)",
+      ],
+      cwd: path.join(import.meta.dir, ".."),
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout.toString().trim()).toBe(path.join(os.tmpdir(), "ulmcode"))
+  })
 })

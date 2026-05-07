@@ -1,0 +1,6 @@
+services:
+  k12-sso-roster-export-chain:
+    build:
+      context: ./service
+    ports:
+      - "8095:8080"

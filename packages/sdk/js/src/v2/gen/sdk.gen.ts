@@ -35,9 +35,9 @@ import type {
   ExperimentalWorkspaceListResponses,
   ExperimentalWorkspaceRemoveErrors,
   ExperimentalWorkspaceRemoveResponses,
-  ExperimentalWorkspaceSessionRestoreErrors,
-  ExperimentalWorkspaceSessionRestoreResponses,
   ExperimentalWorkspaceStatusResponses,
+  ExperimentalWorkspaceWarpErrors,
+  ExperimentalWorkspaceWarpResponses,
   FileListResponses,
   FilePartInput,
   FilePartSource,
@@ -123,6 +123,8 @@ import type {
   SessionChildrenResponses,
   SessionCommandErrors,
   SessionCommandResponses,
+  SessionCostErrors,
+  SessionCostResponses,
   SessionCreateErrors,
   SessionCreateResponses,
   SessionDeleteErrors,
@@ -169,6 +171,8 @@ import type {
   SyncReplayErrors,
   SyncReplayResponses,
   SyncStartResponses,
+  SyncStealErrors,
+  SyncStealResponses,
   TextPartInput,
   ToolIdsErrors,
   ToolIdsResponses,
@@ -191,6 +195,11 @@ import type {
   TuiSelectSessionResponses,
   TuiShowToastResponses,
   TuiSubmitPromptResponses,
+  UlmOperationAuditResponses,
+  UlmOperationListResponses,
+  UlmOperationResumeResponses,
+  UlmOperationStatusResponses,
+  V2ModelListResponses,
   V2SessionCompactResponses,
   V2SessionContextResponses,
   V2SessionListErrors,
@@ -1009,15 +1018,15 @@ export class Workspace extends HeyApiClient {
   }
 
   /**
-   * Restore session into workspace
+   * Warp session into workspace
    *
-   * Replay a session's sync events into the target workspace in batches.
+   * Move a session's sync history into the target workspace, or detach it to the local project.
    */
-  public sessionRestore<ThrowOnError extends boolean = false>(
-    parameters: {
-      id: string
+  public warp<ThrowOnError extends boolean = false>(
+    parameters?: {
       directory?: string
       workspace?: string
+      id?: string
       sessionID?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -1027,20 +1036,20 @@ export class Workspace extends HeyApiClient {
       [
         {
           args: [
-            { in: "path", key: "id" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "body", key: "id" },
             { in: "body", key: "sessionID" },
           ],
         },
       ],
     )
     return (options?.client ?? this.client).post<
-      ExperimentalWorkspaceSessionRestoreResponses,
-      ExperimentalWorkspaceSessionRestoreErrors,
+      ExperimentalWorkspaceWarpResponses,
+      ExperimentalWorkspaceWarpErrors,
       ThrowOnError
     >({
-      url: "/experimental/workspace/{id}/session-restore",
+      url: "/experimental/workspace/warp",
       ...options,
       ...params,
       headers: {
@@ -3058,6 +3067,38 @@ export class Session2 extends HeyApiClient {
   }
 
   /**
+   * Get session cost rollup
+   *
+   * Get the cumulative cost of this session plus the rolled-up cost of all descendant subagent sessions.
+   */
+  public cost<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionCostResponses, SessionCostErrors, ThrowOnError>({
+      url: "/session/{sessionID}/cost",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * Get session todos
    *
    * Retrieve the todo list associated with a specific session, showing tasks and action items.
@@ -3230,6 +3271,7 @@ export class Session2 extends HeyApiClient {
       messageID: string
       directory?: string
       workspace?: string
+      force?: "true" | "false"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3242,6 +3284,7 @@ export class Session2 extends HeyApiClient {
             { in: "path", key: "messageID" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "query", key: "force" },
           ],
         },
       ],
@@ -3956,6 +3999,43 @@ export class Sync extends HeyApiClient {
     })
   }
 
+  /**
+   * Steal session into workspace
+   *
+   * Update a session to belong to the current workspace through the sync event system.
+   */
+  public steal<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SyncStealResponses, SyncStealErrors, ThrowOnError>({
+      url: "/sync/steal",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
   private _history?: History
   get history(): History {
     return (this._history ??= new History({ client: this.client }))
@@ -4163,10 +4243,47 @@ export class Session3 extends HeyApiClient {
   }
 }
 
+export class Model extends HeyApiClient {
+  /**
+   * List v2 models
+   *
+   * Retrieve available provider models with cost, capability, provider, and variant details.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<V2ModelListResponses, unknown, ThrowOnError>({
+      url: "/api/model",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class V2 extends HeyApiClient {
   private _session?: Session3
   get session(): Session3 {
     return (this._session ??= new Session3({ client: this.client }))
+  }
+
+  private _model?: Model
+  get model(): Model {
+    return (this._model ??= new Model({ client: this.client }))
   }
 }
 
@@ -4617,6 +4734,165 @@ export class Tui extends HeyApiClient {
   }
 }
 
+export class Operation extends HeyApiClient {
+  /**
+   * List ULM operations
+   *
+   * List ULMCode operations with compact dashboard state.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      eventLimit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "eventLimit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<UlmOperationListResponses, unknown, ThrowOnError>({
+      url: "/ulm/operation",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get ULM operation status
+   *
+   * Read one ULMCode operation dashboard payload.
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters: {
+      operationID: string
+      directory?: string
+      workspace?: string
+      eventLimit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "operationID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "eventLimit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<UlmOperationStatusResponses, unknown, ThrowOnError>({
+      url: "/ulm/operation/{operationID}/status",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get ULM operation resume brief
+   *
+   * Build a restart/compaction resume brief for one ULMCode operation.
+   */
+  public resume<ThrowOnError extends boolean = false>(
+    parameters: {
+      operationID: string
+      directory?: string
+      workspace?: string
+      eventLimit?: string
+      staleAfterMinutes?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "operationID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "eventLimit" },
+            { in: "query", key: "staleAfterMinutes" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<UlmOperationResumeResponses, unknown, ThrowOnError>({
+      url: "/ulm/operation/{operationID}/resume",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Audit ULM operation handoff
+   *
+   * Run ULMCode final readiness checks for one operation.
+   */
+  public audit<ThrowOnError extends boolean = false>(
+    parameters: {
+      operationID: string
+      directory?: string
+      workspace?: string
+      eventLimit?: string
+      staleAfterMinutes?: string
+      minWords?: string
+      requireOutlineBudget?: "true" | "false"
+      minOutlineWordsPerPage?: string
+      requireFindingSections?: "true" | "false"
+      minFindingWords?: string
+      finalHandoff?: "true" | "false"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "operationID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "eventLimit" },
+            { in: "query", key: "staleAfterMinutes" },
+            { in: "query", key: "minWords" },
+            { in: "query", key: "requireOutlineBudget" },
+            { in: "query", key: "minOutlineWordsPerPage" },
+            { in: "query", key: "requireFindingSections" },
+            { in: "query", key: "minFindingWords" },
+            { in: "query", key: "finalHandoff" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<UlmOperationAuditResponses, unknown, ThrowOnError>({
+      url: "/ulm/operation/{operationID}/audit",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Ulm extends HeyApiClient {
+  private _operation?: Operation
+  get operation(): Operation {
+    return (this._operation ??= new Operation({ client: this.client }))
+  }
+}
+
 export class OpencodeClient extends HeyApiClient {
   public static readonly __registry = new HeyApiRegistry<OpencodeClient>()
 
@@ -4758,5 +5034,10 @@ export class OpencodeClient extends HeyApiClient {
   private _tui?: Tui
   get tui(): Tui {
     return (this._tui ??= new Tui({ client: this.client }))
+  }
+
+  private _ulm?: Ulm
+  get ulm(): Ulm {
+    return (this._ulm ??= new Ulm({ client: this.client }))
   }
 }

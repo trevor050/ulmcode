@@ -1,0 +1,86 @@
+name: ulm-harness
+
+on:
+  push:
+    branches:
+      - dev
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 9 * * *"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  fast:
+    name: ulm harness fast
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Verify ULM profile package
+        run: tools/ulmcode-profile/test-profile.sh
+
+      - name: Run ULM harness fast lane
+        working-directory: packages/opencode
+        run: bun run test:ulm-harness:fast
+
+      - name: Upload ULM harness artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ulm-harness-fast-${{ github.run_attempt }}
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 14
+          path: packages/opencode/.artifacts/ulm-harness
+
+  nightly-chaos:
+    name: ulm harness nightly chaos
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Run ULM harness chaos lane
+        working-directory: packages/opencode
+        run: bun run test:ulm-harness:chaos
+
+      - name: Upload ULM chaos artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ulm-harness-chaos-${{ github.run_attempt }}
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 14
+          path: packages/opencode/.artifacts/ulm-harness

@@ -1,325 +1,3 @@
-# ULMcode Agents Notes
-
-Last updated: 2026-02-26
-
-## Repo Reality (Read This First)
-- `/Users/trevorrosato/codeprojects/ULMcode/` is a workspace container only (not a git repo).
-- The actual git repo root is `/Users/trevorrosato/codeprojects/ULMcode/opencode/`.
-- Always `cd opencode` (or run `git -C opencode ...`) before doing git work to avoid committing to the void.
-
-## Project Summary
-- Repo root: `opencode/` (fork of OpenCode).
-- Primary customization area: `packages/opencode` (ULM cybersecurity harness + orchestration behavior).
-- Product intent: evidence-first, non-destructive-by-default internal pentest orchestration with guided operator flow.
-
-## Key Architecture
-- `packages/opencode`: core runtime, session orchestration, tool routing, reporting, cyber agent behavior.
-- `packages/app`: web UI.
-- `packages/desktop`: desktop app shell.
-- `tools/ulmcode-profile`: skill profile + bootstrap sync scripts used by runtime harness.
-
-## Installer + Profile (Field Setup)
-- Bash installer: `install` (downloads GitHub release assets + skills bundle, installs `ulmcode`, initializes profile).
-- PowerShell installer: `install.ps1` (Windows native).
-- Skills bundle script: `tools/ulmcode-profile/scripts/build-skills-bundle.sh` -> `ulmcode-skills.tar.gz`.
-- Profile initializer CLI: `ulmcode profile init` (writes `~/.config/ulmcode/opencode.json` + launchers, allowlists skills, configures MCP).
-- Upgrade path for distributed fork users: `ulmcode upgrade` (alias: `ulmcode update`).
-- Upgrade command resilience: when install method detection is `unknown`, CLI now falls back to `curl` installer flow (instead of erroring on `unknown` method).
-
-## Current Behavior Snapshot
-- `pentest` is the default guided mode when no explicit agent is set.
-- Guided flow is plan-first and requires explicit confirmation before execution handoff (`plan_exit`).
-- Engagement scaffold must maintain required artifacts (`finding.md`, `handoff.md`, `engagement.md`, evidence folders, agent results, reports).
-- Reporting flow is enforced; `report_writer` must run before finalization.
-
-## Swarm Foundation Phase 1 (2026-02-18)
-- Implemented hard bash guardrails:
-  - default timeout remains 2 minutes,
-  - hard max timeout is now 30 minutes (clamped when exceeded),
-  - checkpoint runtime metadata emitted at 5/10/15/20/25/30 minute marks.
-- Added cyber config surface for runtime controls:
-  - `cyber.command_timeout_default_ms`
-  - `cyber.command_timeout_max_ms`
-  - `cyber.command_checkpoint_minutes`
-  - `cyber.enforce_scan_safety_defaults`
-  - `cyber.background_task.*` concurrency + stale timeout settings.
-- Added scan safety policy option:
-  - when enabled, blocks unsafe default-first scan patterns (`nmap -p-`, `--script=vuln`, unbounded `masscan`).
-- Added subagent telemetry standardization for `task`:
-  - `sessionId`, `parentSessionId`, `agent`, `model`, `startedAt`, `endedAt`, `durationMs`, `status`, `errorType`, plus background task linkage.
-- Added subagent reliability improvements:
-  - task execution races normal prompt completion with terminal message recovery to prevent parent hangs.
-  - assistant error payloads now throw from `task` so parent receives explicit failure instead of silent empty results.
-- Added background swarm toolchain:
-  - tools: `background_list`, `background_output`, `background_cancel`
-  - manager: `packages/opencode/src/features/background-agent/manager.ts`
-  - `task` now supports `run_in_background`, `coordination_scope`, `expected_output_schema`, `teammate_targets`, `allow_scope_overlap`.
-- Added cross-subagent coordination contract:
-  - `engagements/<id>/agents/coordination/task-graph.json`
-  - `engagements/<id>/agents/coordination/inbox/<session-id>.jsonl`
-  - scope claims are blocked on overlap unless explicitly overridden.
-- Added deliverables-first reporting publish path:
-  - report authoring remains in `reports/`,
-  - `report_finalize` now publishes final client artifacts to `deliverables/final/`,
-  - archives full report bundle snapshots to `deliverables/archive/<timestamp>/`.
-- Added engagement hygiene/indexing:
-  - `engagements/index.json` now maintained with session/root/status/mode/final PDF path.
-  - scaffold now creates `deliverables/final` and `deliverables/archive`.
-  - noise cleanup routine removes empty runtime artifacts in tmp/agents surfaces.
-- Branding coverage expanded:
-  - TUI/local provider labeling hardened for `OpenCode local` -> `ULM`.
-  - TUI sidebar footer brand mark is hardcoded in `packages/opencode/src/cli/cmd/tui/routes/session/sidebar.tsx`; keep it as `ULM` (do not reintroduce split `Open` + `Code` tags).
-- app-side provider/model labels now route through shared branding helper.
-
-## Swarm Overhaul Phase 2 (2026-02-18, in progress)
-- Added V2 swarm domain modules under `packages/opencode/src/features/swarm/`:
-  - `team-manager.ts`, `mesh-router.ts`, `identity.ts`, `scheduler.ts`, `inbox.ts`, `watchdog.ts`, `tmux.ts`, `telemetry.ts`
-  - SQLite schema in `swarm.sql.ts` with migration `migration/20260218153000_swarm_v2_foundation/migration.sql`.
-- Added `cyber.swarm_v2.*` config and env gates:
-  - `enabled`, `dual_write_legacy_files`, `sqlite_read_canonical`, `tmux_default_enabled`, `high_autonomy`, `default_topology`.
-- `task` tool now supports additive V2 routing fields:
-  - `team_id`, `caller_id`, `delegation_mode`, `isolation_mode`, `retry_policy`
-  - existing V1 fields remain compatible (`run_in_background`, `coordination_scope`, `expected_output_schema`, `teammate_targets`, `allow_scope_overlap`).
-- `task` now emits/propagates caller chain + delegation depth and can route through mesh (`direct`) or inbox (`brokered`) messaging.
-- Background manager now persists richer swarm task metadata and handles claim lifecycle release on completion/failure/cancel/stale timeout.
-- Added full team tool surface and registry wiring:
-  - `team_create`, `team_update`, `team_list`, `team_members`, `team_message`, `team_status`, `team_pause`, `team_resume`, `team_stop`.
-- Background tools are async-safe now and include team/delegation metadata in outputs:
-  - `background_list`, `background_output`, `background_cancel`.
-- New tests:
-  - `packages/opencode/test/tool/team-tools.test.ts`
-  - `packages/opencode/test/tool/background-tools.test.ts` (updated for async manager API).
-- Important gotcha:
-  - Swarm telemetry writes are now gated by `swarm_v2.enabled`, with FK-safe fallback that drops invalid refs into payload metadata instead of crashing runs.
-
-## Swarm Revision Phase 2.1 (2026-02-18)
-- Added mandatory pentest plan-time swarm aggression intake on `plan_exit` (once per engagement by default):
-  - options: `none`, `low`, `balanced`, `high`, `max_parallel`
-  - enforced in `packages/opencode/src/tool/plan.ts` when `cyber.swarm_v2_1.enabled=true`.
-  - fallback behavior: if question plumbing is unavailable, plan exit logs `swarm_aggression_warning` and safely persists default aggression.
-- Engagement-scoped policy now persists at:
-  - `engagements/<id>/agents/coordination/swarm-policy.json`
-  - helper APIs in `packages/opencode/src/session/environment.ts`:
-    - `resolveSwarmPolicyPath()`
-    - `readSwarmPolicy()`
-    - `writeSwarmPolicy()`
-- Added canonical aggression policy mapping in:
-  - `packages/opencode/src/features/swarm/aggression.ts`
-  - runtime defaults:
-    - `none` => no delegation, no background tasks, depth 0
-    - `low` => background 2, depth 1
-    - `balanced` => background 4, depth 2
-    - `high` => background 8, depth 3
-    - `max_parallel` => planner-unbounded background (still provider/model constrained), depth cap from config (default 4)
-- `task` tool now supports optional `swarm_aggression_override` (restricted to operator/planner-style agents), with metadata/provenance:
-  - `swarmAggression`, `aggressionSource`, `maxActiveBackground`, `maxDelegationDepth`
-- Background/task persistence and outputs include aggression metadata:
-  - DB migration: `packages/opencode/migration/20260218190000_swarm_v21_aggression/migration.sql`
-  - `swarm_task` columns added: `swarm_aggression`, `aggression_source`, `max_active_background`, `max_delegation_depth`
-  - `background_list` and `background_output` print aggression context.
-- Added `cyber.swarm_v2_1.*` config + env flags:
-  - `enabled`
-  - `default_aggression`
-  - `ask_aggression_on_plan_exit`
-  - `max_parallel_depth_cap`
-- Report provenance now includes swarm policy snapshot sidecar:
-  - `reports/swarm-quality.json`
-  - copied into final deliverables during `report_finalize`.
-
-## Swarm Revision Phase 2.1.1 (2026-02-19)
-- Seamless plan/pentest handoff stabilization:
-  - `plan_exit` now no-ops when session is not currently in `plan` mode (prevents accidental pentest-mode misuse).
-  - session processor fallback now detects explicit user approval intent (for example: "go ahead", "approved", "proceed") and auto-recovers from literal `plan_exit` text outputs.
-  - fallback recovery no longer depends strictly on current assistant agent being `plan`; it also checks recent plan context.
-- Swarm aggression UX and normalization improvements:
-  - user-facing labels are friendly (`None`, `Low`, `Balanced`, `High`, `Max parallel`),
-  - internal canonical values remain unchanged (`none|low|balanced|high|max_parallel`),
-  - normalization accepts friendly aliases and hyphen/space variants.
-- Prompt hardening updates:
-  - prompts now explicitly state that swarm aggression controls subagent collaboration strategy, not raw scan aggressiveness.
-  - plan prompts now explicitly forbid printing plain `plan_exit` text; it must be a tool call.
-  - execution bootstrap reminder added after plan handoff to enforce todowrite + delegation lanes before deep scanning.
-- TUI mode sync fix:
-  - selected bottom agent now tracks latest effective user primary-agent transition, not only `plan_enter/plan_exit` tool-completion events.
-  - helper added: `src/cli/cmd/tui/routes/session/agent-sync.ts`.
-
-## Swarm Revision Phase 2.3 (2026-02-19, initial comms groundwork)
-- Added cross-agent communication tool surfaces:
-  - `team_inbox_read`: read team or per-session inbox with message-type filters
-  - `team_inbox_ack`: explicit acknowledgement path tied to original message id
-  - `team_broadcast`: fan-out messaging to all or selected teammate sessions
-  - `team_wait`: polling wait primitive for coordination/synchronization points
-- Enhanced message envelope metadata in `SwarmInbox.send()`:
-  - `_meta.correlation_id`
-  - `_meta.idempotency_key`
-  - `_meta.priority` (`low|normal|high|critical`)
-  - `_meta.ttl_seconds` and `_meta.expires_at`
-  - `_meta.attempt`
-- Inbox listing behavior now supports:
-  - team-scoped filtering (always constrained by `team_id`),
-  - optional per-session + broadcast inclusion,
-  - type filters and `since`-time filtering,
-  - TTL-aware suppression of expired messages.
-- Added new message types:
-  - `ack`
-  - `announcement`
-- Registry wiring updated to expose new tools by default.
-- Tests extended:
-  - `packages/opencode/test/tool/team-tools.test.ts` now validates read/ack/broadcast/wait flows.
-
-## Contracts + Gotchas
-- Resolve git/repo root first to avoid nested path drift in this monorepo.
-- Quote shell paths because local machine paths can include spaces.
-- Keep `finding_json` HTML comment format parser-compatible for report generation.
-- `build` alias is intentionally not treated as a cyber agent in env auto-scaffolding.
-- Subagent `results.md` must end with:
-  - `executed_commands`
-  - `generated_files`
-  - `unverified_claims`
-  - `failed_commands`
-- Skill reference discovery needs all `references/*.md` files enumerated, not sampled subsets.
-- Runtime engagement artifacts under `packages/opencode/engagements/*` are local/runtime state and should stay ignored in git.
-- History rewrite caution: running `git-filter-repo` across active branch history rewrites commit SHAs and can make fork divergence metrics explode (for example, thousands "ahead" with similar content). If cleanup is required, prefer path-scoped rewrites and then rebuild `dev` on top of `upstream/dev` with a squashed delta to restore sane ahead/behind counts.
-- Branding gotcha (2026-02-10): keep external docs/service URLs on real OpenCode domains (for example `opencode.ai`, `api.opencode.ai`) unless DNS/domain ownership is confirmed. String-rebranding helpers should not rewrite domains by default.
-- Prompt/runtime gotcha (2026-02-10): cyber environment details now flow through system context, while synthetic cyber reminders are intentionally sparse and reserved for late-stage gates.
-- Opus 4.6 guardrail (2026-02-10): disable synthetic assistant reminder injection to satisfy strict Claude user-message sequencing behavior.
-- TUI agent-switch gotcha (2026-02-26): in `packages/opencode/src/cli/cmd/tui/routes/session/index.tsx`, do not couple agent auto-sync effects to `local.agent.current()` reads. That creates a feedback loop that immediately overwrites manual `tab agents` / command-palette changes in sessions with existing messages. Sync from message-derived signals only.
-
-## Parallel Agent Branching Contract
-- Multiple agents can safely run in parallel on this machine, but only with strict branch/worktree isolation.
-- All feature implementation happens in the `opencode/` git repo root.
-- Every agent session must create and stay on its own `codex/*` feature branch.
-- Direct commits to `dev`/`main` are prohibited for agent work.
-- Recommended setup: one git worktree per active agent branch (prevents shared working-tree collisions and accidental cross-agent staging).
-- Mandatory pre-edit branch check:
-  - `git rev-parse --abbrev-ref HEAD`
-  - if current branch is `dev`/`main`, branch off immediately before touching files.
-- Handoff contract per agent:
-  - provide branch name,
-  - latest commit SHA,
-  - concise change summary + known risks/tests.
-- Conflict hygiene:
-  - never revert unrelated dirty files,
-  - if unrelated changes appear, stop and report rather than "cleaning up".
-
-## Maintenance Rules
-- Update this file whenever:
-  - we add/rename prompt-routing mappings,
-  - scaffold contracts change,
-  - reporting gates or quality modes change,
-  - skill/reference discovery behavior changes,
-  - any "tricky" behavior required for reliability is introduced,
-  - branch/worktree coordination rules for multi-agent development change.
-
-## Documentation Contract
-- 2026-02-18: root `README.md` is now fork-specific and should stay ULMCode-first.
-- Keep README positioning aligned with current product reality:
-  - WIP but stable enough for real guided engagements,
-  - default workflow centered on `plan` + `pentest` + `action`,
-  - evidence/report artifact discipline is a core product contract, not optional docs flavor.
-
-## Licensing Policy
-- 2026-02-08: project license changed from MIT to `PolyForm Noncommercial 1.0.0`.
-- Commercial use, resale, or offering paid services with this code now requires a separate written commercial license from Trevor Rosato (captured as `Required Notice:` lines in `LICENSE`).
-- Keep package metadata (`package.json` license fields), user-facing license labels/links, and packaging metadata aligned with the root `LICENSE` to avoid mixed-license ambiguity.
-
-## Upstream Sync Log
-- 2026-03-02: merged latest `upstream/dev` into local `dev` and resolved 13 merge conflicts across workflow/config, TUI session routing, tool registry, and skill-discovery tests.
-- 2026-03-02 sync gotchas:
-  - `packages/opencode/src/cli/cmd/tui/routes/session/index.tsx` now depends on `routes/session/agent-sync.ts`; keep both in sync during merges.
-  - `PlanEnterTool` can be accidentally commented out during upstream merges in `packages/opencode/src/tool/plan.ts`; if that happens, `packages/opencode/test/tool/plan.test.ts` fails immediately.
-  - Full `bun turbo typecheck` currently requires Bun `^1.3.10` per upstream script guard; local Bun `1.3.9` can still validate key packages with targeted `bun run --cwd packages/opencode typecheck` and `bun run --cwd packages/ui typecheck`.
-- 2026-02-08: merged `upstream/dev` into fork branch `codex/upstream-sync-20260208` (17 upstream commits integrated at sync time).
-- High-impact upstream areas landed:
-  - prompt input UX and drag/drop attachment handling,
-  - session side-panel + command handling tweaks,
-  - terminal keybind focus behavior fixes,
-  - web share-link handling and file path normalization tests,
-  - i18n key updates across language packs.
-- ULM custom cyber flow files in `packages/opencode/*` merged without conflicts in this sync.
-- 2026-02-08 follow-up: fully untracked `packages/opencode/engagements/**` from git and enforced ignore-only runtime handling (keep only `.gitkeep` tracked).
-
-## Daily Upstream Sync Automation Contract
-- Goal: run a daily catch-up from `upstream/dev` into fork `dev` without losing ULM cyber custom behavior.
-- Always sync in a branch named `codex/upstream-sync-<YYYYMMDD>`.
-- Required sequence:
-  1) `git checkout dev && git pull origin dev`
-  2) `git fetch upstream --prune`
-  3) create sync branch from current `dev`
-  4) `git merge --no-ff upstream/dev`
-  5) resolve conflicts using precedence rules below
-  6) run validation (`bun turbo typecheck` at minimum)
-  7) push branch and open PR into `dev`
-
-### Conflict Handling Rules
-- Treat `packages/opencode/**` as ULM-critical surface:
-  - preserve ULM-specific cyber orchestration behavior by default,
-  - adopt upstream fixes when they do not change ULM contracts.
-- For prompt and routing files, never silently drop ULM mappings:
-  - `packages/opencode/src/session/prompt/cyber-core.txt`
-  - `packages/opencode/src/agent/prompt/pentest.txt`
-  - `packages/opencode/src/agent/prompt/pentest-auto.txt`
-- For engagement runtime artifacts:
-  - keep `packages/opencode/engagements/**` ignored and untracked (except `.gitkeep`),
-  - do not reintroduce tracked engagement outputs during conflict resolution.
-- If conflict touches both security-critical behavior and upstream runtime assumptions, prefer explicit manual reconciliation and document the decision in PR notes.
-
-## Security Incident Notes
-- 2026-02-10: confirmed sensitive engagement outputs were historically committed under:
-  - `packages/opencode/finding.md`
-  - `packages/opencode/.engagements_link_backup`
-  - `packages/opencode/.opencode/engagements/**`
-  - `packages/opencode/.opencode/engagements_legacy_backup/**`
-- Required remediation now includes:
-  1) keep these paths ignored in root `.gitignore`,
-  2) keep all engagement runtime artifacts local-only and untracked,
-  3) if any of these paths appear in git history, perform history rewrite + force-push cleanup to `origin/dev` and `origin/main`.
-
-## Agent Surface Simplification (2026-02-10)
-- Primary agent UX now targets three clear roles: `plan` (read-only planning), `pentest` (guided cyber orchestrator), and `action` (general one-off operator mode).
-- `pentest` is the canonical default behavior when `default_agent` is unset.
-- Legacy IDs remain for compatibility but should be treated as aliases:
-  - `AutoPentest`, `pentest_flow`, `pentest_auto` -> `pentest`
-  - `build` -> `action`
-- Workspace custom docs agent at `.opencode/agent/docs.md` was removed to reduce selector clutter and avoid non-cyber mode confusion.
-- TUI plan handoff should return to the last active visible primary agent after `plan_exit` rather than forcing hidden aliases.
-
-### Required PR Format For Syncs
-- Title: `chore(sync): merge upstream dev into fork (<YYYY-MM-DD>)`
-- Base/head: `dev <- codex/upstream-sync-<YYYYMMDD>`
-- PR body must include:
-  - upstream behind/ahead counts at sync start,
-  - high-impact areas changed upstream,
-  - files/areas where ULM logic was intentionally preserved,
-  - validation commands run + pass/fail,
-  - explicit callout of unresolved risk or follow-up tasks (if any).
-
-### Bot Review + Checks Wait Strategy
-- Use an `up to 8 minutes` wait window for post-PR review triage.
-- Poll PR status every 60 seconds during that window.
-- Exit early as soon as both conditions are true:
-  - all required checks are complete (pass/fail), and
-  - bot/human reviews/comments for the latest commit are visible.
-- Do not do a blind fixed sleep before triage.
-- If checks are still pending/queued after 8 minutes, continue with a slower poll loop (every 2-3 minutes) and classify the run as `blocked` only when there is a durable external blocker (for example: stuck queue, permission issue, or unavailable runners).
-
-## Defensive Expansion Notes (2026-02-10)
-- Added defensive finding metadata support in `packages/opencode/src/tool/finding.ts` and `packages/opencode/src/report/report.ts`:
-  - `finding_type`, `control_refs`, `baseline_state`, `expected_state`, `positive_finding`
-- Added quality warning hooks for defensive report integrity:
-  - `missing_control_refs` for compliance/policy findings without mappings
-  - `missing_baseline_delta` for hardening recommendations without current/expected states
-- Added standalone defensive tools (manual + file-ingest, API-adapter-ready contracts):
-  - `baseline_check`, `compliance_mapper`, `alert_analyzer`, `detection_validator`, `ir_timeline_builder`
-- Added defensive skill pack source at `tools/ulmcode-profile/skills/defensive-compact/*` with compact SKILL.md + references model.
-- Updated profile bootstrap script to optionally include defensive skill pack by default (`WITH_DEFENSIVE=1`) while preserving strict deny-by-default skill permissions.
-
-## Defensive Tool Exposure Note (2026-02-10)
-- Defensive tools currently exist in source (`baseline_check`, `compliance_mapper`, `alert_analyzer`, `detection_validator`, `ir_timeline_builder`) but are intentionally not registered in `packages/opencode/src/tool/registry.ts`.
-- Rationale: keep pentest-focused model behavior clean and avoid tool-selection confusion during core offensive workflows.
-- Re-enable later by re-adding these tools to `ToolRegistry.all()` once dedicated defensive mode/routing is in place.
-
-## Upstream General Instructions
 - To regenerate the JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
 - ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE.
 - The default branch in this repo is `dev`.
@@ -420,9 +98,76 @@ const table = sqliteTable("session", {
 - Test actual implementation, do not duplicate logic into tests
 - Tests cannot run from repo root (guard: `do-not-run-tests-from-root`); run from package dirs like `packages/opencode`.
 
-## ULMcode Hotfix Notes
+## Type Checking
 
-- V2.1.1 regression fix: TUI agent sync must use newest user message by timestamp/id, not array order. The message array is not guaranteed chronological, and naive `findLast()` can snap plan sessions back to pentest.
-- Keep explicit approval gating for `plan_exit` when handing off to `pentest`; this prevents accidental immediate execution and plain-text `plan_exit` dead ends.
-- V2.1.1 follow-up: first-message pentest kickoff must be routed at message creation time (`SessionPrompt.createUserMessage`) to agent `plan`, not via loop-time synthetic kickoff. This keeps UI mode and execution mode aligned and prevents immediate snapback into pentest behavior.
-- V2.1.1 follow-up 2: first-message pentest reroute must also inject kickoff guidance + force-create cyber environment at ingestion (`SessionPrompt.prompt`) or plan mode falls back to generic read-only coding behavior and skips expected safe recon snapshot steps.
+- Always run `bun typecheck` from package directories (e.g., `packages/opencode`), never `tsc` directly.
+
+## ULMCode Rebuild Notes
+
+- For overnight-supervisor work, read `docs/ulm-autonomy/overnight-supervisor.md` and `docs/superpowers/plans/2026-05-06-ulm-overnight-supervisor.md` before editing; the design doc explains the supervisor runtime, and the plan tracks the supervisor/goal/tool-inventory rebuild checklist.
+- The rebuild branch starts from current `upstream/dev`; old fork cyber code should be mined for requirements, not ported wholesale.
+- Native ULM operation artifacts are written under `.ulmcode/operations/<operation-id>/`.
+- Active ULM goals enable turn-end supervision by default: before a normal assistant stop exits `SessionPrompt.run`, the loop calls `operation_supervise` with `reviewKind=turn_end`. If the supervisor returns execution/reporting work, the loop injects a synthetic continuation instead of going idle.
+- Active ULM prompts inject the durable plan from `plans/operation-plan.json` or `.md` up to `goal.continuation.injectPlanMaxChars` (default 12,000 chars). Keep the cap char-based, not token-based.
+- During unattended active operations, `Permission.ask` and `Question.ask` use `goal.continuation.operatorFallbackTimeoutSeconds` (default 75s). Permission timeouts reject with corrective feedback; question timeouts choose conservative answers and write artifacts under `operator-timeouts/`.
+- `operation_checkpoint` is the durable heartbeat/stage ledger tool.
+- `operation_plan` writes `plans/operation-plan.json` and `.md`; use it before broad execution to capture ordered phases, actions, success criteria, subagent/no-subagent policy, assumptions, and reporting closeout.
+- `operation_resume` is the first post-compaction/restart recovery tool. It emits health gaps, recommended follow-up tools, operation-scoped tool hints, active/background tasks, and a continuation prompt before raw JSON inside `<operation_resume_json>` tags. Use `staleAfterMinutes` for unattended runs so old checkpoints and stale background jobs become explicit health gaps; pass `recoverStaleTasks: true` to relaunch restartable stale/error/cancelled lanes directly from saved metadata, or use `operation_recover` separately when you want a dedicated recovery step. Exhausted `runtime_summary` budgets and runtime blind-spot notes also mark the resume brief not ready and recommend `runtime_summary`.
+- Chat todos are intentionally ephemeral: completed/cancelled items are pruned and `/clear-tasks` clears the active list. Do not rely on `todowrite` as durable ULM operation state; use operation checkpoints, stage gates, runtime summaries, and background job metadata.
+- `operation_stage_gate` checks whether a stage is ready to continue/advance and writes `deliverables/stage-gates/<stage>.json` plus `.md`. Use it at major stage boundaries; it blocks exhausted runtime budgets/blind spots, validation blocks unresolved candidate/needs-validation findings, and handoff gates can forward the same strict report quality options as `report_lint`.
+- `operation_status` is the post-compaction/interruption resume reader for ledgers, finding counts, reports, runtime budget/task rollups, runtime notes, and recent events. It prints a compact dashboard first, then the full JSON inside `<operation_status_json>` tags.
+- `operation_audit` combines restart health and final handoff lint, writes `deliverables/operation-audit.json` plus `.md`, and should be the last gate before claiming a final package is ready. Final handoff lint now verifies package integrity too: manifest paths must match rendered artifacts, JSON files must parse, `report.pdf` must look like a PDF, `report.html` must look like HTML, and copied `deliverables/final/runtime-summary.md` must match the source runtime summary when one exists.
+- CLI operators can inspect the same ledger outside a model turn with `opencode ulm list`, `opencode ulm status <operationID>`, `opencode ulm resume <operationID>`, `opencode ulm gate <operationID>`, and `opencode ulm audit <operationID>`; use `--format json` for machine-readable handoff.
+- Instance HTTP API routes under `/ulm/operation` expose typed operation list, status, resume, and audit JSON for TUI/plugin dashboards. `/api/model` exposes configured/provider-registered models through the v2 HttpApi and generated JS SDK. Regenerate the JS SDK after changing either route surface.
+- The TUI has a native `ulm.operations` command and `/ulm` slash entry. It opens a persistent operation dashboard route backed by the generated SDK; the route refreshes on `operation.updated` events and also polls as a fallback. The older dialog remains a compact selector/detail view.
+- TUI boot regressions are part of the ULM profile gate. Run `bun run --cwd packages/opencode test:ulm-tui-launch` or `tools/ulmcode-profile/test-profile.sh` before claiming the local harness launches.
+- ULM artifact writers emit `operation.updated` after durable writes for checkpoints, plans, evidence, findings, report outlines/renders, runtime summaries, stage gates, and operation audits. The event carries compact dashboard state (operation brief, counts, report flags, runtime-summary flag), and the TUI route applies that payload immediately before any API fallback refresh.
+- `evidence_record` writes durable evidence JSON plus optional raw text under `evidence/`; findings should cite evidence IDs/paths from this tool rather than chat-only observations.
+- `finding_record` is the evidence-backed finding state tool; validated/report-ready findings require evidence refs.
+- Native ULM agents are `pentest`, `recon`, `person-recon`, `attack-map`, `validator`, `evidence`, `report-writer`, and `report-reviewer`; prompts are artifact-contracts, not old swarm carryover. Keep profile routing aligned when adding or renaming one.
+- K-12 org/person recon is first-class: `district_profile` writes district/system context, `person_profile` writes public professional role profiles under `profiles/people/`, and `identity_graph` connects people/accounts/groups/roles/apps/data. Keep only engagement-relevant professional/public information; exclude private-life or irrelevant personal details.
+- `report_outline` creates a long-form report page budget before drafting; the default substantial report budget is now 50 pages and includes district, people/role, and identity-graph sections. `report_lint` can require a report file, total minimum word count, outline target-page budget, required outline sections, finding sections, and per-section/per-finding minimum word counts to catch sparse deliverables. For substantial reports, prefer `report_lint` with `requireOutlineBudget: true`, `requireOutlineSections: true`, `requireFindingSections: true`, and `finalHandoff: true` instead of relying on total word count.
+- `report_render` publishes print-ready HTML, an outline-aligned lightweight PDF, and a manifest to `.ulmcode/operations/<id>/deliverables/final/`. It preserves authored `reports/report.md` or `reports/report.html` when present, and the PDF text is derived from the rendered HTML body; do not reintroduce a separate skinny PDF content path.
+- `runtime_summary` writes `.ulmcode/operations/<id>/deliverables/runtime-summary.json` and `.md` for long-run handoff, including model-call split, token/cost budget rollups, per-agent usage, compaction pressure, repeated fetches, background task state, restart args for stale jobs, notes, and canonical artifact paths. It auto-derives model/token/cost fields, compaction count/pressure, persisted background job state, and background job session usage from current assistant messages plus child/background subagent ledgers when those fields are omitted; explicit fields are treated as operator overrides. If a terminal background lane has no readable ledger or runtime snapshot, the tool records a runtime blind-spot note so budgets are not falsely trusted.
+- Observability respects operator OTEL identity: `OTEL_SERVICE_NAME` and `service.name`, `service.version`, `deployment.environment.name` in `OTEL_RESOURCE_ATTRIBUTES` should survive wrappers for long unattended runs.
+- `task` supports `background: true` and optional `operationID`; list recoverable background jobs with `task_list` (pass `operationID` during ULM operations) and poll a returned `task_id` with `task_status` for long-running subagent lanes. Completed background task launches persist a compact runtime usage snapshot in job metadata so `runtime_summary` can still count the lane when the child session ledger is unavailable.
+- Bare-repo-backed git worktrees intentionally cache project IDs in the bare common dir but expose the checked-out tree as `project.worktree`; do not regress this or TUI/sidebar/cwd surfaces point at the bare repo.
+- Background task metadata is persisted under storage key `background_job/<task_id>` so `task_status` can recover terminal output after a service reload. If a persisted `running` job has no active fiber, it becomes `stale`; new task launches persist prompt/subagent/operation/worktree metadata so `task_status` can print restart args and `task_list` can mark stale jobs as restartable. Cancellation must interrupt the captured fiber before/while marking the job cancelled.
+- `task_list` now prints `restart_args` for stale jobs when metadata is available. Prefer `operation_resume` with `recoverStaleTasks: true` or `operation_recover` for all stale lanes in one operation, or `task_restart` with a specific stale `task_id` for single-lane recovery after a process restart loses long-running fibers.
+- `operation_recover` restarts matching stale/error/cancelled operation lanes and supervised command jobs. Command recovery depends on `command_supervise` metadata (`profileID`, variables, output prefix, manifest path, lane ID, workUnitID), so preserve those fields when launching commands. When it can resolve the operation worktree, it writes a fresh operation checkpoint recording recovered job IDs so `operation_status` immediately shows recovery activity.
+- `max_retries` is the config-level cap for transient session retry attempts. The bundled ULM profile sets it to 8; raise it deliberately for flaky providers, but do not leave long unattended runs able to retry forever.
+- Known-tool malformed input is classified separately from unknown tools via `invalid` metadata (`known_tool_invalid_input` vs `unknown_tool`). Preserve this distinction; it gives long-running agents a useful retry hint instead of generic tool failure noise.
+- Anthropic/Vertex-Anthropic message normalization treats client `tool-call` and `tool-result` as one group; do not split them apart when moving trailing text, or Anthropic rejects the request. Provider-executed/server-side tool pairs must stay in assistant content.
+- Moonshot/Kimi schema normalization keeps `$ref` sibling stripping and tuple-item cleanup, and flattens deeply nested complex schemas near provider depth limits so deep MCP tools do not fail before the model call.
+- MCP dynamic tools retry once after recognized transport/session errors by reconnecting the MCP client. Auth/business errors should still surface directly; do not broaden `isTransportError` without focused reconnect tests.
+- Core process handles resolve exit state on `exit` as well as `close`, and SIGKILL escalation does not wait forever for a close event. Preserve this, shell cleanup can otherwise hang after orphaned pipe holders.
+- Shell commands that broadly kill Node.js processes are blocked by `isDangerousProcessKillCommand`; preserve this runtime guard because OpenCode itself runs on Node. PID-scoped kills and project-scoped stop commands should stay allowed.
+- `Npm.add` resolves cached non-registry plugin specs from the cached install root `package.json`; do not assume `npm-package-arg` can infer names for tarballs/git/file specs.
+- `/global/event` has a shared 1024-event SSE replay ring in `server/sse-replay.ts` / `server/global-event-replay.ts`. Both legacy Hono and Effect HttpApi global event routes should continue honoring `Last-Event-ID`; do not regress reconnect catch-up for long operations.
+- ULM artifact writers await best-effort `operation.updated` publication after durable writes. Keep that ordering; fire-and-forget publication can race persistent TUI dashboards and tests after enriched event payloads read disk state.
+- Config caching tracks file fingerprints for global and instance config. Keep `Config.invalidate()` usable without an instance context; instance config should refresh from fingerprints on the next read.
+- TUI plugins can intercept prompt keydown events with `api.input.intercept(handler)`. Handlers return `true` to consume the event and are automatically disposed with the plugin scope.
+- Server plugins can transform assembled chat messages with `pre_chat.messages.transform`; preserve replacement-output semantics because image-stripping and vision-summary plugins may assign a fresh `output.messages` array instead of mutating in place.
+- Queued user messages should be cancelled with `session.deleteMessage(..., force: "true")`, not `session.abort`; abort is for the active run and should not be used to discard a queued prompt.
+- ACP prompt/command returns wait for the completed `message.updated` event before sending `end_turn`; this keeps final streamed chunks from appearing after the RPC reply.
+- Session cost rollups are served by `Session.cost` / `GET /session/:id/cost`; they include self spend plus all descendant subagent sessions and should 404 for missing root sessions.
+- Session processor does a proactive pre-stream context estimate when compaction is enabled and the model reports a context limit; this prevents subagent runs from hanging on providers that silently accept oversized prompts.
+- `InstanceState.get` must provide the resolved `InstanceRef` into `ScopedCache.get`; otherwise cache lookups can initialize under the right key but without the matching instance context.
+- Codex/OpenAI stream chunks with `server_is_overloaded` are retryable provider overloads; keep this alongside generic `server_error` handling so unattended runs do not fail on transient overload JSON.
+- Codex OAuth refresh responses may omit a new refresh token; preserve the existing token on refresh, but keep initial browser/headless OAuth flows strict so missing first-login refresh tokens fail loudly.
+- `experimental.enable_sse_json_repair` is opt-in globally but enabled in `tools/ulmcode-profile`; it repairs malformed SSE `data:` JSON after strict parsing fails and should remain off by default for baseline OpenCode behavior.
+- The bundled isolated profile lives in `tools/ulmcode-profile`; validate it with `tools/ulmcode-profile/test-profile.sh`. Its installer copies compact skills, ULM slash commands, the vetted local OpenCode command set, local OMO agents/prompts/Feature Forge, vendored profile plugins, plugin `package.json`, and both root/`.opencode` Oh My OpenAgent routing files. Keep the long-report skill pointed at `report_outline`, background report/evidence/review lanes, `report_lint`, `report_render`, `runtime_summary`, and `operation_audit`; it exists specifically to prevent sparse final reports.
+- The isolated profile includes `plugins/ulmcode-runtime-guard.js`, which injects operation-resume, background-task, runtime-summary, report-lint/render, and final-handoff guardrails through plugin hooks. It also keeps vendored Claude Code bridge source at `tools/ulmcode-profile/plugins/vendor/opencode-claude-code-plugin-0.2.2/` and full Oh My OpenAgent package source at `tools/ulmcode-profile/plugins/vendor/oh-my-openagent-3.17.12/` for audit/fork work; profile plugin config should use `oh-my-openagent`, not `oh-my-openagent@latest`, so the vendored dependency is the one npm resolves.
+- The isolated profile ships `tools/ulmcode-profile/tool-manifest.json` as the tool-acquisition and supervised-command catalog. Keep unattended profiles `non_destructive`, reserve destructive activity for `interactive_destructive`, include validation commands/fallbacks/artifact parsers for each tool, and validate it with `bun run --cwd packages/opencode test:ulm-tool-manifest`. The runtime tools are `tool_acquire` for validation/blocker recording and `command_supervise` for heartbeat/idle/hard-timeout command execution. `agent-browser` is the preferred low-context browser automation entry in the profile; Playwright remains a fallback, and unrelated Vercel/context7 MCPs should stay out of the isolated pentest profile.
+- Long autonomous operations should call `operation_schedule` after `operation_plan` to create the required lane graph, then call `operation_run` as the main lane lifecycle controller. `operation_run` marks lanes running/complete/failed, can launch a selected model lane with `launchModelLane=true`, syncs background jobs with `laneID` metadata, requires lane-completion proof with explicit non-empty artifacts, writes `plans/operation-run.jsonl`, and returns background `task` parameters plus suggested command profiles. Use `operation_next` when you only need the next launch/wait/compact/stop decision without mutating lane state. The governor reads `runtime_summary` plus the graph/model catalog and returns continue/compact/stop with budget/context/model-limit blockers.
+- After supervised command artifacts exist, use `evidence_normalize` before validation/reporting. It writes `evidence-index.json`, `leads.json`, and citable evidence records; leads are unverified signal and should not be promoted to findings until a validation lane confirms them.
+- Use `operation_queue` after evidence normalization to convert leads into durable `work-queue.json` command units, then `operation_queue_next` to claim queued units and get exact `command_supervise` params. Preserve the returned `workUnitID` when launching commands; `operation_run` uses it to sync completed/failed background jobs back into queue state. The queue stores profile IDs and variables only, never raw shell, and refuses destructive profiles. Manual `operation_queue_next` remains dry-run by default; the scheduler/daemon owner path flips selected queued units to `dryRun:false` and starts supervised command jobs.
+- Use `runtime_scheduler` for unattended progress instead of expecting the model to remember every loop step. It writes `.ulmcode/operations/<operation>/scheduler/heartbeat.json`, requeues stale claimed work units, syncs background jobs into the graph/queue, runs `operation_run`, launches prepared model lanes through background `task`, claims queued command work units into `command_supervise`, and records scheduler cycles. For real wall-clock runs, use `bun run --cwd packages/opencode ulm:runtime-daemon <operationID>`; it defaults to a 20-hour runtime window with interval sleeps, daemon lock, stale-lock recovery, stale-job recovery hooks, signal-aware shutdown, and daemon heartbeats. Add `--detach --json` when an operator wants a non-blocking 20-hour process handoff with pid, launch, heartbeat, and log paths. For OS-owned 20-hour runs, generate service-manager files with `bun run --cwd packages/opencode ulm:runtime-daemon <operationID> --supervisor all --json`; launchd/systemd artifacts intentionally run the foreground daemon and must not include `--detach`. `bun run --cwd packages/opencode ulm:burnin <operationID> --target-hours 20 --json` creates an accelerated proof artifact, but it is only readiness evidence, not a substitute for a literal 20-hour live run. `bun run --cwd packages/opencode ulm:literal-run-readiness <operationID> --strict --json` audits the actual wall-clock proof chain and only passes when the daemon heartbeat/log prove the target elapsed time; it writes `scheduler/literal-run-readiness.json` and `.md`.
+- The profile bundles the local shell non-interactive strategy at `tools/ulmcode-profile/plugins/shell-strategy/shell_strategy.md` and loads it through `opencode.json` instructions; keep it self-contained and do not point profile installs at the user's live `~/.config/opencode`.
+- `bun run --cwd packages/opencode test:ulm-skills` validates bundled ULM profile skills and commands for frontmatter, placeholder-free content, durable ULM tool references, full local workflow command coverage, shell strategy wiring, and model-routing drift.
+- `bun run --cwd packages/opencode test:ulm-smoke` runs the synthetic ULM lifecycle smoke: plan, evidence, finding, outline, validation stage gate, final checkpoint, report render, runtime summary, operation audit, final handoff lint, and status/dashboard verification.
+- `bun run --cwd packages/opencode test:ulm-lab` runs the manifest-driven lab replay harness across every `tools/ulmcode-labs/*/manifest.json`; replay final lint enforces validation stage gate, final handoff artifacts, operation audit, report outline budget, required outline sections, and optional authored report files. Current lab categories include authentication, roster/gradebook, storage/search/reset, guardian/LTI/SIS, assignment/attendance/transcript, LMS payment, family messaging, third-party integration flows, and at least one multi-finding chained portal case with an authored-report replay. The target-smoke harness should cover every lab service added under `tools/ulmcode-labs/*/service`.
+- `bun run --cwd packages/opencode test:ulm-lab-target` starts and probes every bundled HTTP lab target; Docker Compose support lives beside each lab under `tools/ulmcode-labs/<lab>/docker-compose.yml`.
+- `bun run --cwd packages/opencode test:ulm-rebuild-audit` checks the rebuild evidence checklist: upstream currency, durable ULM runtime tools, strict report gates, authored report preservation into rendered HTML/PDF, profile GPT-5.5/GPT-5.4 routing, shell strategy/local commands, profile vendoring/runtime guard, lab catalog breadth, and required gate scripts. `bun run --cwd packages/opencode script/ulm-rebuild-audit.ts --json` emits the same checklist for automation. It is a checklist verifier, not a replacement for running the actual smoke/lab/typecheck gates.
+- `bun run --cwd packages/opencode test:ulm-harness:fast` runs the ULM harness scorecard added for the rebuild. It requires coverage for ten harness gaps: model-loop eval, restart/resume chaos, installed profile runtime, CI gating, longitudinal scorecards, prompt/agent regression, provider/tool chaos, dashboard/API E2E, deep lab targets, and adversarial report quality. Scenario specs live in `tools/ulmcode-evals/scenarios/`, scorecards write to `.artifacts/ulm-harness/`, and `.github/workflows/ulm-harness.yml` is the named CI surface. Additional lanes are `test:ulm-harness:full`, `test:ulm-harness:chaos`, and `test:ulm-harness:overnight`; the overnight lane is a readiness contract, while real 20-hour lab execution remains an explicit operator-triggered run.
+- Invoking the package as `ulmcode` sets `OPENCODE_APP_NAME=ulmcode`; core global paths then use the `ulmcode` app name.

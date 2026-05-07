@@ -10,6 +10,7 @@ import * as Session from "./session"
 import { LLM } from "./llm"
 import { MessageV2 } from "./message-v2"
 import { isOverflow } from "./overflow"
+import { Token } from "@/util/token"
 import { PartID } from "./schema"
 import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
@@ -22,6 +23,7 @@ import * as Log from "@opencode-ai/core/util/log"
 import { isRecord } from "@/util/record"
 import { EventV2 } from "@/v2/event"
 import { SessionEvent } from "@/v2/session-event"
+import { Modelv2 } from "@/v2/model"
 import * as DateTime from "effect/DateTime"
 
 const DOOM_LOOP_THRESHOLD = 3
@@ -432,9 +434,9 @@ export const layer: Layer.Layer<
                 sessionID: ctx.sessionID,
                 agent: input.assistantMessage.agent,
                 model: {
-                  id: ctx.model.id,
-                  providerID: ctx.model.providerID,
-                  variant: input.assistantMessage.variant,
+                  id: Modelv2.ID.make(ctx.model.id),
+                  providerID: Modelv2.ProviderID.make(ctx.model.providerID),
+                  variant: Modelv2.VariantID.make(input.assistantMessage.variant ?? "default"),
                 },
                 snapshot: ctx.snapshot,
                 timestamp: DateTime.makeUnsafe(Date.now()),
@@ -655,7 +657,7 @@ export const layer: Layer.Layer<
           EventV2.run(SessionEvent.Step.Failed.Sync, {
             sessionID: ctx.sessionID,
             error: {
-              type: error.name,
+              type: "unknown",
               message: errorMessage(e),
             },
             timestamp: DateTime.makeUnsafe(Date.now()),
@@ -672,9 +674,26 @@ export const layer: Layer.Layer<
       const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
         slog.info("process")
         ctx.needsCompaction = false
-        ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
+        const cfg = yield* config.get()
+        ctx.shouldBreak = cfg.experimental?.continue_loop_on_deny !== true
 
         return yield* Effect.gen(function* () {
+          const contextLimit = input.model.limit.context
+          if (!ctx.assistantMessage.summary && cfg.compaction?.auto !== false && contextLimit > 0) {
+            const preStreamPayload = JSON.stringify([...(streamInput.system ?? []), ...streamInput.messages])
+            const preStreamTokens = Token.estimate(preStreamPayload)
+            const compactionThreshold = Math.floor(contextLimit * 0.85)
+            if (preStreamTokens >= compactionThreshold) {
+              ctx.needsCompaction = true
+              slog.info("proactive compaction triggered", {
+                estimatedTokens: preStreamTokens,
+                threshold: compactionThreshold,
+                contextLimit,
+              })
+              return "compact"
+            }
+          }
+
           yield* Effect.gen(function* () {
             ctx.currentText = undefined
             ctx.reasoningMap = {}
@@ -700,6 +719,7 @@ export const layer: Layer.Layer<
             ),
             Effect.retry(
               SessionRetry.policy({
+                maxRetries: cfg.max_retries,
                 parse,
                 set: (info) => {
                   // TODO(v2): Temporary dual-write while migrating session messages to v2 events.

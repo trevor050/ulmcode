@@ -1,6 +1,5 @@
 import path from "path"
 import os from "os"
-import z from "zod"
 import * as EffectZod from "@/util/effect-zod"
 import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
@@ -56,11 +55,14 @@ import { SessionRunState } from "./run-state"
 import { EffectBridge } from "@/effect/bridge"
 import { EventV2 } from "@/v2/event"
 import { SessionEvent } from "@/v2/session-event"
+import { Modelv2 } from "@/v2/model"
 import { AgentAttachment, FileAttachment, Source } from "@/v2/session-prompt"
 import * as DateTime from "effect/DateTime"
 import { eq } from "@/storage/db"
 import * as Database from "@/storage/db"
 import { SessionTable } from "./session.sql"
+import { activeOperationForContext } from "@/ulm/operation-context"
+import { superviseOperation, type OperationSupervisorAction } from "@/ulm/operation-supervisor"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -120,11 +122,11 @@ export const layer = Layer.effect(
       return yield* EffectBridge.make()
     })
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
-      const run = yield* runner()
       return {
-        cancel: (sessionID: SessionID) => run.fork(cancel(sessionID)),
+        cancel: (sessionID: SessionID) => cancel(sessionID),
         resolvePromptParts: (template: string) => resolvePromptParts(template),
         prompt: (input: PromptInput) => prompt(input),
+        loop: (input: LoopInput) => loop(input),
       } satisfies TaskPromptOps
     })
 
@@ -978,9 +980,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         EventV2.run(SessionEvent.ModelSwitched.Sync, {
           sessionID: input.sessionID,
           timestamp: DateTime.makeUnsafe(info.time.created),
-          id: info.model.modelID,
-          providerID: info.model.providerID,
-          variant: info.model.variant,
+          model: {
+            id: Modelv2.ID.make(info.model.modelID),
+            providerID: Modelv2.ProviderID.make(info.model.providerID),
+            variant: Modelv2.VariantID.make(info.model.variant ?? "default"),
+          },
         })
       }
 
@@ -1388,6 +1392,98 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       },
     )
 
+    function assistantText(msg: MessageV2.WithParts | undefined) {
+      return (
+        msg?.parts
+          .filter((part): part is MessageV2.TextPart => part.type === "text")
+          .map((part) => part.text)
+          .join("\n")
+          .trim() ?? ""
+      )
+    }
+
+    function canStopAfterSupervisor(action: OperationSupervisorAction | undefined) {
+      return action === "handoff_ready" || action === "blocked_for_operator" || action === "pause"
+    }
+
+    function continuationPrompt(input: {
+      action: OperationSupervisorAction
+      reason: string
+      nextTool?: string
+      operationID: string
+      planPath?: string
+    }) {
+      return [
+        "<system-reminder>",
+        `ULM turn-end supervisor action: ${input.action}`,
+        `reason: ${input.reason}`,
+        input.nextTool ? `required_next_tool: ${input.nextTool}` : "required_next_tool: choose the next safe bounded ULM tool",
+        input.planPath ? `plan_excerpt_source: ${input.planPath}` : "plan_excerpt_source: missing or unavailable",
+        "",
+        "Do not hand off, summarize as done, or wait for the operator unless the supervisor explicitly allows it.",
+        "Continue the active operation using the required next tool. Long commands must use command_supervise, task background=true, runtime_scheduler, or runtime_daemon.",
+        "</system-reminder>",
+      ].join("\n")
+    }
+
+    const maybeInjectTurnEndContinuation = Effect.fn("SessionPrompt.turnEndSupervisor")(function* (input: {
+      sessionID: SessionID
+      session: Session.Info
+      lastUser: MessageV2.User
+      lastAssistantMsg?: MessageV2.WithParts
+      messages: MessageV2.WithParts[]
+    }) {
+      const ctx = yield* InstanceState.context
+      const operation = yield* Effect.promise(() => activeOperationForContext(ctx))
+      if (!operation) return false
+      if (operation.goal.continuation?.turnEndReview === false) return false
+      if (operation.goal.continuation?.enabled === false) return false
+
+      const review = yield* Effect.tryPromise(() =>
+        superviseOperation(operation.worktree, {
+          operationID: operation.operationID,
+          reviewKind: "turn_end",
+          maxActions: 1,
+          latestAssistantMessage: assistantText(input.lastAssistantMsg).slice(0, 2_000),
+        }),
+      ).pipe(Effect.orDie)
+      const top = review.decisions[0]
+      if (canStopAfterSupervisor(top?.action)) return false
+
+      const lastHumanUser = input.messages.findLast(
+        (msg) => msg.info.role === "user" && !msg.parts.every((part) => "synthetic" in part && part.synthetic),
+      )
+      const previousContinuations = input.messages.filter(
+        (msg) =>
+          msg.info.role === "user" &&
+          (!lastHumanUser || msg.info.id > lastHumanUser.info.id) &&
+          msg.parts.some((part) => part.type === "text" && part.metadata?.ulmTurnEndContinuation === true),
+      ).length
+      if (previousContinuations >= (operation.goal.continuation?.maxNoToolContinuationTurns ?? 1)) return false
+
+      yield* createUserMessage({
+        sessionID: input.sessionID,
+        agent: input.lastUser.agent,
+        model: input.lastUser.model,
+        variant: input.lastUser.model.variant,
+        parts: [
+          {
+            type: "text",
+            synthetic: true,
+            metadata: { ulmTurnEndContinuation: true, supervisorReview: review.files?.json },
+            text: continuationPrompt({
+              action: top?.action ?? "continue_execution",
+              reason: top?.reason ?? "active ULM operation is not complete",
+              nextTool: top?.requiredNextTool,
+              operationID: operation.operationID,
+              planPath: review.planExcerpt?.path,
+            }),
+          },
+        ],
+      })
+      return true
+    })
+
     const lastAssistant = Effect.fnUntraced(function* (sessionID: SessionID) {
       const match = yield* sessions.findMessage(sessionID, (m) => m.info.role !== "user")
       if (Option.isSome(match)) return match.value
@@ -1442,6 +1538,18 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             !hasToolCalls &&
             lastUser.id < lastAssistant.id
           ) {
+            if (
+              yield* maybeInjectTurnEndContinuation({
+                sessionID,
+                session,
+                lastUser,
+                lastAssistantMsg,
+                messages: msgs,
+              })
+            ) {
+              yield* slog.info("turn-end supervisor injected continuation")
+              continue
+            }
             yield* slog.info("exiting loop")
             break
           }
@@ -1562,7 +1670,20 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               }
             }
 
-            yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
+            const transformInput = {
+              sessionID,
+              agent: agent.name,
+              model,
+              messages: msgs,
+            }
+            const preChat = yield* plugin.trigger("pre_chat.messages.transform", transformInput, {
+              messages: structuredClone(msgs),
+            })
+            msgs = preChat.messages
+            const legacyChat = yield* plugin.trigger("experimental.chat.messages.transform", transformInput, {
+              messages: msgs,
+            })
+            msgs = legacyChat.messages
 
             const [skills, env, instructions, modelMsgs] = yield* Effect.all([
               sys.skills(agent),
@@ -1593,7 +1714,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               return "break" as const
             }
 
-            const finished = handle.message.finish && !["tool-calls", "unknown"].includes(handle.message.finish)
+            const finished = handle.message.finish && !["tool-calls", "other"].includes(handle.message.finish)
             if (finished && !handle.message.error) {
               if (format.type === "json_schema") {
                 handle.message.error = new MessageV2.StructuredOutputError({

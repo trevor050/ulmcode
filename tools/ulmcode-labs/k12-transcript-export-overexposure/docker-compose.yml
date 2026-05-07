@@ -1,0 +1,8 @@
+services:
+  k12-transcript-export-overexposure:
+    build:
+      context: ./service
+    ports:
+      - "18091:8080"
+    environment:
+      PORT: "8080"

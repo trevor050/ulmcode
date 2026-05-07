@@ -4,7 +4,7 @@ import os from "os"
 import path from "path"
 import { Config } from "@/config/config"
 import { Shell } from "../../src/shell/shell"
-import { ShellTool } from "../../src/tool/shell"
+import { isDangerousProcessKillCommand, ShellTool } from "../../src/tool/shell"
 import { Instance } from "../../src/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
 import { Filesystem } from "@/util/filesystem"
@@ -69,6 +69,27 @@ const shells = (() => {
     (item, i) => list.findIndex((other) => other.shell.toLowerCase() === item.shell.toLowerCase()) === i,
   )
 })()
+
+describe("isDangerousProcessKillCommand", () => {
+  test.each([
+    "pkill node",
+    "pkill -f node",
+    "killall node",
+    "killall -9 node",
+    "taskkill /F /IM node.exe",
+    "Get-Process node | Stop-Process",
+    "Stop-Process -Name node",
+  ])("blocks broad Node process kill: %s", (command) => {
+    expect(isDangerousProcessKillCommand(command)).toBe(true)
+  })
+
+  test.each(["kill 12345", "npm stop", "pm2 stop api", "taskkill /pid 1234 /T /F"])(
+    "allows scoped process stop: %s",
+    (command) => {
+      expect(isDangerousProcessKillCommand(command)).toBe(false)
+    },
+  )
+})
 const PS = new Set(["pwsh", "powershell"])
 const ps = shells.filter((item) => PS.has(item.label))
 const cmdShell = shells.find((item) => item.label === "cmd")

@@ -1,0 +1,3 @@
+Create a dense report outline and page budget for a ULMCode operation.
+
+Use this before the report writer drafts the final report. It turns the operation ledger and validated findings into a concrete section budget so final reports are substantial, evidence-backed, and hard to accidentally make sparse.

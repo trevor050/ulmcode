@@ -8,8 +8,16 @@ import { Auth } from "../auth"
 import { ProviderTransform } from "@/provider/transform"
 
 import PROMPT_GENERATE from "./generate.txt"
+import PROMPT_ULM_ATTACK_MAP from "./prompt/attack-map.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
+import PROMPT_ULM_EVIDENCE from "./prompt/evidence.txt"
+import PROMPT_ULM_PENTEST from "./prompt/pentest.txt"
+import PROMPT_ULM_PERSON_RECON from "./prompt/person-recon.txt"
+import PROMPT_ULM_RECON from "./prompt/recon.txt"
+import PROMPT_ULM_REPORT_REVIEWER from "./prompt/report-reviewer.txt"
+import PROMPT_ULM_REPORT_WRITER from "./prompt/report-writer.txt"
+import PROMPT_ULM_VALIDATOR from "./prompt/validator.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { Permission } from "@/permission"
@@ -186,6 +194,132 @@ export const layer = Layer.effect(
             options: {},
             mode: "subagent",
             native: true,
+          },
+          pentest: {
+            name: "pentest",
+            description:
+              "ULMCode primary operator for authorized security operations. Runs stage-gated work, delegates specialists, records checkpoints, and enforces evidence-backed reporting.",
+            prompt: PROMPT_ULM_PENTEST,
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                question: "allow",
+                plan_enter: "allow",
+                task: "allow",
+              }),
+              user,
+            ),
+            options: {},
+            mode: "primary",
+            native: true,
+            color: "red",
+          },
+          recon: {
+            name: "recon",
+            description:
+              "ULMCode subagent for scoped asset discovery, service mapping, and hypothesis generation with saved evidence.",
+            prompt: PROMPT_ULM_RECON,
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                todowrite: "deny",
+              }),
+              user,
+            ),
+            options: {},
+            mode: "subagent",
+            native: true,
+            color: "cyan",
+          },
+          "person-recon": {
+            name: "person-recon",
+            description:
+              "ULMCode subagent for authorized public K-12 people/role research that writes professional pentest-relevant profiles.",
+            prompt: PROMPT_ULM_PERSON_RECON,
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                todowrite: "deny",
+              }),
+              user,
+            ),
+            options: {},
+            mode: "subagent",
+            native: true,
+            color: "cyan",
+          },
+          "attack-map": {
+            name: "attack-map",
+            description:
+              "ULMCode subagent for turning recon evidence into prioritized attack paths, validation queues, and safe test plans.",
+            prompt: PROMPT_ULM_ATTACK_MAP,
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                todowrite: "deny",
+              }),
+              user,
+            ),
+            options: {},
+            mode: "subagent",
+            native: true,
+            color: "magenta",
+          },
+          validator: {
+            name: "validator",
+            description:
+              "ULMCode subagent for validating or rejecting candidate security findings with repeatable evidence.",
+            prompt: PROMPT_ULM_VALIDATOR,
+            permission: Permission.merge(defaults, user),
+            options: {},
+            mode: "subagent",
+            native: true,
+            color: "yellow",
+          },
+          evidence: {
+            name: "evidence",
+            description:
+              "ULMCode subagent for normalizing raw outputs into durable evidence references and resumable handoffs.",
+            prompt: PROMPT_ULM_EVIDENCE,
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                todowrite: "deny",
+              }),
+              user,
+            ),
+            options: {},
+            mode: "subagent",
+            native: true,
+            color: "blue",
+          },
+          "report-writer": {
+            name: "report-writer",
+            description:
+              "ULMCode subagent for dense final report synthesis from operation artifacts, findings, and evidence.",
+            prompt: PROMPT_ULM_REPORT_WRITER,
+            permission: Permission.merge(defaults, user),
+            options: {},
+            mode: "subagent",
+            native: true,
+            color: "green",
+          },
+          "report-reviewer": {
+            name: "report-reviewer",
+            description:
+              "ULMCode subagent for adversarial review of final reports, evidence coverage, sparse sections, and handoff readiness.",
+            prompt: PROMPT_ULM_REPORT_REVIEWER,
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                todowrite: "deny",
+              }),
+              user,
+            ),
+            options: {},
+            mode: "subagent",
+            native: true,
+            color: "purple",
           },
           compaction: {
             name: "compaction",

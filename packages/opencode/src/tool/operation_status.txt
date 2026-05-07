@@ -1,0 +1,5 @@
+Read the current ULMCode operation status.
+
+Use this after compaction, after interruptions, before resuming a long run, or before delegating new subagent work. It summarizes the checkpoint ledger, finding state counts, report artifact state, runtime budget/model/task rollups, and recent events.
+
+The output starts with a compact human dashboard for fast operator recovery, followed by the full machine-readable JSON inside `<operation_status_json>` tags.

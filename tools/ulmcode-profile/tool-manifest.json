@@ -1,0 +1,457 @@
+{
+  "version": 1,
+  "lastReviewed": "2026-05-05",
+  "policy": {
+    "defaultSafetyMode": "non_destructive",
+    "destructiveSafetyMode": "interactive_destructive",
+    "installFailureBehavior": "record_blocker_with_fallback",
+    "notes": [
+      "Profiles are starting points, not permission grants. Operators still need written authorization and scope.",
+      "Prefer package-manager installs only when the tool is missing and the operation plan names the tool purpose."
+    ]
+  },
+  "tools": [
+    {
+      "id": "nmap",
+      "purpose": "service inventory and version fingerprinting",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "darwin", "command": "brew install nmap" },
+        { "platform": "linux", "command": "sudo apt-get update && sudo apt-get install -y nmap" }
+      ],
+      "validate": "nmap --version",
+      "safeExamples": [
+        "nmap -sV --version-light -oA evidence/raw/nmap-service-scan <authorized-target>",
+        "nmap -Pn -p 80,443,8080 --script=http-title -oA evidence/raw/nmap-http-titles <authorized-target>"
+      ],
+      "outputParsers": ["normal", "grepable", "xml"],
+      "fallbacks": ["masscan-lite", "httpx"]
+    },
+    {
+      "id": "httpx",
+      "purpose": "HTTP discovery, status/title/tech capture, and URL inventory",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "darwin", "command": "brew install httpx" },
+        { "platform": "go", "command": "go install github.com/projectdiscovery/httpx/cmd/httpx@latest" }
+      ],
+      "validate": "httpx -version",
+      "safeExamples": [
+        "httpx -l evidence/raw/hosts.txt -title -tech-detect -status-code -json -o evidence/raw/httpx.jsonl",
+        "httpx -u https://<authorized-host> -follow-host-redirects -json -o evidence/raw/httpx-single.jsonl"
+      ],
+      "outputParsers": ["jsonl"],
+      "fallbacks": ["curl", "nmap"]
+    },
+    {
+      "id": "dnsx",
+      "purpose": "DNS resolution and record inventory",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "darwin", "command": "brew install dnsx" },
+        { "platform": "go", "command": "go install github.com/projectdiscovery/dnsx/cmd/dnsx@latest" }
+      ],
+      "validate": "dnsx -version",
+      "safeExamples": [
+        "dnsx -l evidence/raw/domains.txt -a -aaaa -cname -resp -json -o evidence/raw/dnsx.jsonl"
+      ],
+      "outputParsers": ["jsonl"],
+      "fallbacks": ["dig"]
+    },
+    {
+      "id": "agent-browser",
+      "purpose": "low-context browser navigation, screenshots, form review, and authenticated workflow observation for authorized HTTP surfaces",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "npm", "command": "npm i -g agent-browser && agent-browser install" },
+        { "platform": "skills", "command": "npx skills add https://github.com/vercel-labs/agent-browser --skill agent-browser" }
+      ],
+      "validate": "agent-browser --version",
+      "safeExamples": [
+        "agent-browser open https://<authorized-host>",
+        "agent-browser screenshot --output evidence/screenshots/<host>.png"
+      ],
+      "outputParsers": ["screenshots", "text"],
+      "fallbacks": ["playwright", "manual-browser-review"]
+    },
+    {
+      "id": "gowitness",
+      "purpose": "browser screenshots for authorized HTTP surfaces",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "go", "command": "go install github.com/sensepost/gowitness@latest" }
+      ],
+      "validate": "gowitness version",
+      "safeExamples": [
+        "gowitness scan file -f evidence/raw/urls.txt --screenshot-path evidence/screenshots --write-db"
+      ],
+      "outputParsers": ["sqlite", "screenshots"],
+      "fallbacks": ["agent-browser", "playwright", "browser-use"]
+    },
+    {
+      "id": "ffuf",
+      "purpose": "authorized content discovery with conservative rate controls",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "darwin", "command": "brew install ffuf" },
+        { "platform": "go", "command": "go install github.com/ffuf/ffuf/v2@latest" }
+      ],
+      "validate": "ffuf -V",
+      "safeExamples": [
+        "ffuf -u https://<authorized-host>/FUZZ -w wordlists/common.txt -rate 25 -of json -o evidence/raw/ffuf.json"
+      ],
+      "outputParsers": ["json"],
+      "fallbacks": ["feroxbuster"]
+    },
+    {
+      "id": "zap-baseline",
+      "purpose": "passive web baseline checks and spidering in authorized scope",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "docker", "command": "docker pull ghcr.io/zaproxy/zaproxy:stable" }
+      ],
+      "validate": "docker image inspect ghcr.io/zaproxy/zaproxy:stable",
+      "safeExamples": [
+        "docker run --rm -v \"$PWD/evidence/raw:/zap/wrk\" ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t https://<authorized-host> -r zap.html -J zap.json"
+      ],
+      "outputParsers": ["json", "html"],
+      "fallbacks": ["manual-browser-review"]
+    },
+    {
+      "id": "nuclei",
+      "purpose": "low-noise template-based vulnerability baseline checks",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "go", "command": "go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest" }
+      ],
+      "validate": "nuclei -version",
+      "safeExamples": [
+        "nuclei -l evidence/raw/urls.txt -severity info,low,medium -rate-limit 15 -jsonl -o evidence/raw/nuclei-baseline.jsonl"
+      ],
+      "outputParsers": ["jsonl"],
+      "fallbacks": ["manual-validation", "zap-baseline"]
+    },
+    {
+      "id": "subfinder",
+      "purpose": "passive subdomain discovery for authorized domains",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "go", "command": "go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest" }
+      ],
+      "validate": "subfinder -version",
+      "safeExamples": [
+        "subfinder -d <authorized-domain> -silent -o evidence/raw/subfinder.txt"
+      ],
+      "outputParsers": ["text"],
+      "fallbacks": ["amass", "dnsx"]
+    },
+    {
+      "id": "amass",
+      "purpose": "external attack-surface enumeration for authorized domains",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "darwin", "command": "brew install amass" },
+        { "platform": "linux", "command": "sudo apt-get update && sudo apt-get install -y amass" }
+      ],
+      "validate": "amass -version",
+      "safeExamples": [
+        "amass enum -passive -d <authorized-domain> -o evidence/raw/amass-passive.txt"
+      ],
+      "outputParsers": ["text"],
+      "fallbacks": ["subfinder"]
+    },
+    {
+      "id": "feroxbuster",
+      "purpose": "authorized recursive content discovery with rate limits",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "darwin", "command": "brew install feroxbuster" },
+        { "platform": "linux", "command": "sudo apt-get update && sudo apt-get install -y feroxbuster" }
+      ],
+      "validate": "feroxbuster --version",
+      "safeExamples": [
+        "feroxbuster -u https://<authorized-host> -w wordlists/common.txt --rate-limit 25 --json -o evidence/raw/feroxbuster.json"
+      ],
+      "outputParsers": ["json"],
+      "fallbacks": ["ffuf", "gobuster"]
+    },
+    {
+      "id": "gobuster",
+      "purpose": "authorized directory, DNS, and vhost discovery",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "darwin", "command": "brew install gobuster" },
+        { "platform": "go", "command": "go install github.com/OJ/gobuster/v3@latest" }
+      ],
+      "validate": "gobuster version",
+      "safeExamples": [
+        "gobuster dir -u https://<authorized-host> -w wordlists/common.txt -o evidence/raw/gobuster.txt"
+      ],
+      "outputParsers": ["text"],
+      "fallbacks": ["ffuf", "feroxbuster"]
+    },
+    {
+      "id": "whatweb",
+      "purpose": "web technology fingerprinting",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "darwin", "command": "brew install whatweb" },
+        { "platform": "linux", "command": "sudo apt-get update && sudo apt-get install -y whatweb" }
+      ],
+      "validate": "whatweb --version",
+      "safeExamples": [
+        "whatweb --log-json=evidence/raw/whatweb.json https://<authorized-host>"
+      ],
+      "outputParsers": ["json"],
+      "fallbacks": ["httpx"]
+    },
+    {
+      "id": "sslscan",
+      "purpose": "TLS configuration inventory",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "darwin", "command": "brew install sslscan" },
+        { "platform": "linux", "command": "sudo apt-get update && sudo apt-get install -y sslscan" }
+      ],
+      "validate": "sslscan --version",
+      "safeExamples": [
+        "sslscan --xml=evidence/raw/sslscan.xml <authorized-host>:443"
+      ],
+      "outputParsers": ["xml", "text"],
+      "fallbacks": ["testssl.sh", "nmap"]
+    },
+    {
+      "id": "trivy",
+      "purpose": "container, dependency, and config scanning for provided assets",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "darwin", "command": "brew install trivy" },
+        { "platform": "linux", "command": "sudo apt-get update && sudo apt-get install -y trivy" }
+      ],
+      "validate": "trivy --version",
+      "safeExamples": [
+        "trivy fs --format json --output evidence/raw/trivy-fs.json <authorized-project-dir>"
+      ],
+      "outputParsers": ["json"],
+      "fallbacks": ["manual-dependency-review"]
+    },
+    {
+      "id": "semgrep",
+      "purpose": "source and configuration static analysis for provided repositories",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "pipx", "command": "pipx install semgrep" }
+      ],
+      "validate": "semgrep --version",
+      "safeExamples": [
+        "semgrep scan --config auto --json --output evidence/raw/semgrep.json <authorized-project-dir>"
+      ],
+      "outputParsers": ["json"],
+      "fallbacks": ["grep", "manual-code-review"]
+    },
+    {
+      "id": "gitleaks",
+      "purpose": "secret scanning for provided repositories",
+      "safety": "non_destructive",
+      "install": [
+        { "platform": "darwin", "command": "brew install gitleaks" },
+        { "platform": "linux", "command": "sudo apt-get update && sudo apt-get install -y gitleaks" }
+      ],
+      "validate": "gitleaks version",
+      "safeExamples": [
+        "gitleaks detect --source <authorized-project-dir> --report-format json --report-path evidence/raw/gitleaks.json"
+      ],
+      "outputParsers": ["json"],
+      "fallbacks": ["manual-secret-review"]
+    }
+  ],
+  "commandProfiles": [
+    {
+      "id": "service-inventory",
+      "tool": "nmap",
+      "safety": "non_destructive",
+      "template": "nmap -sV --version-light -oA {outputPrefix} {target}",
+      "heartbeatSeconds": 120,
+      "idleTimeoutSeconds": 900,
+      "hardTimeoutSeconds": 7200,
+      "restartable": true,
+      "artifacts": ["evidence/raw/nmap-service-scan.nmap", "evidence/raw/nmap-service-scan.xml"]
+    },
+    {
+      "id": "http-discovery",
+      "tool": "httpx",
+      "safety": "non_destructive",
+      "template": "httpx -l {inputFile} -title -tech-detect -status-code -json -o {outputPrefix}.jsonl",
+      "heartbeatSeconds": 60,
+      "idleTimeoutSeconds": 600,
+      "hardTimeoutSeconds": 3600,
+      "restartable": true,
+      "artifacts": ["evidence/raw/httpx.jsonl"]
+    },
+    {
+      "id": "content-discovery",
+      "tool": "ffuf",
+      "safety": "non_destructive",
+      "template": "ffuf -u {url}/FUZZ -w {wordlist} -rate 25 -of json -o {outputPrefix}.json",
+      "heartbeatSeconds": 60,
+      "idleTimeoutSeconds": 600,
+      "hardTimeoutSeconds": 7200,
+      "restartable": true,
+      "artifacts": ["evidence/raw/ffuf.json"]
+    },
+    {
+      "id": "passive-web-baseline",
+      "tool": "zap-baseline",
+      "safety": "non_destructive",
+      "template": "docker run --rm -v \"$PWD/evidence/raw:/zap/wrk\" ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t {url} -r zap.html -J zap.json",
+      "heartbeatSeconds": 180,
+      "idleTimeoutSeconds": 1200,
+      "hardTimeoutSeconds": 10800,
+      "restartable": false,
+      "artifacts": ["evidence/raw/zap.json", "evidence/raw/zap.html"]
+    },
+    {
+      "id": "icmp-sweep",
+      "tool": "nmap",
+      "safety": "non_destructive",
+      "template": "nmap -sn -oA {outputPrefix} {target}",
+      "heartbeatSeconds": 120,
+      "idleTimeoutSeconds": 900,
+      "hardTimeoutSeconds": 14400,
+      "restartable": true,
+      "artifacts": ["evidence/raw/icmp-sweep.nmap", "evidence/raw/icmp-sweep.xml"]
+    },
+    {
+      "id": "tcp-top-ports-sweep",
+      "tool": "nmap",
+      "safety": "non_destructive",
+      "template": "nmap --top-ports 1000 --version-light -oA {outputPrefix} {target}",
+      "heartbeatSeconds": 120,
+      "idleTimeoutSeconds": 1200,
+      "hardTimeoutSeconds": 21600,
+      "restartable": true,
+      "artifacts": ["evidence/raw/tcp-top-ports.nmap", "evidence/raw/tcp-top-ports.xml"]
+    },
+    {
+      "id": "udp-top-ports-sweep",
+      "tool": "nmap",
+      "safety": "non_destructive",
+      "template": "nmap -sU --top-ports 50 --version-light -oA {outputPrefix} {target}",
+      "heartbeatSeconds": 180,
+      "idleTimeoutSeconds": 1800,
+      "hardTimeoutSeconds": 28800,
+      "restartable": true,
+      "artifacts": ["evidence/raw/udp-top-ports.nmap", "evidence/raw/udp-top-ports.xml"]
+    },
+    {
+      "id": "web-title-screenshot",
+      "tool": "httpx",
+      "safety": "non_destructive",
+      "template": "httpx -l {inputFile} -title -tech-detect -status-code -follow-host-redirects -json -o {outputPrefix}.jsonl",
+      "heartbeatSeconds": 60,
+      "idleTimeoutSeconds": 900,
+      "hardTimeoutSeconds": 7200,
+      "restartable": true,
+      "artifacts": ["evidence/raw/web-title-screenshot.jsonl"]
+    },
+    {
+      "id": "browser-screenshot",
+      "tool": "agent-browser",
+      "safety": "non_destructive",
+      "template": "agent-browser screenshot {url} --output {outputPrefix}.png",
+      "heartbeatSeconds": 60,
+      "idleTimeoutSeconds": 600,
+      "hardTimeoutSeconds": 3600,
+      "restartable": true,
+      "artifacts": ["evidence/screenshots/browser-screenshot.png"]
+    },
+    {
+      "id": "tls-inventory",
+      "tool": "sslscan",
+      "safety": "non_destructive",
+      "template": "sslscan --xml={outputPrefix}.xml {target}",
+      "heartbeatSeconds": 120,
+      "idleTimeoutSeconds": 900,
+      "hardTimeoutSeconds": 7200,
+      "restartable": true,
+      "artifacts": ["evidence/raw/tls-inventory.xml"]
+    },
+    {
+      "id": "dns-zone-discovery",
+      "tool": "dnsx",
+      "safety": "non_destructive",
+      "template": "dnsx -l {inputFile} -a -aaaa -cname -mx -txt -resp -json -o {outputPrefix}.jsonl",
+      "heartbeatSeconds": 60,
+      "idleTimeoutSeconds": 900,
+      "hardTimeoutSeconds": 7200,
+      "restartable": true,
+      "artifacts": ["evidence/raw/dns-zone-discovery.jsonl"]
+    },
+    {
+      "id": "subdomain-discovery",
+      "tool": "subfinder",
+      "safety": "non_destructive",
+      "template": "subfinder -d {domain} -silent -o {outputPrefix}.txt",
+      "heartbeatSeconds": 120,
+      "idleTimeoutSeconds": 1200,
+      "hardTimeoutSeconds": 14400,
+      "restartable": true,
+      "artifacts": ["evidence/raw/subdomain-discovery.txt"]
+    },
+    {
+      "id": "nuclei-low-noise-baseline",
+      "tool": "nuclei",
+      "safety": "non_destructive",
+      "template": "nuclei -l {inputFile} -severity info,low,medium -rate-limit 15 -jsonl -o {outputPrefix}.jsonl",
+      "heartbeatSeconds": 120,
+      "idleTimeoutSeconds": 1200,
+      "hardTimeoutSeconds": 21600,
+      "restartable": true,
+      "artifacts": ["evidence/raw/nuclei-low-noise-baseline.jsonl"]
+    },
+    {
+      "id": "smb-inventory",
+      "tool": "nmap",
+      "safety": "non_destructive",
+      "template": "nmap -p 139,445 --script smb-protocols,smb-os-discovery -oA {outputPrefix} {target}",
+      "heartbeatSeconds": 120,
+      "idleTimeoutSeconds": 1200,
+      "hardTimeoutSeconds": 14400,
+      "restartable": true,
+      "artifacts": ["evidence/raw/smb-inventory.nmap", "evidence/raw/smb-inventory.xml"]
+    },
+    {
+      "id": "ad-lightweight-enum",
+      "tool": "nmap",
+      "safety": "non_destructive",
+      "template": "nmap -p 88,389,445,464,636,3268,3269 --version-light -oA {outputPrefix} {target}",
+      "heartbeatSeconds": 120,
+      "idleTimeoutSeconds": 1200,
+      "hardTimeoutSeconds": 14400,
+      "restartable": true,
+      "artifacts": ["evidence/raw/ad-lightweight-enum.nmap", "evidence/raw/ad-lightweight-enum.xml"]
+    },
+    {
+      "id": "secrets-repo-scan",
+      "tool": "gitleaks",
+      "safety": "non_destructive",
+      "template": "gitleaks detect --source {targetDir} --report-format json --report-path {outputPrefix}.json",
+      "heartbeatSeconds": 120,
+      "idleTimeoutSeconds": 1200,
+      "hardTimeoutSeconds": 14400,
+      "restartable": true,
+      "artifacts": ["evidence/raw/secrets-repo-scan.json"]
+    },
+    {
+      "id": "cloud-storage-baseline",
+      "tool": "trivy",
+      "safety": "non_destructive",
+      "template": "trivy config --format json --output {outputPrefix}.json {targetDir}",
+      "heartbeatSeconds": 120,
+      "idleTimeoutSeconds": 1200,
+      "hardTimeoutSeconds": 14400,
+      "restartable": true,
+      "artifacts": ["evidence/raw/cloud-storage-baseline.json"]
+    }
+  ]
+}

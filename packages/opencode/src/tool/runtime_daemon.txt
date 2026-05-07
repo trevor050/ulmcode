@@ -1,0 +1,11 @@
+Run the ULMCode wall-clock runtime daemon for an operation.
+
+This is the long-run owner for unattended operation progress when the process
+should keep polling in one invocation. It wraps `runtime_scheduler` with
+operation-scoped daemon locking, interval sleeps, stale-lock recovery, scheduler
+error backoff, signal-aware shutdown, and fresh background-job reconciliation on
+each tick.
+
+Use short `maxRuntimeSeconds` and `maxCycles` values for interactive checks.
+For operator terminal runs, prefer `bun run --cwd packages/opencode
+ulm:runtime-daemon <operationID>`.

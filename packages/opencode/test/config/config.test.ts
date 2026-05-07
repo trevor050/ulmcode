@@ -62,6 +62,8 @@ const layer = Config.layer.pipe(
 const it = testEffect(layer)
 
 const load = () => Effect.runPromise(Config.Service.use((svc) => svc.get()).pipe(Effect.scoped, Effect.provide(layer)))
+const loadGlobalConfig = () =>
+  Effect.runPromise(Config.Service.use((svc) => svc.getGlobal()).pipe(Effect.scoped, Effect.provide(layer)))
 const save = (config: Config.Info) =>
   Effect.runPromise(Config.Service.use((svc) => svc.update(config)).pipe(Effect.scoped, Effect.provide(layer)))
 const saveGlobal = (config: Config.Info) =>
@@ -147,6 +149,7 @@ test("loads JSON config file", async () => {
       await writeConfig(dir, {
         $schema: "https://opencode.ai/config.json",
         model: "test/model",
+        max_retries: 3,
         username: "testuser",
       })
     },
@@ -156,9 +159,57 @@ test("loads JSON config file", async () => {
     fn: async () => {
       const config = await load()
       expect(config.model).toBe("test/model")
+      expect(config.max_retries).toBe(3)
       expect(config.username).toBe("testuser")
     },
   })
+})
+
+test("refreshes project config cache when config file changes", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        username: "first",
+      })
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      expect((await load()).username).toBe("first")
+
+      await writeConfig(tmp.path, {
+        $schema: "https://opencode.ai/config.json",
+        username: "second-user",
+      })
+
+      expect((await load()).username).toBe("second-user")
+    },
+  })
+})
+
+test("refreshes global config cache when global config file changes", async () => {
+  await using tmp = await tmpdir()
+  const prev = Global.Path.config
+  ;(Global.Path as { config: string }).config = tmp.path
+  await clear(true)
+  try {
+    await writeConfig(tmp.path, {
+      $schema: "https://opencode.ai/config.json",
+      username: "global-first",
+    })
+    expect((await loadGlobalConfig()).username).toBe("global-first")
+
+    await writeConfig(tmp.path, {
+      $schema: "https://opencode.ai/config.json",
+      username: "global-second-user",
+    })
+    expect((await loadGlobalConfig()).username).toBe("global-second-user")
+  } finally {
+    ;(Global.Path as { config: string }).config = prev
+    await clear(true)
+  }
 })
 
 test("loads shell config field", async () => {

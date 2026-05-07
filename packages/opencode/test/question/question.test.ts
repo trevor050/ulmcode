@@ -1,7 +1,10 @@
 import { afterEach, expect } from "bun:test"
+import fs from "fs/promises"
+import path from "path"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
 import { Question } from "../../src/question"
 import { Instance } from "../../src/project/instance"
+import { InstanceState } from "../../src/effect/instance-state"
 import { WithInstance } from "../../src/project/with-instance"
 import { InstanceRuntime } from "../../src/project/instance-runtime"
 import { QuestionID } from "../../src/question/schema"
@@ -9,6 +12,7 @@ import { disposeAllInstances, provideInstance, reloadTestInstance, tmpdirScoped 
 import { SessionID } from "../../src/session/schema"
 import { testEffect } from "../lib/effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { createOperationGoal } from "../../src/ulm/operation-goal"
 
 const it = testEffect(Layer.mergeAll(Question.defaultLayer, CrossSpawnSpawner.defaultLayer))
 
@@ -105,6 +109,42 @@ it.instance(
       expect(pending[0].questions).toEqual(questions)
       yield* rejectAll
       expect((yield* Fiber.await(fiber))._tag).toBe("Failure")
+    }),
+  { git: true },
+)
+
+it.instance(
+  "ask - active unattended ULM operation times out with conservative answers",
+  () =>
+    Effect.gen(function* () {
+      const ctx = yield* InstanceState.context
+      yield* Effect.promise(() =>
+        createOperationGoal(ctx.worktree, {
+          operationID: "school",
+          objective: "Authorized unattended run",
+          targetDurationHours: 20,
+          continuation: { operatorFallbackTimeoutSeconds: 0.01 },
+        }),
+      )
+
+      const answers = yield* askEffect({
+        sessionID: SessionID.make("ses_test"),
+        questions: [
+          {
+            question: "Can I expand scope to a new subnet?",
+            header: "Scope",
+            options: [
+              { label: "Continue", description: "Keep going" },
+              { label: "Denied", description: "Do not expand scope" },
+            ],
+          },
+        ],
+      })
+
+      expect(answers).toEqual([["Denied"]])
+      const timeoutDir = path.join(ctx.worktree, ".ulmcode", "operations", "school", "operator-timeouts")
+      const timeoutFiles = yield* Effect.promise(() => fs.readdir(timeoutDir))
+      expect(timeoutFiles.some((file) => file.includes("question"))).toBe(true)
     }),
   { git: true },
 )

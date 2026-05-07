@@ -1,0 +1,15 @@
+{
+  "id": "restart-resume-contract",
+  "capability": "restart_resume_chaos",
+  "tier": "fast",
+  "objective": "Keep restart, stale-lane recovery, and resume behavior visible as required harness coverage.",
+  "checks": [
+    "operation_resume supports stale recovery controls",
+    "operation_recover can write recovery checkpoints",
+    "artifact health checks mention stale task recovery"
+  ],
+  "acceptance": [
+    "The scorecard reports restart_resume_chaos coverage",
+    "Failures in recovery wiring block the fast harness"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "@khalilgharbaoui/opencode-claude-code-plugin": "^0.2.2",
+    "@opencode-ai/plugin": "1.14.38",
+    "oh-my-openagent": "file:plugins/vendor/oh-my-openagent-3.17.12",
+    "oh-my-opencode": "file:plugins/vendor/oh-my-openagent-3.17.12"
+  }
+}

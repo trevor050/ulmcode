@@ -66,6 +66,7 @@ import { questionHandlers } from "./handlers/question"
 import { sessionHandlers } from "./handlers/session"
 import { syncHandlers } from "./handlers/sync"
 import { tuiHandlers } from "./handlers/tui"
+import { ulmHandlers } from "./handlers/ulm"
 import { v2Handlers } from "./handlers/v2"
 import { workspaceHandlers } from "./handlers/workspace"
 import { instanceContextLayer, instanceRouterMiddleware } from "./middleware/instance-context"
@@ -73,6 +74,7 @@ import { workspaceRouterMiddleware, workspaceRoutingLayer } from "./middleware/w
 import { disposeMiddleware } from "./lifecycle"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import * as ServerBackend from "@/server/backend"
+import { errorLayer } from "./middleware/error"
 
 export const context = Context.makeUnsafe<unknown>(new Map())
 
@@ -120,6 +122,7 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
     syncHandlers,
     v2Handlers,
     tuiHandlers,
+    ulmHandlers,
     workspaceHandlers,
   ]),
 )
@@ -144,6 +147,7 @@ const uiRoute = HttpRouter.use((router) =>
 export function createRoutes(corsOptions?: CorsOptions) {
   return Layer.mergeAll(rootApiRoutes, eventApiRoutes, instanceRoutes, uiRoute).pipe(
     Layer.provide([
+      errorLayer,
       cors(corsOptions),
       runtime,
       Account.defaultLayer,

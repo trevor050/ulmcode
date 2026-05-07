@@ -7,6 +7,7 @@ import { GlobalPaths } from "../../src/server/routes/instance/httpapi/groups/glo
 import { PublicApi } from "../../src/server/routes/instance/httpapi/public"
 import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
 import { Server } from "../../src/server/server"
+import { GlobalBus } from "../../src/bus/global"
 import * as Log from "@opencode-ai/core/util/log"
 import { ConfigProvider, Layer } from "effect"
 import { HttpRouter } from "effect/unstable/http"
@@ -53,6 +54,26 @@ function app(input?: { password?: string; username?: string }) {
       return this.fetch(input instanceof Request ? input : new Request(new URL(input, "http://localhost"), init))
     },
   }
+}
+
+async function readUntil(reader: ReadableStreamDefaultReader<Uint8Array>, needle: string) {
+  const decoder = new TextDecoder()
+  let text = ""
+  const deadline = Date.now() + 2_000
+
+  while (!text.includes(needle)) {
+    if (Date.now() > deadline) throw new Error(`Timed out waiting for ${needle}. Read: ${text}`)
+    const next = await Promise.race([
+      reader.read(),
+      new Promise<ReadableStreamReadResult<Uint8Array>>((_, reject) =>
+        setTimeout(() => reject(new Error(`Timed out waiting for ${needle}. Read: ${text}`)), 500),
+      ),
+    ])
+    if (next.done) break
+    text += decoder.decode(next.value, { stream: true })
+  }
+
+  return text
 }
 
 function openApiRouteKeys(spec: { paths: Record<string, Partial<Record<(typeof methods)[number], unknown>>> }) {
@@ -227,9 +248,14 @@ describe("HttpApi server", () => {
 
     expect(honoRoutes.filter((route) => !effectRoutes.includes(route))).toEqual([])
     expect(effectRoutes.filter((route) => !honoRoutes.includes(route))).toEqual([
+      "GET /api/model",
       "GET /api/session",
       "GET /api/session/{sessionID}/context",
       "GET /api/session/{sessionID}/message",
+      "GET /ulm/operation",
+      "GET /ulm/operation/{operationID}/audit",
+      "GET /ulm/operation/{operationID}/resume",
+      "GET /ulm/operation/{operationID}/status",
       "POST /api/session/{sessionID}/compact",
       "POST /api/session/{sessionID}/prompt",
       "POST /api/session/{sessionID}/wait",
@@ -407,6 +433,39 @@ describe("HttpApi server", () => {
     expect(response.status).toBe(200)
     expect(response.headers.get("content-type")).toContain("text/event-stream")
     expect(new TextDecoder().decode(chunk.value)).toContain("server.connected")
+  })
+
+  test("replays missed global events from Last-Event-ID", async () => {
+    const response = await app().request(GlobalPaths.event)
+    if (!response.body) throw new Error("missing event stream body")
+    const reader = response.body.getReader()
+    await readUntil(reader, "server.connected")
+
+    const marker = `replay-${Date.now()}-${Math.random()}`
+    GlobalBus.emit("event", {
+      directory: "global",
+      payload: { type: "test.replay", properties: { marker: `${marker}:1` } },
+    })
+    GlobalBus.emit("event", {
+      directory: "global",
+      payload: { type: "test.replay", properties: { marker: `${marker}:2` } },
+    })
+
+    const live = await readUntil(reader, `${marker}:2`)
+    await reader.cancel()
+    const ids = [...live.matchAll(/^id: (\d+)$/gm)].map((match) => Number(match[1]))
+    expect(ids.length).toBeGreaterThanOrEqual(2)
+
+    const replay = await app().request(GlobalPaths.event, {
+      headers: { "Last-Event-ID": String(ids[ids.length - 2]) },
+    })
+    if (!replay.body) throw new Error("missing replay event stream body")
+    const replayReader = replay.body.getReader()
+    const replayText = await readUntil(replayReader, `${marker}:2`)
+    await replayReader.cancel()
+
+    expect(replayText).toContain(`id: ${ids[ids.length - 1]}`)
+    expect(replayText).not.toContain(`${marker}:1`)
   })
 
   test("serves control log from Effect HttpApi", async () => {

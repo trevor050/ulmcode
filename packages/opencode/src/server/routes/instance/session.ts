@@ -187,6 +187,40 @@ export const SessionRoutes = lazy(() =>
       },
     )
     .get(
+      "/:sessionID/cost",
+      describeRoute({
+        summary: "Get session cost rollup",
+        tags: ["Session"],
+        description:
+          "Get the cumulative cost of this session plus the rolled-up cost of all descendant subagent sessions.",
+        operationId: "session.cost",
+        responses: {
+          200: {
+            description: "Cost rollup",
+            content: {
+              "application/json": {
+                schema: resolver(Session.Cost.zod),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: Session.CostInput.zod,
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        return jsonRequest("SessionRoutes.cost", c, function* () {
+          const session = yield* Session.Service
+          return yield* session.cost(sessionID)
+        })
+      },
+    )
+    .get(
       "/:sessionID/todo",
       describeRoute({
         summary: "Get session todos",
@@ -768,12 +802,19 @@ export const SessionRoutes = lazy(() =>
           messageID: MessageID.zod,
         }),
       ),
+      validator(
+        "query",
+        z.object({
+          force: z.enum(["true", "false"]).optional(),
+        }),
+      ),
       async (c) =>
         jsonRequest("SessionRoutes.deleteMessage", c, function* () {
           const params = c.req.valid("param")
+          const query = c.req.valid("query")
           const state = yield* SessionRunState.Service
           const session = yield* Session.Service
-          yield* state.assertNotBusy(params.sessionID)
+          if (!queryBoolean(query.force)) yield* state.assertNotBusy(params.sessionID)
           yield* session.removeMessage({
             sessionID: params.sessionID,
             messageID: params.messageID,

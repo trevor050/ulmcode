@@ -1,0 +1,269 @@
+{
+  "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/dev/assets/oh-my-opencode.schema.json",
+  "sisyphus_agent": {
+    "disabled": false,
+    "default_builder_enabled": true,
+    "planner_enabled": true,
+    "replace_plan": false
+  },
+  "model_capabilities": {
+    "enabled": true,
+    "auto_refresh_on_start": true,
+    "refresh_timeout_ms": 5000
+  },
+  "agents": {
+    "sisyphus": {
+      "model": "openai/gpt-5.5-fast",
+      "variant": "high",
+      "reasoningEffort": "high",
+      "temperature": 0.08,
+      "textVerbosity": "medium",
+      "fallback_models": [
+        {
+          "model": "openai/gpt-5.5-fast",
+          "variant": "xhigh",
+          "reasoningEffort": "xhigh",
+          "temperature": 0.03
+        },
+        {
+          "model": "opencode-go/glm-5.1",
+          "temperature": 0.12
+        }
+      ],
+      "permission": {
+        "task": "allow",
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "list": "allow",
+        "bash": "allow",
+        "edit": "allow",
+        "webfetch": "allow",
+        "websearch": "allow",
+        "external_directory": "ask"
+      }
+    }
+  },
+  "categories": {
+    "quick": {
+      "model": "openai/gpt-5.4-mini-fast",
+      "temperature": 0,
+      "textVerbosity": "low",
+      "description": "Small low-risk fixes, command help, and concise explanations."
+    },
+    "repo-scout": {
+      "model": "openai/gpt-5.4-mini-fast",
+      "temperature": 0,
+      "textVerbosity": "medium",
+      "description": "Read-only repository and target-surface mapping."
+    },
+    "docs-librarian": {
+      "model": "openai/gpt-5.4-mini-fast",
+      "temperature": 0,
+      "textVerbosity": "medium",
+      "description": "Documentation, setup-note, command, API, and convention extraction."
+    },
+    "pentest-control": {
+      "model": "openai/gpt-5.5-fast",
+      "variant": "high",
+      "reasoningEffort": "high",
+      "temperature": 0.08,
+      "textVerbosity": "medium",
+      "description": "Operation planning, scope control, task routing, and final handoff ownership."
+    },
+    "plan-critic": {
+      "model": "openai/gpt-5.5-fast",
+      "variant": "high",
+      "reasoningEffort": "high",
+      "temperature": 0.02,
+      "textVerbosity": "medium",
+      "description": "Plannotator-style critique lane for long ULM plans. It finds missing questions, lane gaps, report gaps, and ROE/safety concerns without replacing native Build, Plan, or operation_plan."
+    },
+    "recon": {
+      "model": "openai/gpt-5.4-mini-fast",
+      "reasoningEffort": "medium",
+      "temperature": 0,
+      "textVerbosity": "medium",
+      "description": "Reconnaissance, inventory, passive discovery, and low-risk enumeration."
+    },
+    "person-recon": {
+      "model": "openai/gpt-5.4-mini-fast",
+      "reasoningEffort": "medium",
+      "temperature": 0,
+      "textVerbosity": "medium",
+      "description": "Authorized public K-12 people and role profiling for access, workflow, and identity graph context."
+    },
+    "attack-map": {
+      "model": "openai/gpt-5.5-fast",
+      "variant": "high",
+      "reasoningEffort": "high",
+      "temperature": 0.04,
+      "textVerbosity": "medium",
+      "description": "Attack-path mapping, validation queue design, and blast-radius prioritization from recorded evidence."
+    },
+    "evidence": {
+      "model": "openai/gpt-5.4-mini-fast",
+      "reasoningEffort": "medium",
+      "temperature": 0,
+      "textVerbosity": "medium",
+      "description": "Evidence normalization, artifact summarization, and source-to-finding traceability."
+    },
+    "validator": {
+      "model": "openai/gpt-5.5-fast",
+      "variant": "xhigh",
+      "reasoningEffort": "xhigh",
+      "temperature": 0.03,
+      "textVerbosity": "medium",
+      "description": "High-confidence validation, exploit reproducibility review, and false-positive reduction."
+    },
+    "report-writer": {
+      "model": "openai/gpt-5.5-fast",
+      "variant": "high",
+      "reasoningEffort": "high",
+      "temperature": 0.08,
+      "textVerbosity": "medium",
+      "description": "Dense report drafting, finding synthesis, artifact handoff, and final readiness checks."
+    },
+    "report-reviewer": {
+      "model": "openai/gpt-5.5-fast",
+      "variant": "xhigh",
+      "reasoningEffort": "xhigh",
+      "temperature": 0.03,
+      "textVerbosity": "medium",
+      "description": "Adversarial report QA for sparse sections, unsupported claims, missing evidence, and final handoff blockers."
+    },
+    "backend-architect": {
+      "model": "openai/gpt-5.5-fast",
+      "variant": "high",
+      "reasoningEffort": "high",
+      "temperature": 0.04,
+      "textVerbosity": "medium",
+      "description": "Backend architecture, data model, API contracts, auth, authorization, evidence storage, reliability, and test strategy."
+    },
+    "backend-builder": {
+      "model": "openai/gpt-5.5-fast",
+      "variant": "medium",
+      "reasoningEffort": "medium",
+      "temperature": 0.08,
+      "textVerbosity": "medium",
+      "description": "Backend/API/data implementation from an approved architecture, including tests and integration wiring."
+    },
+    "frontend-taste": {
+      "model": "opencode-go/kimi-k2.6",
+      "temperature": 0.35,
+      "textVerbosity": "medium",
+      "description": "UI/UX specs, visual hierarchy, interaction design, and operator dashboard taste."
+    },
+    "frontend-builder": {
+      "model": "opencode-go/kimi-k2.6",
+      "temperature": 0.25,
+      "textVerbosity": "medium",
+      "description": "Frontend implementation from an approved UI spec, with responsive states and accessibility."
+    },
+    "product-taste-pass": {
+      "model": "github-copilot/gemini-3.1-pro-preview",
+      "temperature": 0.45,
+      "textVerbosity": "medium",
+      "tools": {
+        "read": true,
+        "glob": true,
+        "grep": true,
+        "list": false,
+        "bash": false,
+        "edit": false,
+        "webfetch": false,
+        "websearch": false,
+        "task": false,
+        "skill": false
+      },
+      "fallback_models": [
+        "openai/gpt-5.5-fast"
+      ],
+      "is_unstable_agent": true,
+      "description": "Gemini semantic/product taste pass for audience fit, claims, wording, and operator UX sanity before UI build."
+    },
+    "human-taste-review": {
+      "model": "claude-code/claude-sonnet-4-6",
+      "temperature": 0.35,
+      "textVerbosity": "medium",
+      "maxTokens": 1800,
+      "fallback_models": [
+        "github-copilot/gemini-3.1-pro-preview"
+      ],
+      "is_unstable_agent": true,
+      "description": "Sparse optional Claude review for human feel, copy tone, product coherence, and emotional UX. Do not use for coding."
+    },
+    "verification-court": {
+      "model": "openai/gpt-5.5-fast",
+      "variant": "high",
+      "reasoningEffort": "high",
+      "temperature": 0.03,
+      "textVerbosity": "medium",
+      "description": "Final technical review for bugs, false confidence, missing evidence, and bad handoff claims."
+    },
+    "xhigh-court": {
+      "model": "openai/gpt-5.5-fast",
+      "variant": "xhigh",
+      "reasoningEffort": "xhigh",
+      "temperature": 0.03,
+      "textVerbosity": "medium",
+      "description": "Emergency review lane for high-risk security, auth, evidence, or architecture failures."
+    },
+    "test-coverage": {
+      "model": "openai/gpt-5.4-mini-fast",
+      "temperature": 0,
+      "textVerbosity": "medium",
+      "fallback_models": [
+        {
+          "model": "openai/gpt-5.5-fast",
+          "variant": "medium",
+          "reasoningEffort": "medium"
+        }
+      ],
+      "description": "Coverage mapping and repetitive test work. Escalate strategy and review to GPT-5.5."
+    }
+  },
+  "background_task": {
+    "defaultConcurrency": 10,
+    "staleTimeoutMs": 300000,
+    "providerConcurrency": {
+      "openai": 8,
+      "github-copilot": 4,
+      "opencode-go": 6,
+      "claude-code": 1
+    },
+    "modelConcurrency": {
+      "openai/gpt-5.5-fast": 4,
+      "openai/gpt-5.4-mini-fast": 10,
+      "github-copilot/gemini-3.1-pro-preview": 4,
+      "opencode-go/kimi-k2.6": 4,
+      "opencode-go/glm-5.1": 2,
+      "claude-code/claude-sonnet-4-6": 1
+    }
+  },
+  "runtime_fallback": {
+    "enabled": true,
+    "retry_on_errors": [
+      400,
+      429,
+      503,
+      529
+    ],
+    "max_fallback_attempts": 3,
+    "cooldown_seconds": 45,
+    "timeout_seconds": 30,
+    "notify_on_fallback": true
+  },
+  "experimental": {
+    "aggressive_truncation": true,
+    "auto_resume": true,
+    "task_system": true
+  },
+  "tmux": {
+    "enabled": true,
+    "layout": "main-vertical",
+    "main_pane_size": 60,
+    "main_pane_min_width": 120,
+    "agent_pane_min_width": 40
+  }
+}

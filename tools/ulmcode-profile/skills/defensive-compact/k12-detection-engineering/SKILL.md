@@ -1,6 +1,6 @@
 ---
 name: k12-detection-engineering
-description: Assess SOC detection coverage against likely attacker behavior, reduce alert noise, and produce focused tuning recommendations.
+description: Use for assessing SOC detection coverage against likely attacker behavior, reducing alert noise, and producing focused tuning recommendations.
 ---
 
 # K-12 Detection Engineering
@@ -29,3 +29,8 @@ Measure detection coverage quality and identify practical SOC tuning opportuniti
 - `references/detection-coverage-matrix.md`
 - `references/alert-triage-playbook.md`
 - `references/log-source-checklist.md`
+
+## Durable ULM Tools
+- Use `operation_status` to read the operation ledger before analysis.
+- Use `evidence_record` for source artifacts and `finding_record` for validated security claims.
+- Use `runtime_summary` for handoff context when work spans sessions.

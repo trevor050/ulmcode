@@ -1,0 +1,180 @@
+{
+  "id": "k12-family-messaging-cross-class-broadcast",
+  "operationID": "k12-family-messaging-cross-class-broadcast",
+  "objective": "Replay a synthetic authorized K-12 family messaging assessment where a teacher can send guardian broadcasts to another class by changing the class id.",
+  "assumptions": [
+    "The lab uses synthetic evidence only.",
+    "No real guardian messaging provider is contacted.",
+    "Classes, teachers, guardians, and messages are intentionally fake."
+  ],
+  "plan": {
+    "phases": [
+      {
+        "stage": "recon",
+        "objective": "Map messaging authorization boundaries and class ownership.",
+        "actions": [
+          "List the synthetic teacher's assigned classes",
+          "Review the family messaging policy endpoint",
+          "Record the target class outbox before broadcast"
+        ],
+        "successCriteria": [
+          "Teacher scope, policy, and baseline outbox evidence are recorded"
+        ],
+        "subagents": [
+          "recon"
+        ],
+        "noSubagents": [
+          "student and guardian impact interpretation stays with the primary operator"
+        ]
+      },
+      {
+        "stage": "validation",
+        "objective": "Validate client-supplied class id can target another class.",
+        "actions": [
+          "Send a synthetic family broadcast as teacher-north to south-algebra",
+          "Confirm the API accepts the cross-class broadcast",
+          "Fetch the south-algebra outbox to prove guardian message delivery"
+        ],
+        "successCriteria": [
+          "A report-ready finding cites policy, broadcast acceptance, and outbox evidence"
+        ],
+        "subagents": [
+          "validator",
+          "evidence"
+        ],
+        "noSubagents": [
+          "final family-communications risk wording stays with the primary operator"
+        ]
+      },
+      {
+        "stage": "reporting",
+        "objective": "Render final handoff artifacts.",
+        "actions": [
+          "Run report_lint",
+          "Run report_render",
+          "Run runtime_summary"
+        ],
+        "successCriteria": [
+          "Final handoff lint passes"
+        ],
+        "subagents": [
+          "report-writer"
+        ],
+        "noSubagents": [
+          "client-facing delivery approval is manual"
+        ]
+      }
+    ],
+    "reportingCloseout": [
+      "Run report_lint",
+      "Run report_render",
+      "Run runtime_summary"
+    ]
+  },
+  "report": {
+    "targetPages": 3,
+    "minOutlineWordsPerPage": 80
+  },
+  "evidence": [
+    {
+      "evidenceID": "ev-messaging-policy",
+      "title": "Synthetic family messaging policy response",
+      "kind": "http_response",
+      "summary": "The messaging policy trusts the client-supplied class id and does not enforce teacher ownership.",
+      "url": "http://127.0.0.1/api/messages/policy",
+      "content": "{\"teacherOwnershipCheck\":\"client_hint\",\"guardianBroadcastAuth\":\"classIdOnly\",\"labFinding\":\"messaging_class_authorization_gap\"}"
+    },
+    {
+      "evidenceID": "ev-cross-class-broadcast-accepted",
+      "title": "Synthetic cross-class family broadcast accepted",
+      "kind": "http_response",
+      "summary": "teacher-north successfully sent a guardian broadcast to south-algebra, a class outside their assignment.",
+      "url": "http://127.0.0.1/api/messages/broadcast",
+      "content": "{\"accepted\":true,\"teacherId\":\"teacher-north\",\"classId\":\"south-algebra\",\"authorizedByOwnership\":false,\"guardianRecipients\":2,\"labFinding\":\"cross_class_family_broadcast\"}"
+    },
+    {
+      "evidenceID": "ev-south-outbox-mutated",
+      "title": "Synthetic south-algebra guardian outbox after broadcast",
+      "kind": "http_response",
+      "summary": "The south-algebra guardian outbox contains the message sent by the unauthorized teacher.",
+      "url": "http://127.0.0.1/api/messages/outbox?classId=south-algebra",
+      "content": "{\"classId\":\"south-algebra\",\"messages\":[{\"sentBy\":\"teacher-north\",\"body\":\"forged guardian alert\"}],\"labFinding\":\"guardian_message_delivered_cross_class\"}"
+    }
+  ],
+  "findings": [
+    {
+      "findingID": "family-messaging-cross-class-broadcast",
+      "title": "Family messaging accepts cross-class guardian broadcasts",
+      "state": "report_ready",
+      "severity": "high",
+      "confidence": 0.9,
+      "affectedAssets": [
+        "Family messaging API",
+        "Guardian notification workflow",
+        "Class ownership authorization"
+      ],
+      "evidence": [
+        {
+          "id": "ev-messaging-policy",
+          "path": "evidence/raw/ev-messaging-policy.txt"
+        },
+        {
+          "id": "ev-cross-class-broadcast-accepted",
+          "path": "evidence/raw/ev-cross-class-broadcast-accepted.txt"
+        },
+        {
+          "id": "ev-south-outbox-mutated",
+          "path": "evidence/raw/ev-south-outbox-mutated.txt"
+        }
+      ],
+      "description": "The synthetic family messaging endpoint authorizes broadcasts based on a client-supplied class id without verifying that the teacher owns the target class.",
+      "impact": "A teacher or compromised teacher session could send messages to guardians outside their assigned class, causing privacy, safety, and trust issues in school communications.",
+      "remediation": "Authorize family broadcasts server-side against teacher-class assignments, ignore client ownership hints, log cross-scope attempts, and require elevated approval for school-wide or cross-class sends."
+    }
+  ],
+  "runtime": {
+    "sessionMessages": [
+      {
+        "role": "assistant",
+        "agent": "pentest",
+        "modelID": "gpt-5.5",
+        "providerID": "openai",
+        "cost": 0.46,
+        "tokens": {
+          "input": 1260,
+          "output": 590,
+          "reasoning": 350,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "role": "assistant",
+        "agent": "validator",
+        "modelID": "gpt-5.4-mini",
+        "providerID": "openai",
+        "cost": 0.13,
+        "tokens": {
+          "input": 660,
+          "output": 300,
+          "reasoning": 130,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      }
+    ]
+  },
+  "expected": {
+    "reportableFindings": 1,
+    "evidence": 3,
+    "dashboardIncludes": [
+      "# k12-family-messaging-cross-class-broadcast - handoff/complete",
+      "risk: high",
+      "findings: 1 total"
+    ]
+  }
+}

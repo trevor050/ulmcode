@@ -1,7 +1,8 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { FetchHttpClient } from "effect/unstable/http"
-import { expect } from "bun:test"
+import { expect, test } from "bun:test"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
+import fs from "fs/promises"
 import path from "path"
 import { fileURLToPath } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -38,6 +39,7 @@ import { SystemPrompt } from "../../src/session/system"
 import { Shell } from "../../src/shell/shell"
 import { Snapshot } from "../../src/snapshot"
 import { ToolRegistry } from "@/tool/registry"
+import { BackgroundJob } from "@/background/job"
 import { Truncate } from "@/tool/truncate"
 import * as Log from "@opencode-ai/core/util/log"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -180,6 +182,7 @@ function makeHttp() {
     Layer.provide(CrossSpawnSpawner.defaultLayer),
     Layer.provide(Ripgrep.defaultLayer),
     Layer.provide(Format.defaultLayer),
+    Layer.provide(BackgroundJob.defaultLayer),
     Layer.provideMerge(todo),
     Layer.provideMerge(question),
     Layer.provideMerge(deps),
@@ -237,6 +240,17 @@ const cfg = {
     },
   },
 }
+
+test("static prompts preserve compact ULM operation context rules", async () => {
+  const root = path.join(__dirname, "../..")
+  const defaultPrompt = await fs.readFile(path.join(root, "src", "session", "prompt", "default.txt"), "utf8")
+  const planPrompt = await fs.readFile(path.join(root, "src", "session", "prompt", "plan.txt"), "utf8")
+
+  expect(defaultPrompt).toContain("<ulm_operation_context>")
+  expect(defaultPrompt).toContain("supervised/background execution")
+  expect(planPrompt).toContain("<ulm_operation_context>")
+  expect(planPrompt).toContain("avoid dumping the full tool catalog")
+})
 
 function providerCfg(url: string) {
   return {
@@ -341,6 +355,23 @@ it.live("loop exits immediately when last assistant has stop finish", () =>
       const result = yield* prompt.loop({ sessionID: chat.id })
       expect(result.info.role).toBe("assistant")
       if (result.info.role === "assistant") expect(result.info.finish).toBe("stop")
+      expect(yield* llm.calls).toBe(0)
+    }),
+    { git: true, config: providerCfg },
+  ),
+)
+
+it.live("loop exits immediately when last assistant has other finish without tool calls", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ llm }) {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      yield* seed(chat.id, { finish: "other" })
+
+      const result = yield* prompt.loop({ sessionID: chat.id })
+      expect(result.info.role).toBe("assistant")
+      if (result.info.role === "assistant") expect(result.info.finish).toBe("other")
       expect(yield* llm.calls).toBe(0)
     }),
     { git: true, config: providerCfg },
@@ -503,6 +534,36 @@ it.live("loop continues when finish is tool-calls", () =>
         parts: [{ type: "text", text: "hello" }],
       })
       yield* llm.tool("first", { value: "first" })
+      yield* llm.text("second")
+
+      const result = yield* prompt.loop({ sessionID: session.id })
+      expect(yield* llm.calls).toBe(2)
+      expect(result.info.role).toBe("assistant")
+      if (result.info.role === "assistant") {
+        expect(result.parts.some((part) => part.type === "text" && part.text === "second")).toBe(true)
+        expect(result.info.finish).toBe("stop")
+      }
+    }),
+    { git: true, config: providerCfg },
+  ),
+)
+
+it.live("loop continues when finish is other after tool activity", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ llm }) {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({
+        title: "Pinned",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+      yield* llm.push(reply().tool("first", { value: "first" }).finish("other"))
       yield* llm.text("second")
 
       const result = yield* prompt.loop({ sessionID: session.id })
@@ -859,6 +920,43 @@ it.live(
 )
 
 it.live(
+  "cancel propagates from slash command subtask to child session",
+  () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ llm }) {
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const status = yield* SessionStatus.Service
+        const chat = yield* sessions.create({ title: "Pinned" })
+        yield* llm.hang
+        const msg = yield* user(chat.id, "hello")
+        yield* addSubtask(chat.id, msg.id)
+
+        const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+        yield* llm.wait(1)
+
+        const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+        const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
+        const tool = taskMsg ? toolPart(taskMsg.parts) : undefined
+        const sessionID = tool?.state.status === "running" ? tool.state.metadata?.sessionId : undefined
+        expect(typeof sessionID).toBe("string")
+        if (typeof sessionID !== "string") throw new Error("missing child session id")
+        const childID = SessionID.make(sessionID)
+        expect((yield* status.get(childID)).type).toBe("busy")
+
+        yield* prompt.cancel(chat.id)
+        const exit = yield* Fiber.await(fiber)
+        expect(Exit.isSuccess(exit)).toBe(true)
+
+        expect((yield* status.get(chat.id)).type).toBe("idle")
+        expect((yield* status.get(childID)).type).toBe("idle")
+      }),
+      { git: true, config: providerCfg },
+    ),
+  10_000,
+)
+
+it.live(
   "cancel with queued callers resolves all cleanly",
   () =>
     provideTmpdirServer(
@@ -1098,6 +1196,7 @@ unix("shell captures stdout and stderr in completed tool output", () =>
       }),
     { git: true, config: cfg },
   ),
+  10_000,
 )
 
 unix("shell completes a fast command on the preferred shell", () =>
@@ -1122,6 +1221,7 @@ unix("shell completes a fast command on the preferred shell", () =>
       }),
     { git: true, config: cfg },
   ),
+  10_000,
 )
 
 unix(
