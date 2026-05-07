@@ -40,6 +40,27 @@ describe("ULM operation goal", () => {
     expect(read.goal?.status).toBe("active")
   })
 
+  test("generates a readable unique operation id when create omits one", async () => {
+    await using dir = await tmpdir({ git: true })
+
+    const first = await createOperationGoal(
+      dir.path,
+      { objective: "Authorized overnight district network assessment" },
+      { now: "2026-05-06T00:00:00.000Z" },
+    )
+    const second = await createOperationGoal(
+      dir.path,
+      { objective: "Authorized follow-up district network assessment" },
+      { now: "2026-05-06T00:01:00.000Z" },
+    )
+
+    expect(first.operationID).toMatch(/^[a-z]+-[a-z]+(-[a-z]+)?-[a-f0-9]{6}$/)
+    expect(second.operationID).toMatch(/^[a-z]+-[a-z]+(-[a-z]+)?-[a-f0-9]{6}$/)
+    expect(second.operationID).not.toBe(first.operationID)
+    expect(first.goal.operationID).toBe(first.operationID)
+    expect(await fs.readFile(first.files.json, "utf8")).toContain(`"operationID": "${first.operationID}"`)
+  })
+
   test("does not overwrite an active goal through create", async () => {
     await using dir = await tmpdir({ git: true })
     await createOperationGoal(

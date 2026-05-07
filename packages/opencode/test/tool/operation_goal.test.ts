@@ -54,6 +54,32 @@ describe("tool.operation_goal", () => {
     })
   })
 
+  test("creates operation goals with generated ids", async () => {
+    await using dir = await tmpdir({ git: true })
+    await provideTestInstance({
+      directory: dir.path,
+      fn: () =>
+        Effect.runPromise(
+          Effect.gen(function* () {
+            const tool = yield* OperationGoalTool
+            const def = yield* tool.init()
+            const created = yield* def.execute(
+              {
+                action: "create",
+                objective: "Authorized 20 hour district assessment",
+                targetDurationHours: 20,
+              },
+              context,
+            )
+
+            expect(created.metadata.created).toBe(true)
+            expect(created.metadata.operationID).toMatch(/^[a-z]+-[a-z]+(-[a-z]+)?-[a-f0-9]{6}$/)
+            expect(created.output).toContain(`operation_id: ${created.metadata.operationID}`)
+          }).pipe(Effect.provide(layer)),
+        ),
+    })
+  })
+
   test("reports blockers when completion artifacts are missing", async () => {
     await using dir = await tmpdir({ git: true })
     await provideTestInstance({

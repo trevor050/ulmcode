@@ -23,7 +23,7 @@ const Continuation = Schema.Struct({
 })
 
 export const Parameters = Schema.Struct({
-  operationID: Schema.String,
+  operationID: Schema.optional(Schema.String),
   action: Schema.Literals(["create", "read", "complete"]),
   objective: Schema.optional(Schema.String),
   targetDurationHours: Schema.optional(Schema.Number),
@@ -86,7 +86,9 @@ export const OperationGoalTool = Tool.define<typeof Parameters, Metadata, never>
         }
 
         if (params.action === "complete") {
-          const result = yield* Effect.tryPromise(() => completeOperationGoal(Instance.worktree, params)).pipe(Effect.orDie)
+          if (!params.operationID?.trim()) throw new Error("operationID is required when action is complete")
+          const operationID = params.operationID
+          const result = yield* Effect.tryPromise(() => completeOperationGoal(Instance.worktree, { operationID })).pipe(Effect.orDie)
           return {
             title: result.completed
               ? `Completed operation goal for ${result.operationID}`
@@ -115,7 +117,9 @@ export const OperationGoalTool = Tool.define<typeof Parameters, Metadata, never>
           }
         }
 
-        const result = yield* Effect.tryPromise(() => readOperationGoal(Instance.worktree, params.operationID)).pipe(Effect.orDie)
+        if (!params.operationID?.trim()) throw new Error("operationID is required when action is read")
+        const operationID = params.operationID
+        const result = yield* Effect.tryPromise(() => readOperationGoal(Instance.worktree, operationID)).pipe(Effect.orDie)
         return {
           title: result.goal ? `Read operation goal for ${result.operationID}` : `No operation goal for ${result.operationID}`,
           output: [

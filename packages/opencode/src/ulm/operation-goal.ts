@@ -1,5 +1,6 @@
 import fs from "fs/promises"
 import path from "path"
+import { randomInt, randomUUID } from "crypto"
 import { operationPath, slug } from "./artifact"
 
 export type OperationGoalStatus = "active" | "complete"
@@ -35,7 +36,7 @@ export type OperationGoalRecord = {
 }
 
 export type OperationGoalCreateInput = {
-  operationID: string
+  operationID?: string
   objective: string
   targetDurationHours?: number
   completionPolicy?: Partial<OperationGoalCompletionPolicy>
@@ -91,6 +92,34 @@ const defaultContinuation: OperationGoalContinuation = {
   maxRepeatedOperatorTimeoutsPerKind: 2,
 }
 
+const operationNameWords = [
+  "amber",
+  "arcade",
+  "beacon",
+  "brisk",
+  "cobalt",
+  "comet",
+  "cosmic",
+  "daring",
+  "ember",
+  "frost",
+  "glimmer",
+  "harbor",
+  "jazz",
+  "lucky",
+  "matrix",
+  "neon",
+  "orbit",
+  "pixel",
+  "quartz",
+  "rocket",
+  "signal",
+  "solar",
+  "summit",
+  "velvet",
+  "wild",
+] as const
+
 function goalFiles(worktree: string, operationID: string): OperationGoalFiles {
   const dir = path.join(operationPath(worktree, operationID), "goals")
   return {
@@ -128,6 +157,39 @@ async function readableJson(file: string) {
   if (!(await readableFile(file))) return false
   await readJson(file)
   return true
+}
+
+async function pathExists(target: string) {
+  try {
+    await fs.stat(target)
+    return true
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false
+    throw error
+  }
+}
+
+function randomOperationIDCandidate() {
+  const wordCount = randomInt(2, 4)
+  const words: string[] = []
+  while (words.length < wordCount) {
+    const word = operationNameWords[randomInt(operationNameWords.length)]
+    if (words.at(-1) !== word) words.push(word)
+  }
+  const tag = randomUUID().replaceAll("-", "").slice(0, 6)
+  return `${words.join("-")}-${tag}`
+}
+
+async function resolveOperationID(worktree: string, operationID: string | undefined) {
+  const explicit = operationID?.trim()
+  if (explicit) return slug(explicit, "operation")
+
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const candidate = randomOperationIDCandidate()
+    if (!(await pathExists(operationPath(worktree, candidate)))) return candidate
+  }
+
+  return `${randomOperationIDCandidate()}-${Date.now().toString(36)}`
 }
 
 function normalizeDuration(value: number | undefined) {
@@ -181,7 +243,7 @@ async function writeGoal(files: OperationGoalFiles, goal: OperationGoalRecord) {
   await fs.writeFile(files.markdown, goalMarkdown(goal))
 }
 
-function withDefaults(input: OperationGoalCreateInput, now: string): OperationGoalRecord {
+function withDefaults(input: OperationGoalCreateInput & { operationID: string }, now: string): OperationGoalRecord {
   const objective = input.objective.trim()
   if (!objective) throw new Error("objective is required")
   return {
@@ -201,7 +263,7 @@ export async function createOperationGoal(
   input: OperationGoalCreateInput,
   options: { now?: string } = {},
 ): Promise<OperationGoalCreateResult> {
-  const operationID = slug(input.operationID, "operation")
+  const operationID = await resolveOperationID(worktree, input.operationID)
   const files = goalFiles(worktree, operationID)
   const existing = await readJson<OperationGoalRecord>(files.json)
   if (existing?.status === "active") return { operationID, created: false, goal: existing, files }

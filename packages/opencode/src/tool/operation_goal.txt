@@ -2,10 +2,10 @@ Use this tool to create, read, or complete a durable ULM operation goal.
 
 The operation goal is the long-run objective contract. It stores the operator's objective, target duration, completion requirements, and continuation policy under `.ulmcode/operations/<operation-id>/goals/`.
 
-Use `action="create"` near the start of any long-running pentest operation, after the operator has provided the authorized objective and expected runtime. For overnight work, include `targetDurationHours`.
+Use `action="create"` near the start of any long-running pentest operation, after the operator has provided the authorized objective and expected runtime. For overnight work, include `targetDurationHours`. `operationID` is optional for create; if omitted, ULMCode generates a readable two- or three-word id with a short uniqueness tag.
 
-Use `action="read"` after compaction, resume, or when a supervisor lane needs to verify the current objective.
+Use `action="read"` after compaction, resume, or when a supervisor lane needs to verify the current objective. `operationID` is required.
 
-Use `action="complete"` only after the operation has real handoff artifacts. Completion is evidence-gated: the tool checks runtime summary, final render manifest, operation audit, and the required stage gate before marking the goal complete. If artifacts are missing, it writes `goals/completion-blockers.json` and keeps the goal active.
+Use `action="complete"` only after the operation has real handoff artifacts. `operationID` is required. Completion is evidence-gated: the tool checks runtime summary, final render manifest, operation audit, and the required stage gate before marking the goal complete. If artifacts are missing, it writes `goals/completion-blockers.json` and keeps the goal active.
 
 Do not treat chat text, todo state, or a promise tag as goal completion.

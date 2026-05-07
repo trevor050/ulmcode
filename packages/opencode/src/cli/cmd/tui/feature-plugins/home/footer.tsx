@@ -1,6 +1,9 @@
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
-import { createMemo, Match, Show, Switch } from "solid-js"
+import path from "path"
+import { createMemo, createSignal, Match, onCleanup, onMount, Show, Switch } from "solid-js"
 import { Global } from "@opencode-ai/core/global"
+import { activeOperationGoal } from "@/ulm/operation-context"
+import { operationPath } from "@/ulm/artifact"
 
 const id = "internal:home-footer"
 
@@ -44,6 +47,36 @@ function Mcp(props: { api: TuiPluginApi }) {
   )
 }
 
+function OperationFile(props: { api: TuiPluginApi }) {
+  const theme = () => props.api.theme.current
+  const [file, setFile] = createSignal<string | undefined>()
+
+  async function refresh() {
+    const root = props.api.state.path.worktree || props.api.state.path.directory || process.cwd()
+    const operation = await activeOperationGoal(root)
+    const next = operation
+      ? path.join(operationPath(operation.worktree, operation.operationID), "goals", "operation-goal.json")
+      : undefined
+    setFile(next)
+  }
+
+  onMount(() => {
+    void refresh()
+    const interval = setInterval(() => void refresh(), 5_000)
+    onCleanup(() => clearInterval(interval))
+  })
+
+  return (
+    <Show when={file()}>
+      {(value) => (
+        <text fg={theme().textMuted}>
+          op: <span style={{ fg: theme().text }}>{value()}</span>
+        </text>
+      )}
+    </Show>
+  )
+}
+
 function Version(props: { api: TuiPluginApi }) {
   const theme = () => props.api.theme.current
 
@@ -67,6 +100,7 @@ function View(props: { api: TuiPluginApi }) {
       gap={2}
     >
       <Directory api={props.api} />
+      <OperationFile api={props.api} />
       <Mcp api={props.api} />
       <box flexGrow={1} />
       <Version api={props.api} />
