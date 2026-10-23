@@ -55,4 +55,12 @@ export function runtimeEnv(env: Record<string, string | undefined>, paths: Profi
   return result
 }
 
+export function applyRuntimeEnv(target: Record<string, string | undefined>, filtered: Record<string, string | undefined>) {
+  for (const key of Object.keys(target)) if (!(key in filtered)) delete target[key]
+  for (const [key, value] of Object.entries(filtered)) {
+    if (value === undefined) delete target[key]
+    else target[key] = value
+  }
+}
+
 export * as Profile from "./profile.js"

@@ -17,7 +17,7 @@ type WorkerSpec = {
 }
 type Result = { status: "succeeded" | "failed" | "interrupted"; summary: string; artifactRefs: Array<{ path: string; mediaType: string }> }
 type CommandIdentity = { pid: number; processStart: string; processGroupID: number; watchdogPID: number; watchdogStart: string; deadlineAt: string }
-type GuardSpec = { operationID: string; executionID: string; attempt: number; commandPID: number; commandStart: string; processGroupID: number; workerPID: number; workerStart: string; deadlineAt: string; killGraceMs: number; readyFile: string; ackFile: string; resultFile: string; workerResultFile: string }
+type GuardSpec = { operationID: string; executionID: string; attempt: number; commandPID: number; commandStart: string; processGroupID: number; workerPID: number; workerStart: string; deadlineAt: string; killGraceMs: number; readyFile: string; ackFile: string; monitorFile: string; resultFile: string; workerResultFile: string }
 
 if (process.argv[2] === "--guard") {
   await runGuard(process.argv[3]!)
@@ -44,6 +44,7 @@ const commandIdentityFile = path.join(spec.privateDirectory, `${commandID}.comma
 const guardSpecFile = path.join(spec.privateDirectory, `${commandID}.guard.json`)
 const guardReadyFile = path.join(spec.privateDirectory, `${commandID}.guard.ready`)
 const guardAckFile = path.join(spec.privateDirectory, `${commandID}.guard.ack`)
+const guardMonitorFile = path.join(spec.privateDirectory, `${commandID}.guard.monitoring`)
 const guardResultFile = path.join(spec.privateDirectory, `${commandID}.guard.result.json`)
 let interrupted = false
 let timedOut = false
@@ -75,7 +76,7 @@ try {
   const workerInfo = await processInfo(process.pid)
   if (!workerInfo) throw new Error("worker process identity could not be established")
   const deadlineAt = new Date(Date.now() + spec.timeoutMs).toISOString()
-  const guardSpec: GuardSpec = { operationID: spec.operationID, executionID: spec.executionID, attempt: spec.attempt, commandPID: child.pid, commandStart: commandInfo.processStart, processGroupID: commandInfo.processGroupID, workerPID: process.pid, workerStart: workerInfo.processStart, deadlineAt, killGraceMs: 500, readyFile: guardReadyFile, ackFile: guardAckFile, resultFile: guardResultFile, workerResultFile: resultFile }
+  const guardSpec: GuardSpec = { operationID: spec.operationID, executionID: spec.executionID, attempt: spec.attempt, commandPID: child.pid, commandStart: commandInfo.processStart, processGroupID: commandInfo.processGroupID, workerPID: process.pid, workerStart: workerInfo.processStart, deadlineAt, killGraceMs: 500, readyFile: guardReadyFile, ackFile: guardAckFile, monitorFile: guardMonitorFile, resultFile: guardResultFile, workerResultFile: resultFile }
   await writePrivate(guardSpecFile, JSON.stringify(guardSpec))
   Bun.spawn([process.execPath, import.meta.path, "--guard", guardSpecFile], { cwd: directory, env: process.env, stdio: ["ignore", "ignore", "ignore"], detached: true })
   const guardReadyDeadline = Date.now() + 3000
@@ -86,6 +87,9 @@ try {
   if (!guardInfo) throw new Error("timeout guard identity could not be established")
   await writePrivate(commandIdentityFile, JSON.stringify({ pid: child.pid, processStart: commandInfo.processStart, processGroupID: commandInfo.processGroupID, watchdogPID: guardPID, watchdogStart: guardInfo.processStart, deadlineAt } satisfies CommandIdentity))
   await writePrivate(guardAckFile, "ready")
+  const monitoringDeadline = Date.now() + 3000
+  while (Date.now() < monitoringDeadline && !(await Bun.file(guardMonitorFile).exists())) await Bun.sleep(10)
+  if (!(await Bun.file(guardMonitorFile).exists())) throw new Error("independent timeout guard did not enter command monitoring")
   await writePrivate(readyFile, String(process.pid))
   if (interrupted) terminate()
   if (!(child.stdout instanceof ReadableStream) || !(child.stderr instanceof ReadableStream)) throw new Error("command output pipes were not created")
@@ -195,8 +199,13 @@ async function runGuard(file: string) {
   while (Date.now() < ackDeadline && !(await Bun.file(spec.ackFile).exists())) await Bun.sleep(10)
   if (!(await Bun.file(spec.ackFile).exists())) return
   const deadline = Date.parse(spec.deadlineAt)
+  let monitoringConfirmed = false
   while (true) {
     const members = await processGroupMembers(spec.processGroupID)
+    if (!monitoringConfirmed) {
+      await writePrivate(spec.monitorFile, "monitoring")
+      monitoringConfirmed = true
+    }
     if (!members.length) {
       await writeGuardResultIfWorkerGone(spec, interrupted ? "interrupted" : "failed", interrupted ? "command was interrupted after worker loss; output capture was unavailable" : "worker exited before recording a command result; output capture was unavailable")
       return

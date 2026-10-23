@@ -470,6 +470,14 @@ export class OperationEngine {
   async normalizeEvidence(id: string, now = new Date()) {
     const record = await this.#require(id)
     const directory = this.#store.directory(record.id)
+    const sources = [...record.artifacts, ...record.executions.flatMap((execution) => execution.artifactRefs)]
+      .filter((reference) => reference.path !== "evidence/normalized.json" && !reference.path.startsWith("deliverables/final/"))
+    for (const reference of sources) {
+      const actual = fileRef(directory, reference)
+      if (actual.sha256 !== reference.sha256 || (reference.size !== undefined && actual.size !== reference.size)) {
+        throw new OperationConflictError(`registered evidence source changed; register new bytes at a new path: ${reference.path}`)
+      }
+    }
     const evidence = await normalizeEvidence(record, directory)
     const normalizedFile = fileRef(directory, { path: "evidence/normalized.json", mediaType: "application/json" })
     const priorFile = record.artifacts.find((artifact) => artifact.path === normalizedFile.path)
@@ -502,9 +510,11 @@ export class OperationEngine {
       const seen = new Set<string>()
       const validated = artifacts.map((artifact) => {
         assertPublicArtifactPath(artifact)
-        if (seen.has(artifact.path)) throw new Error(`duplicate artifact path: ${artifact.path}`)
-        seen.add(artifact.path)
-        return fileRef(directory, artifact)
+        const resolved = fileRef(directory, artifact)
+        assertPublicArtifactPath({ ...artifact, path: resolved.path })
+        if (seen.has(resolved.path)) throw new Error(`duplicate canonical artifact path: ${resolved.path}`)
+        seen.add(resolved.path)
+        return resolved
       })
       for (const item of validated) {
         const prior = record.artifacts.find((artifact) => artifact.path === item.path)
@@ -551,6 +561,19 @@ export class OperationEngine {
       const file = path.join(directory, "findings", "findings.json")
       ensureRealOperationDirectory(directory, path.dirname(file))
       const previous = existsSync(file) ? readFileSync(file) : undefined
+      const registeredFindings = record.artifacts.find((artifact) => artifact.path === "findings/findings.json")
+      if (previous && !registeredFindings) {
+        throw new OperationConflictError("an existing findings artifact is unregistered; explicit recovery is required before updating it")
+      }
+      if (!previous && registeredFindings) {
+        throw new OperationConflictError("the registered findings artifact is missing; explicit recovery is required before updating it")
+      }
+      if (previous && registeredFindings) {
+        const actual = fileRef(directory, registeredFindings)
+        if (actual.sha256 !== registeredFindings.sha256 || (registeredFindings.size !== undefined && actual.size !== registeredFindings.size)) {
+          throw new OperationConflictError("registered findings source changed; restore it or use explicit recovery before updating it")
+        }
+      }
       const priorDocument = previous
         ? findingDocumentSchema.parse(JSON.parse(previous.toString("utf8")))
         : undefined
@@ -558,6 +581,10 @@ export class OperationEngine {
       const submittedIDs = new Set(parsed.findings.map((finding) => finding.id))
       const retainedRejected = priorDocument?.findings.filter((finding) => !submittedIDs.has(finding.id)) ?? []
       for (const prior of priorDocument?.findings ?? []) {
+        if (
+          (prior.state === "validated" || prior.state === "report_ready" || prior.state === "rejected") &&
+          (!prior.reviewedBy || !prior.validationRationale || ((prior.state === "validated" || prior.state === "report_ready") && !prior.evidenceIDs.length))
+        ) throw new OperationConflictError(`prior finding ${prior.id} has an incomplete review record`)
         const submitted = parsed.findings.find((finding) => finding.id === prior.id)
         if (!submitted && prior.state !== "rejected") {
           throw new OperationConflictError(`finding ${prior.id} must remain in canonical history until explicitly rejected`)
@@ -568,8 +595,8 @@ export class OperationEngine {
       }
       const findings = [
         ...parsed.findings.map((finding) => ({
-        ...finding,
-        ...(parsed.reviewedBy ? { reviewedBy: parsed.reviewedBy } : {}),
+          ...finding,
+          ...(parsed.reviewedBy ? { reviewedBy: parsed.reviewedBy } : {}),
         })),
         ...retainedRejected,
       ]

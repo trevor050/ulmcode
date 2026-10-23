@@ -84,6 +84,30 @@ describe("supervised command adapter", () => {
     }
   })
 
+  test("keeps the watchdog alive after a successful leader exits with an ignored descendant", async () => {
+    const marker = path.join(os.tmpdir(), "ulm-command-success-descendant-" + crypto.randomUUID())
+    const data = await fixture("const child=require('node:child_process').spawn(process.execPath,['-e','process.on(\"SIGTERM\",()=>{});require(\"node:fs\").writeFileSync(process.argv[1],String(process.pid));setInterval(()=>{},30000)',process.argv[2]],{stdio:'ignore'}); child.unref()", { timeoutMs: 1200, variables: { marker } })
+    await data.adapter.launch(data.request)
+    const receipt = data.adapter.receipt(data.request)
+    const markerDeadline = Date.now() + 3000
+    while (Date.now() < markerDeadline && !(await Bun.file(marker).exists())) await Bun.sleep(10)
+    expect(await Bun.file(marker).exists()).toBe(true)
+    const commandPath = path.join(data.root, ".ulmcode", "supervision", data.request.operationID, `${data.request.executionID}-attempt-1.command.json`)
+    const command = JSON.parse(await readFile(commandPath, "utf8")) as { processGroupID: number; deadlineAt: string }
+    const result = await waitFor(data.adapter, receipt)
+    expect(result.status, result.summary).toBe("succeeded")
+    let processGroupExists = true
+    try { process.kill(-command.processGroupID, 0) } catch (error) { processGroupExists = (error as NodeJS.ErrnoException).code !== "ESRCH" }
+    expect(processGroupExists).toBe(true)
+    const cleanupDeadline = Date.parse(command.deadlineAt) + 2000
+    while (Date.now() < cleanupDeadline) {
+      try { process.kill(-command.processGroupID, 0) }
+      catch (error) { if ((error as NodeJS.ErrnoException).code === "ESRCH") { processGroupExists = false; break } }
+      await Bun.sleep(20)
+    }
+    expect(processGroupExists).toBe(false)
+  })
+
   test("captures completion, survives adapter restart, and does not dispatch twice", async () => {
     const marker = path.join(os.tmpdir(), "ulm-command-marker-" + crypto.randomUUID())
     const fixtureData = await fixture("require('node:fs').appendFileSync(process.argv[2], 'x'); process.stdout.write('local complete')", { variables: { marker } })

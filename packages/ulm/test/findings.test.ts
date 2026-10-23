@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, symlink } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, test } from "bun:test"
@@ -46,6 +46,16 @@ const baseFinding = {
 }
 
 describe("operation artifact and finding registration", () => {
+  test("does not adopt an unregistered findings file", async () => {
+    const { store, engine, operation } = await fixture("findings-unregistered")
+    const findingsFile = path.join(store.directory(operation.id), "findings/findings.json")
+    await mkdir(path.dirname(findingsFile), { recursive: true })
+    await Bun.write(findingsFile, JSON.stringify({ operationID: operation.id, findings: [baseFinding] }))
+    await expect(engine.recordFindings(operation.id, { findings: [baseFinding] })).rejects.toThrow("existing findings artifact is unregistered")
+    expect((await store.get(operation.id))?.revision).toBe(operation.revision)
+    await store.close()
+  })
+
   test("registers immutable evidence by hash and exact retry does not revise the operation", async () => {
     const { store, engine, operation } = await fixture("artifact-register")
     const sourcePath = path.join(store.directory(operation.id), "evidence/source.json")
@@ -55,8 +65,13 @@ describe("operation artifact and finding registration", () => {
     expect((await engine.recordArtifacts(operation.id, [{ path: "evidence/source.json", mediaType: "application/json" }])).revision).toBe(registered.revision)
     await Bun.write(sourcePath, "changed source bytes\n")
     await expect(engine.recordArtifacts(operation.id, [{ path: "evidence/source.json", mediaType: "application/json" }])).rejects.toBeInstanceOf(OperationConflictError)
+    await expect(engine.normalizeEvidence(operation.id)).rejects.toThrow("registered evidence source changed")
+    expect(await Bun.file(path.join(store.directory(operation.id), "evidence/normalized.json")).exists()).toBe(false)
     await expect(engine.recordArtifacts(operation.id, [{ path: "findings/findings.json", mediaType: "application/json" }])).rejects.toThrow("dedicated engine methods")
     await expect(engine.recordArtifacts(operation.id, [{ path: "evidence/../findings/findings.json", mediaType: "application/json" }])).rejects.toThrow("normalized relative paths")
+    await mkdir(path.join(store.directory(operation.id), "evidence"), { recursive: true })
+    await symlink("..", path.join(store.directory(operation.id), "evidence", "internal-alias"))
+    await expect(engine.recordArtifacts(operation.id, [{ path: "evidence/internal-alias/operation.db" }])).rejects.toThrow("public artifacts must be under")
     expect((await store.get(operation.id))?.revision).toBe(registered.revision)
     await store.close()
   })
@@ -75,16 +90,24 @@ describe("operation artifact and finding registration", () => {
 
     const candidate = await engine.recordFindings(operation.id, { findings: [baseFinding] })
     const candidateRevision = candidate.revision
-    const candidateDocument = JSON.parse(await readFile(path.join(store.directory(operation.id), "findings/findings.json"), "utf8")) as {
+    const findingsFile = path.join(store.directory(operation.id), "findings/findings.json")
+    const candidateBytes = await readFile(findingsFile)
+    const candidateDocument = JSON.parse(candidateBytes.toString("utf8")) as {
       operationID: string
       findings: Array<{ id: string; state: string; reviewedBy?: string }>
     }
     expect(candidateDocument.operationID).toBe(operation.id)
     expect(candidateDocument.findings[0]).toMatchObject({ id: baseFinding.id, state: "candidate" })
     expect(candidateDocument.findings[0]?.reviewedBy).toBeUndefined()
+    await Bun.write(findingsFile, JSON.stringify({ operationID: operation.id, findings: [{ ...baseFinding, state: "rejected" }] }))
+    await expect(engine.recordFindings(operation.id, { findings: [] })).rejects.toThrow("registered findings source changed")
+    await Bun.write(findingsFile, candidateBytes)
+    await rm(findingsFile)
+    await expect(engine.recordFindings(operation.id, { findings: [baseFinding] })).rejects.toThrow("registered findings artifact is missing")
+    await Bun.write(findingsFile, candidateBytes)
     await expect(engine.recordFindings(operation.id, { findings: [] })).rejects.toThrow("must remain in canonical history")
     expect((await engine.recordFindings(operation.id, { findings: [baseFinding] })).revision).toBe(candidateRevision)
-    expect(JSON.parse(await readFile(path.join(store.directory(operation.id), "findings/findings.json"), "utf8")).findings).toHaveLength(1)
+    expect(JSON.parse(await readFile(findingsFile, "utf8")).findings).toHaveLength(1)
 
     const completedRecord = {
       ...candidate,

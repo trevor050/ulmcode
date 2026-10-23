@@ -216,10 +216,17 @@ describe("durable operation engine", () => {
     expect((await engine.evaluateCompletion(created.id)).completed).toBe(true)
     const source = normalized.evidence?.artifacts.find((artifact) => artifact.path.startsWith("lab/"))
     if (!source) throw new Error("expected a durable lab artifact")
-    await Bun.write(path.join(operationDirectory, source.path), JSON.stringify({
+    const sourceFile = path.join(operationDirectory, source.path)
+    const originalSource = await readFile(sourceFile)
+    const revisedSource = JSON.stringify({
       lab: "synthetic acceptance fixture",
       observations: [{ kind: "configuration", summary: "Synthetic observation was substantively updated." }],
-    }) + "\n")
+    }) + "\n"
+    await Bun.write(sourceFile, revisedSource)
+    await expect(engine.normalizeEvidence(created.id)).rejects.toThrow("registered evidence source changed")
+    await Bun.write(sourceFile, originalSource)
+    await Bun.write(path.join(operationDirectory, "lab/manual-revision.json"), revisedSource)
+    await engine.recordArtifacts(created.id, [{ path: "lab/manual-revision.json", mediaType: "application/json" }])
     const changed = await engine.normalizeEvidence(created.id)
     expect(changed.goal.status).toBe("active")
     expect(changed.status).toBe("blocked")

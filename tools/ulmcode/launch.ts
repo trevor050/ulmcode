@@ -4,15 +4,12 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { spawn } from "node:child_process"
 import { fileURLToPath } from "node:url"
-import { resolveProfilePaths, runtimeEnv } from "../../packages/ulm/src/profile.js"
+import { applyRuntimeEnv, resolveProfilePaths, runtimeEnv } from "../../packages/ulm/src/profile.js"
 
 const profile = resolveProfilePaths({ root: process.env.ULMCODE_PROFILE_ROOT })
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 const pluginDirectory = path.join(repoRoot, "packages", "ulm")
-for (const [key, value] of Object.entries(runtimeEnv(process.env, profile))) {
-  if (value === undefined) delete process.env[key]
-  else process.env[key] = value
-}
+applyRuntimeEnv(process.env, runtimeEnv(process.env, profile))
 
 await fs.mkdir(profile.root, { recursive: true, mode: 0o700 })
 await fs.chmod(profile.root, 0o700)

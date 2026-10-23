@@ -12,7 +12,7 @@ import {
   reviewCredential,
   storeCredential,
 } from "../src/credentials.js"
-import { resolveProfilePaths, runtimeEnv } from "../src/profile.js"
+import { applyRuntimeEnv, resolveProfilePaths, runtimeEnv } from "../src/profile.js"
 import { OperationStore } from "../src/store.js"
 import type { OperationRecord } from "../src/operation.js"
 
@@ -43,6 +43,33 @@ describe("ULMCode profile", () => {
     expect(env.OPENCODE_CONFIG_CONTENT).toBeUndefined()
     expect(env.OPENAI_API_KEY).toBeUndefined()
     expect(env.OPENAI_BASE_URL).toBeUndefined()
+  })
+
+  test("removes inherited auth and API overrides from the actual child environment", async () => {
+    const paths = resolveProfilePaths({ root: "/tmp/synthetic-child-profile" })
+    const inherited = {
+      PATH: process.env.PATH,
+      HOME: process.env.HOME,
+      OPENAI_API_KEY: randomBytes(32).toString("hex"),
+      OPENAI_BASE_URL: "https://synthetic.invalid",
+      OPENCODE_AUTH_CONTENT: randomBytes(32).toString("hex"),
+      OPENCODE_CONFIG_CONTENT: randomBytes(32).toString("hex"),
+    }
+    applyRuntimeEnv(inherited, runtimeEnv(inherited, paths))
+    const keys = ["OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENCODE_AUTH_CONTENT", "OPENCODE_CONFIG_CONTENT"]
+    const child = spawn(
+      process.execPath,
+      ["-e", `process.stdout.write(JSON.stringify(${JSON.stringify(keys)}.map((key) => Object.hasOwn(process.env, key))))`],
+      { env: inherited, stdio: ["ignore", "pipe", "ignore"] },
+    )
+    let output = ""
+    child.stdout?.setEncoding("utf8").on("data", (chunk) => (output += chunk))
+    const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+      child.once("error", reject)
+      child.once("exit", (code, signal) => resolve({ code, signal }))
+    })
+    expect(result).toEqual({ code: 0, signal: null })
+    expect(JSON.parse(output)).toEqual([false, false, false, false])
   })
 
   test("pins ULM to OpenAI, uses the requested product routes, and asks for plan approval", async () => {
