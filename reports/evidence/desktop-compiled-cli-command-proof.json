@@ -1,0 +1,16 @@
+{
+  "scenario": "compiled-host operation_run with a fixture-only local provider",
+  "cli": "packaged resources/opencode-cli",
+  "pluginDirectory": "packaged resources/ulmcode/plugin",
+  "isolatedPath": "/usr/bin:/bin",
+  "systemPathHasBun": false,
+  "workerRuntime": "packaged resources/ulmcode/plugin/bun",
+  "operationRun": {
+    "receiptType": "cmd1",
+    "executionStatus": "succeeded",
+    "phaseStatus": "complete",
+    "syntheticOutputBytes": 26
+  },
+  "networkExecution": false,
+  "cleanup": "host exited with expected interrupt code and provider stopped"
+}

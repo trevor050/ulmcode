@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import { mkdir, readdir, readFile } from "node:fs/promises"
 import { planMigration, applyMigration } from "../../../packages/ulm/src/migration"
 import { OperationStore } from "../../../packages/ulm/src/store"
+import { listCredentials, materializeCredential } from "../../../packages/ulm/src/credentials"
 import { evidenceRoot } from "./paths"
 
 if (process.argv[2] === "--apply") {
@@ -19,6 +20,25 @@ const archive = `${targetCredentialsDir}/legacy-interrupted/quarantine/legacy-op
 const results: { name: string; passed: boolean; detail?: unknown }[] = []
 await mkdir(`${sourceOperation}/evidence`, { recursive: true, mode: 0o700 })
 await mkdir(sourceStorageRoot, { recursive: true, mode: 0o700 })
+await mkdir(`${sourceOperation}/credentials`, { recursive: true, mode: 0o700 })
+await mkdir(`${sourceStorageRoot}/storage/ulm/credential/legacy-interrupted`, { recursive: true, mode: 0o700 })
+const privateValues = [crypto.randomUUID(), crypto.randomUUID()]
+await Bun.write(
+  `${sourceOperation}/credentials/index.json`,
+  JSON.stringify({
+    operationID: "legacy-interrupted",
+    credentials: [{ credentialID: "interrupted-fixture", username: privateValues[0] }],
+  }),
+)
+await Bun.write(
+  `${sourceStorageRoot}/storage/ulm/credential/legacy-interrupted/interrupted-fixture.json`,
+  JSON.stringify({
+    operationID: "legacy-interrupted",
+    credentialID: "interrupted-fixture",
+    username: privateValues[0],
+    password: privateValues[1],
+  }),
+)
 const now = new Date().toISOString()
 await Bun.write(
   `${sourceOperation}/operation.json`,
@@ -36,6 +56,7 @@ for (let index = 0; index < 200; index++)
     `Synthetic local observation ${index}\n` + "Measured fixture evidence.\n".repeat(1200),
   )
 const before = await hashes(sourceOperation)
+const storageBefore = await hashes(sourceStorageRoot)
 const plan = await planMigration({
   sourceOperationsRoot,
   sourceStorageRoot,
@@ -102,7 +123,31 @@ try {
   }
   await check(
     "source hashes remain unchanged after recovery and retry",
-    JSON.stringify(before) === JSON.stringify(await hashes(sourceOperation)),
+    JSON.stringify(before) === JSON.stringify(await hashes(sourceOperation)) &&
+      JSON.stringify(storageBefore) === JSON.stringify(await hashes(sourceStorageRoot)),
+  )
+  const operationRoot = `${targetWorkspaceRoot}/.ulmcode/operations/legacy-interrupted`
+  const credentials = await listCredentials(operationRoot, "legacy-interrupted")
+  await check(
+    "credential recovered after interruption remains unreviewed and unavailable to execution",
+    credentials.length === 1 &&
+      credentials[0]?.status === "needs_review" &&
+      (await materializeCredential({
+        credentialsDir: targetCredentialsDir,
+        operationRoot,
+        operationID: "legacy-interrupted",
+        credentialID: credentials[0].credentialID,
+        target: "http://127.0.0.1:9",
+        executionID: "interruption-acceptance",
+      }).then(
+        () => false,
+        () => true,
+      )),
+  )
+  const publicIndex = await Bun.file(`${operationRoot}/credentials/index.json`).text()
+  await check(
+    "interrupted credential migration preserves public redaction",
+    privateValues.every((value) => !publicIndex.includes(value)),
   )
 } finally {
   if (child.exitCode === null) {

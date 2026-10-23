@@ -1,9 +1,11 @@
 import { checkoutRoot, evidenceRoot } from "./paths"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
+import { resolveProfilePaths, runtimeEnv } from "../../../packages/ulm/src/profile"
 
 const repo = checkoutRoot
 const bun = process.execPath
+const resources = process.env.ULMCODE_ACCEPTANCE_PACKAGE_RESOURCES
 const scenario = process.env.RUNTIME_HOST_SCENARIO ?? "approval-denial"
 if (
   ![
@@ -220,7 +222,7 @@ const profileConfig = {
   update: "disable",
   share: "disabled",
   snapshots: false,
-  plugins: [{ package: path.join(repo, "packages", "ulm") }],
+  plugins: [{ package: resources ? path.join(resources, "ulmcode", "plugin") : path.join(repo, "packages", "ulm") }],
   permissions,
   policies: [
     { action: "provider.use", resource: "*", effect: "deny" },
@@ -280,18 +282,35 @@ Object.assign(env, {
 })
 if (scenario === "authorized-catalog" || scenario === "authorized-invalid-profile")
   Object.assign(env, { ULMCODE_COMMAND_CATALOG: catalogPath })
-const command = [
-  bun,
-  path.join(repo, "tools", "ulmcode", "launch.ts"),
-  "serve",
-  "--hostname",
-  "127.0.0.1",
-  "--port",
-  String(hostPort),
-]
+const command = resources
+  ? [path.join(resources, "opencode-cli"), "serve", "--hostname", "127.0.0.1", "--port", String(hostPort)]
+  : [
+      bun,
+      path.join(repo, "tools", "ulmcode", "launch.ts"),
+      "serve",
+      "--hostname",
+      "127.0.0.1",
+      "--port",
+      String(hostPort),
+    ]
+const hostEnv = resources
+  ? runtimeEnv(
+      { ...env, PATH: "/usr/bin:/bin", ULMCODE_BUN_PATH: path.join(resources, "ulmcode", "plugin", "bun") },
+      resolveProfilePaths({ root: profile }),
+    )
+  : env
+if (
+  resources &&
+  Bun.spawnSync(["/bin/sh", "-c", "command -v bun"], {
+    env: { PATH: hostEnv.PATH },
+    stdout: "ignore",
+    stderr: "ignore",
+  }).exitCode === 0
+)
+  throw new Error("Packaged proof requires a PATH without system Bun")
 const child = Bun.spawn(command, {
   cwd: repo,
-  env,
+  env: hostEnv,
   stdout: Bun.file(path.join(scratch, "host.stdout.log")),
   stderr: Bun.file(path.join(scratch, "host.stderr.log")),
 })
@@ -337,6 +356,7 @@ async function readOperation() {
     id: string
     plan?: { approvedAt?: string; phases: Array<{ id: string; status: string }> }
     sessionIDs: string[]
+    executions: Array<{ id: string; status: string; receipt?: string; artifactRefs: Array<{ path: string }> }>
     handoffs: Array<{ phaseID: string; childID: string; status: string }>
   }>
 }
@@ -364,7 +384,10 @@ try {
     pid: child.pid,
     scenario,
     sessionID,
-    pluginDirectory: path.join(repo, "packages", "ulm"),
+    pluginDirectory: profileConfig.plugins[0]?.package,
+    packagedResources: resources,
+    isolatedPath: resources ? hostEnv.PATH : undefined,
+    explicitWorkerRuntime: resources ? hostEnv.ULMCODE_BUN_PATH : undefined,
   })
   const firstPrompt = await api("POST", `/api/session/${sessionID}/prompt`, {
     text: `RUNTIME_${scenario.toUpperCase()}: execute the native operation flow.`,
@@ -488,8 +511,12 @@ try {
       const operation = await readOperation()
       await check(
         "trusted local command profile completed without network execution",
-        operation.plan?.phases[0]?.status === "complete" && operation.handoffs.length === 0,
-        operation.plan?.phases[0],
+        operation.plan?.phases[0]?.status === "complete" &&
+          operation.handoffs.length === 0 &&
+          operation.executions.length === 1 &&
+          operation.executions[0]?.status === "succeeded" &&
+          operation.executions[0]?.receipt?.startsWith("cmd1:") === true,
+        { phase: operation.plan?.phases[0], executions: operation.executions },
       )
     } else {
       const operation = await readOperation()

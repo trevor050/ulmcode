@@ -2,7 +2,7 @@ import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { checkoutRoot, evidenceRoot } from "./paths"
 
-const run = `${evidenceRoot}/profile-isolation-${new Date().toISOString().replace(/[:.]/g, "-")}`
+const run = `${evidenceRoot}/profile-isolation-${new Date().toISOString().replace(/[:.]/g, "-")}-${crypto.randomUUID().slice(0, 8)}`
 const workspace = `${run}/workspace`
 const profile = `${run}/profile`
 const poisonHome = `${run}/synthetic-home`
@@ -69,7 +69,7 @@ const results: { name: string; passed: boolean; detail?: unknown }[] = []
 async function check(name: string, passed: boolean, detail?: unknown) {
   results.push({ name, passed, detail })
   console.log(`${name}: ${passed ? "PASS" : "FAIL"}`)
-  await Bun.write(`${run}/results.json`, JSON.stringify({ run, results }, null, 2) + "\n")
+  await Bun.write(`${run}/results.json`, JSON.stringify({ run, bunVersion: Bun.version, results }, null, 2) + "\n")
   if (!passed) throw new Error(name)
 }
 const reservation = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("reservation") })
@@ -96,6 +96,14 @@ Object.assign(env, {
   OPENCODE_DISABLE_PROJECT_CONFIG: "1",
   OPENCODE_DISABLE_CLAUDE_CODE: "1",
 })
+const bannedKeys = ["OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENCODE_AUTH_CONTENT", "OPENCODE_CONFIG_CONTENT"]
+if (!control)
+  Object.assign(env, {
+    OPENAI_API_KEY: crypto.randomUUID(),
+    OPENAI_BASE_URL: "http://127.0.0.1:9",
+    OPENCODE_AUTH_CONTENT: "{}",
+    OPENCODE_CONFIG_CONTENT: "{}",
+  })
 const child = Bun.spawn(
   [
     process.execPath,
@@ -134,6 +142,34 @@ try {
       break
     await Bun.sleep(100)
   }
+  if (!control) {
+    const childPIDs = (await Bun.file(`/proc/${child.pid}/task/${child.pid}/children`).text())
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+    const hostPID = (
+      await Promise.all(
+        childPIDs.map(async (pid) => ({
+          pid,
+          command: await Bun.file(`/proc/${pid}/cmdline`)
+            .text()
+            .catch(() => ""),
+        })),
+      )
+    ).find((entry) => entry.command.includes("packages/cli/src/index.ts"))?.pid
+    if (!hostPID) throw new Error("Cannot locate actual launcher CLI child")
+    const environmentKeys = (await Bun.file(`/proc/${hostPID}/environ`).text())
+      .split("\0")
+      .map((entry) => entry.split("=", 1)[0])
+    await check(
+      "actual launched CLI child omits all four prohibited environment keys",
+      bannedKeys.every((key) => !environmentKeys.includes(key)),
+      {
+        childPID: Number(hostPID),
+        presence: Object.fromEntries(bannedKeys.map((key) => [key, environmentKeys.includes(key)])),
+      },
+    )
+  }
   const location = `?location%5Bdirectory%5D=${encodeURIComponent(workspace)}`
   const skills = await api(`/api/skill${location}`)
   if (!control)
@@ -162,7 +198,7 @@ try {
   await Bun.write(`${run}/agent-response.json`, JSON.stringify(agents, null, 2))
   await Bun.write(`${run}/config-response.json`, JSON.stringify(config, null, 2))
   await Bun.write(`${run}/skill-response.json`, JSON.stringify(skills, null, 2))
-  const session = await fetch(`${origin}/api/session`, {
+  const sessionResponse = await fetch(`${origin}/api/session`, {
     method: "POST",
     headers: { authorization: `Basic ${btoa(`opencode:${password}`)}`, "content-type": "application/json" },
     body: JSON.stringify({
@@ -170,11 +206,20 @@ try {
       model: { providerID: "acceptance", id: "isolation" },
       location: { directory: workspace },
     }),
-  }).then((response) => response.json())
-  await fetch(`${origin}/api/session/${session.data.id}/prompt`, {
+  })
+  const session = await sessionResponse.json()
+  await check(
+    "actual isolated profile session starts",
+    sessionResponse.status === 200 && typeof session.data?.id === "string",
+    { status: sessionResponse.status },
+  )
+  const promptResponse = await fetch(`${origin}/api/session/${session.data.id}/prompt`, {
     method: "POST",
     headers: { authorization: `Basic ${btoa(`opencode:${password}`)}`, "content-type": "application/json" },
     body: JSON.stringify({ text: "Verify this disposable isolated profile." }),
+  })
+  await check("actual isolated profile prompt is admitted", promptResponse.status === 200, {
+    status: promptResponse.status,
   })
   // The title request can arrive first; inspect the primary turn only after its native tools arrive.
   for (let attempt = 0; attempt < 400 && !modelSawNativeTools; attempt++) await Bun.sleep(50)
