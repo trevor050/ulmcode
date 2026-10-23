@@ -106,6 +106,20 @@ export async function copyBuiltCliToResources(root: string, dest = windowsify("r
   await copyCliToResources(join(root, directory), dest)
 }
 
+export async function copyCliBinaryToResources(source: string, dest = windowsify("resources/opencode-cli")) {
+  if (!(await Bun.file(source).exists())) throw new Error(`Locally built CLI binary is missing: ${source}`)
+  const result = Bun.spawnSync([source, "--version"], { stdout: "pipe", stderr: "pipe" })
+  if (result.exitCode !== 0) throw new Error(`Locally built CLI could not report its version: ${source}`)
+  const output = result.stdout.toString().trim()
+  const marker = output.lastIndexOf(" v")
+  const version = marker === -1 ? output : output.slice(marker + 2)
+  if (!version) throw new Error(`Locally built CLI returned an empty version: ${source}`)
+  await copyFile(source, dest)
+  await prepareCli(dest)
+  await Bun.write(versionFile(dest), version)
+  console.log(`Copied locally built CLI ${version} to ${dest}`)
+}
+
 // The package directory is an npm package: its package.json version is the string the executable
 // prints for --version. Writing it next to the executable spares the desktop a ~400 ms spawn of the
 // 200 MB binary on first launch.

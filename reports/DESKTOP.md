@@ -4,7 +4,7 @@
 
 Desktop uses the shared ULMCode profile resolver and runtime environment. A new profile is seeded from the ULM template, with the development plugin target resolved to the local `packages/ulm` directory and the packaged target resolved to `resources/ulmcode/plugin`. Desktop restores the isolated profile after importing shell environment, removes inherited auth/config overrides, and pins the command worker to the selected Bun runtime.
 
-The `dev:ulm`, `build:ulm`, and `package:ulm` entrypoints build the native plugin bundle. Packaging includes the plugin server, the worker source, trusted command catalog, isolated profile template, and Bun runtime. The plugin bundle leaves `effect` and `@opencode/plugin` external for the upstream plugin Host loader. Packaged startup also launches the bundled operations service. Development starts the same service through the ULM desktop launcher. Both use the desktop profile’s private credentials directory and the selected workspace; service reuse requires matching workspace and profile identity. The launcher refuses an occupied port when those identities differ.
+The `dev:ulm`, `build:ulm`, and `package:ulm` entrypoints require Bun 1.4.4 and can re-exec under `ULMCODE_BUILD_BUN_PATH` when the invoking Bun is older. The build and package commands build the local CLI from this checkout (`packages/cli/script/build.ts --single --skip-install --skip-web-ui`) and copy that exact binary into the app; ULM prebuilds fail closed if the local binary is missing instead of silently downloading a registry CLI. Packaging includes the plugin server, worker source, trusted command catalog, isolated profile template, and Bun runtime. The packaged plugin Bun is copied from the same 1.4.4 process that builds the CLI and app. The plugin bundle leaves `effect` and `@opencode/plugin` external for the upstream plugin Host loader. Packaged startup also launches the bundled operations service. Development starts the same service through the ULM desktop launcher. Both use the desktop profile’s private credentials directory and the selected workspace; service reuse requires matching workspace and profile identity. The launcher refuses an occupied port when those identities differ.
 
 Development permits the Vite renderer origin and the packaged service permits `oc://renderer`. The operations service binds to loopback. The desktop exposes the existing chat-first renderer and attaches operation status from the isolated service.
 
@@ -12,7 +12,7 @@ Development permits the Vite renderer origin and the packaged service permits `o
 
 - `bun run typecheck` from `packages/desktop`: passed.
 - `bun ./scripts/ulm.ts build` from `packages/desktop`: passed; generated the plugin and operations service bundles. Vite reported existing large-chunk warnings.
-- `bun ./scripts/ulm.ts package --linux --dir` from `packages/desktop`: passed and produced a Linux x64 unpacked application. `resources/ulmcode` contains the plugin bundle, worker source, command catalog, profile template, operations service bundle, and executable Bun runtime.
+- `ULMCODE_BUILD_BUN_PATH=/path/to/bun-1.4.4 bun ./scripts/ulm.ts package --linux --dir` from `packages/desktop`: passed and produced a Linux x64 unpacked application. The packaged CLI, copied desktop resource, and local CLI build had identical SHA-256 `a48975037e2a486da01b15ed90868024fa400358f8ffa5b6c0c1f1245fb6d42a`. The packaged plugin Bun reported 1.4.4 and had the same SHA-256 as the pinned build runtime (`10702245766b225e70bbf6235fd6b47214fd94b4760d00ffaed8ab0df57ac235`). `resources/ulmcode` contains the plugin bundle, worker source, command catalog, profile template, operations service bundle, and executable Bun runtime.
 - Actual development Electron through Xvfb: the pinned Bun 1.4.4 sidecar loaded `packages/ulm/server.ts`, exposed the synthetic OpenAI-compatible model, and rendered two distinct submitted replies. A third delayed request was stopped through the native Stop button, the interrupted session accepted a follow-up reply, and closing/relaunching Electron preserved the transcript.
 - Actual packaged Electron through Xvfb: the compiled CLI loaded the bundled plugin from `resources/ulmcode/plugin/server.js`; the synthetic model rendered a submitted reply. Its provider request contained registered ULM tools including `operation_create`, `operation_plan`, `operation_run`, `operation_status`, `operation_credentials`, and the audit/report tools. The packaged operations sidehost started on loopback and the session UI showed “Attach operation”. The CLI process environment pointed `ULMCODE_BUN_PATH` and the front of `PATH` to the packaged Bun runtime, and loaded the packaged command catalog.
 - Independent compiled-host `operation_run` proof: acceptance started the packaged `resources/opencode-cli` with the bundled plugin and a fixture-only provider, while the CLI PATH was exactly `/usr/bin:/bin` and the worker runtime was explicitly set to the shipped `resources/ulmcode/plugin/bun`. The real compiled host completed the fixture command with a `cmd1` receipt, a succeeded execution and a completed phase (26 bytes of synthetic output); no network execution occurred. See [compiled-host command proof](evidence/desktop-compiled-cli-command-proof.json).
@@ -37,8 +37,10 @@ For packaged Linux payload verification:
 
 ```sh
 cd packages/desktop
-bun ./scripts/ulm.ts package --linux --dir
+ULMCODE_BUILD_BUN_PATH=/path/to/bun-1.4.4 bun ./scripts/ulm.ts package --linux --dir
 ```
+
+`ULMCODE_BUILD_BUN_PATH` is optional when the invoking Bun is version 1.4.4. It selects the build runtime for the local CLI and desktop packaging when the shell's default Bun is older.
 
 To repeat the packaged UI pass, create a disposable test root with `profile/config/opencode.json` pointing `plugins[0].package` at the unpacked app's `resources/ulmcode/plugin`, and configure an OpenAI-compatible model at a loopback-only synthetic provider. Then launch:
 

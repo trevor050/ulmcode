@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { $ } from "bun"
 
-import { copyBuiltCliToResources, downloadCliToResources, resolveChannel } from "./utils"
+import { copyBuiltCliToResources, copyCliBinaryToResources, downloadCliToResources, resolveChannel } from "./utils"
 
 const channel = resolveChannel()
 
@@ -13,7 +13,11 @@ await $`bun ./scripts/copy-icons.ts ${channel}`
 
 await $`bun ./scripts/copy-metainfo.ts ${channel}`
 
-if (channel === "dev") await downloadCliToResources()
+if (Bun.env.ULMCODE_CLI_BINARY) await copyCliBinaryToResources(Bun.env.ULMCODE_CLI_BINARY)
+else if (Bun.env.ULMCODE_DESKTOP === "1") {
+  throw new Error("ULMCode desktop builds require ULMCODE_CLI_BINARY from the local packages/cli build")
+}
+else if (channel === "dev") await downloadCliToResources()
 
 if ((channel === "beta" || channel === "prod") && Bun.env.OPENCODE_CLI_DIST) {
   await copyBuiltCliToResources(Bun.env.OPENCODE_CLI_DIST)

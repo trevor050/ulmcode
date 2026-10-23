@@ -8,6 +8,20 @@ const command = process.argv[2]
 if (command !== "dev" && command !== "build" && command !== "package") {
   throw new Error("Expected one of: dev, build, package")
 }
+const requestedBun = process.env.ULMCODE_BUILD_BUN_PATH
+if (requestedBun && path.resolve(requestedBun) !== path.resolve(process.execPath)) {
+  const env = { ...process.env }
+  delete env.ULMCODE_BUILD_BUN_PATH
+  const reexec = Bun.spawn([path.resolve(requestedBun), path.resolve(process.argv[1]), ...process.argv.slice(2)], {
+    cwd: process.cwd(),
+    env,
+    stdio: ["inherit", "inherit", "inherit"],
+  })
+  process.exit(await reexec.exited)
+}
+if (Bun.version !== "1.4.4") {
+  throw new Error(`ULMCode desktop commands require Bun 1.4.4; set ULMCODE_BUILD_BUN_PATH or invoke with Bun 1.4.4 (found ${Bun.version})`)
+}
 
 process.env.ULMCODE_DESKTOP = "1"
 process.env.OPENCODE_CHANNEL = "local"
@@ -16,6 +30,33 @@ process.env.ULMCODE_PROFILE_TEMPLATE = fileURLToPath(new URL("../../../tools/ulm
 const repo = fileURLToPath(new URL("../../..", import.meta.url))
 const desktop = fileURLToPath(new URL("..", import.meta.url))
 process.env.ULMCODE_COMMAND_CATALOG = fileURLToPath(new URL("../../../tools/ulmcode/command-catalog.json", import.meta.url))
+if (command === "build" || command === "package") {
+  const platform = process.platform === "win32" ? "windows" : process.platform
+  const executable = process.platform === "win32" ? "opencode.exe" : "opencode"
+  if (!process.env.ULMCODE_CLI_BINARY) {
+    const cliBuild = Bun.spawn(
+      [process.execPath, "run", "script/build.ts", "--single", "--skip-install", "--skip-web-ui"],
+      { cwd: path.join(repo, "packages", "cli"), stdio: ["inherit", "inherit", "inherit"] },
+    )
+    if (await cliBuild.exited !== 0) throw new Error("Failed to build the ULMCode CLI before desktop packaging")
+    process.env.ULMCODE_CLI_BINARY = path.join(
+      repo,
+      "packages",
+      "cli",
+      "dist",
+      `cli-${platform}-${process.arch}`,
+      "bin",
+      executable,
+    )
+  }
+  const cli = path.resolve(process.env.ULMCODE_CLI_BINARY)
+  if (!(await Bun.file(cli).exists())) {
+    throw new Error(
+      `The local ULMCode CLI binary is missing at ${cli}.`,
+    )
+  }
+  process.env.ULMCODE_CLI_BINARY = path.resolve(cli)
+}
 if (command === "dev") {
   process.env.ULMCODE_BUN_PATH = process.execPath
   process.env.ULMCODE_PROFILE_ROOT ??= process.env.OPENCODE_DESKTOP_TEST_ROOT
