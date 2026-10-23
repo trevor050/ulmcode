@@ -1,0 +1,67 @@
+{
+  "test": "packaged Electron source-built final channel, stop/resume, restart, profile/env isolation",
+  "recordedAtUtc": "2026-10-23T08:12:35.119328+00:00",
+  "evidenceOnlySyntheticLoopbackProvider": true,
+  "paidProviderUsed": false,
+  "nativeElectronWindow": true,
+  "nativeTwoTurnScreenshot": "reports/evidence/desktop-final-sourcebuilt-two-turns.png",
+  "nativeStopInterruptedScreenshot": "reports/evidence/desktop-final-sourcebuilt-stop-interrupted.png",
+  "nativeStopFollowupScreenshot": "reports/evidence/desktop-final-sourcebuilt-stop-resume.png",
+  "nativeRestartScreenshot": "reports/evidence/desktop-final-sourcebuilt-reopened.png",
+  "cliChannel": "local",
+  "cliVersion": "0.0.0-local-202610230805",
+  "cliSha256": "a180deb6ae3f77556ee3a7b8f36d9f7d33ec2f03a579e89376ab4ac894336dbe",
+  "bundledBunVersion": "1.4.4",
+  "bundledBunSha256": "10702245766b225e70bbf6235fd6b47214fd94b4760d00ffaed8ab0df57ac235",
+  "operationsHealth": {
+    "status": "ok",
+    "service": "ulmcode-operations",
+    "workspaceMatchesDisposableTestWorkspace": true,
+    "profileIDMatchesResolvedPrivateCredentialsDir": true,
+    "vaultEnabled": true
+  },
+  "childEnvironmentKeyPresence": {
+    "cliService": {
+      "OPENAI_API_KEY": false,
+      "OPENAI_BASE_URL": false,
+      "OPENCODE_AUTH_CONTENT": false,
+      "OPENCODE_CONFIG_CONTENT": false
+    },
+    "operationsSidehost": {
+      "OPENAI_API_KEY": false,
+      "OPENAI_BASE_URL": false,
+      "OPENCODE_AUTH_CONTENT": false,
+      "OPENCODE_CONFIG_CONTENT": false
+    },
+    "allForbiddenKeysAbsent": true
+  },
+  "profileRegistrationFileExists": true,
+  "cliServiceListeningOnLoopback3084": true,
+  "operationsSidehostListeningOnLoopback4310": true,
+  "testProfileRoot": "desktop-final-native-v3/profile",
+  "testWorkspaceRoot": "desktop-final-native-v3/documents/Default Project",
+  "sourceCliSha256": "a180deb6ae3f77556ee3a7b8f36d9f7d33ec2f03a579e89376ab4ac894336dbe",
+  "packagedCliSha256": "a180deb6ae3f77556ee3a7b8f36d9f7d33ec2f03a579e89376ab4ac894336dbe",
+  "sourceAndPackagedCliBytesMatch": true,
+  "reopenAndShutdown": {
+    "sameProfileAndWorkspaceReopened": true,
+    "transcriptVisibleAfterReopen": true,
+    "appOwnedOperationsSidehostStoppedOnQuit": true,
+    "profileCliServiceRetainedForReuse": true,
+    "cliRegistrationFileStillExists": true,
+    "operationsHealthPortAfterQuit": false,
+    "cliPortAfterQuit": true
+  },
+  "finalAppMainPidStopped": true,
+  "finalOperationsSidehostPidStopped": true,
+  "recordedAfterShutdownAtUtc": "2026-10-23T08:13:09.072087+00:00",
+  "afterFinalTestCleanup": {
+    "profileCliStoppedAfterRetentionProof": true,
+    "operationsSidehostStopped": true,
+    "syntheticProviderStopped": true,
+    "profileRegistrationAndTranscriptPreserved": false,
+    "testProfileRetained": true,
+    "testWorkspaceRetained": true
+  },
+  "cleanupRecordedAtUtc": "2026-10-23T08:13:51.657177+00:00"
+}

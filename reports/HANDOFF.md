@@ -2,6 +2,8 @@
 
 The rebuild lives in `/home/trevor/swarm-work/ulmcode-v2` on `ulmcode-two`. Its foundation is official OpenCode V2 `v2.1.3`, immutable commit `bb25a2f4a3f3f04d7c344bec0c0574ea3510b3b1`. The original checkout and `local-reference` at `6a3df0d8bd64b3f9ab0fac0bba524887e08773f5` are preserved. Only the stream branch is pushed; the default branch is unchanged.
 
+Independently accepted implementation: **`cb7e23e0ee83c9ae6d33a1f9f7f45c890a911249`**. Later handoff commits add documentation and evidence only. The final clean archive installed 2153 packages with the frozen lockfile; the unchanged core is bound to 18 passing independent suites. Package checks passed 46 tests / 392 assertions and all 35 repository typecheck tasks plus lint. The final source-built Linux desktop passed actual first/second submissions, stop/continue and same-profile reopen, with matching CLI/Bun hashes and private environment checks.
+
 The implementation uses the official session runner, native plugin API and Electron/app surfaces. One operation package owns durable approved plans, execution receipts, supervised process deadlines, interruption/recovery, private credential handles, subordinate handoffs, goal continuation, immutable evidence, reviewed findings and audited styled HTML/PDF reports. Independent acceptance uses real processes and synthetic loopback targets/model transport, with no paid provider keys, live profiles or external targets.
 
 ## Reproduce locally
