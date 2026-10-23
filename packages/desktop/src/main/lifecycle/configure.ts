@@ -22,6 +22,7 @@ export function configureApplication() {
   Object.assign(process.env, {
     OPENCODE_APP_NAME: "ulmcode",
     OPENCODE_CLIENT: "desktop",
+    OPENCODE_DESKTOP_SERVER_CHANNEL: import.meta.env.ULMCODE_CLI_CHANNEL ?? process.env.OPENCODE_DESKTOP_SERVER_CHANNEL ?? "local",
   })
   if (testOnboarding) process.env.OPENCODE_DB = ":memory:"
   mkdirSync(profile.root, { recursive: true, mode: 0o700 })

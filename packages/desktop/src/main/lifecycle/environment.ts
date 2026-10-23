@@ -25,6 +25,7 @@ export const preferApplicationEnvironment = Effect.gen(function* () {
   const shell = process.platform === "win32" ? null : getUserShell()
   const shellEnv = shell ? yield* loadShellEnv(shell) : null
   const ulmBunPath = process.env.ULMCODE_BUN_PATH
+  const ulmServerChannel = process.env.OPENCODE_DESKTOP_SERVER_CHANNEL
   const ulmBunDirectory = ulmBunPath ? path.dirname(ulmBunPath) : undefined
   yield* Effect.sync(() => {
     if (!shellEnv?.XDG_STATE_HOME) delete process.env.XDG_STATE_HOME
@@ -36,6 +37,7 @@ export const preferApplicationEnvironment = Effect.gen(function* () {
     else if (shellEnv) Object.assign(process.env, shellEnv)
     Object.assign(process.env, {
       ...(ulmBunPath ? { ULMCODE_BUN_PATH: ulmBunPath } : {}),
+      ...(ulmServerChannel ? { OPENCODE_DESKTOP_SERVER_CHANNEL: ulmServerChannel } : {}),
       ...(ulmBunDirectory ? { PATH: `${ulmBunDirectory}${path.delimiter}${shellEnv?.PATH ?? process.env.PATH ?? ""}` } : {}),
       OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
       OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",

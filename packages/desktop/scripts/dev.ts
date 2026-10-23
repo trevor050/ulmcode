@@ -15,6 +15,7 @@ async function main() {
   process.env.ULMCODE_BUN_PATH = process.execPath
   console.log("ULMCode desktop Bun runtime:", process.env.ULMCODE_BUN_PATH)
   process.env.OPENCODE_CHANNEL = "local"
+  process.env.ULMCODE_CLI_CHANNEL ??= "local"
   process.env.OPENCODE_VERSION ??= `2.0.0-local-${Date.now()}`
   process.env.OPENCODE_DISABLE_CHANNEL_DB = "0"
   const options = selectOptions()

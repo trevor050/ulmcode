@@ -1,10 +1,13 @@
 import { app } from "electron"
+import { existsSync } from "node:fs"
+import { createConnection } from "node:net"
 import { Context, Effect, FileSystem, Layer, Path } from "effect"
 import { BackgroundServiceState } from "./background-service-state"
 import { cleanStages } from "./cli-stages"
 import { DesktopCli } from "./desktop-cli"
 import { SidecarCredentials } from "./sidecar-credentials"
 import { sidecarProbe } from "./sidecar-probe"
+import { serviceRegistrationFile } from "./service-registration"
 
 export * as BackgroundService from "./background-service"
 
@@ -31,26 +34,24 @@ export const layer = Layer.effect(
 
 const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial" | "reconnect") {
   yield* Effect.logInfo("starting v2 background service")
-  const path = yield* Path.Path
   const desktopCli = yield* DesktopCli.Service
   const runFork = Effect.runForkWith(yield* Effect.context<FileSystem.FileSystem | Path.Path>())
-  const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
+  const isolated = app.isPackaged || process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
   const cli = yield* desktopCli.resolve
   const version = mode === "initial" ? cli.version : undefined
 
-  if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
+  if (isolated && !process.env.XDG_STATE_HOME) process.env.XDG_STATE_HOME = app.getPath("userData")
   const client = yield* Effect.promise(() => import("@opencode/client/service"))
+  const registration = serviceRegistrationFile()
+  const isolatedPort = 0x0c0c
+  if (isolated && registration && !existsSync(registration) && (yield* Effect.promise(() => isListening(isolatedPort))))
+    throw new Error(
+      `ULMCode's isolated CLI service port ${isolatedPort} is already in use without a registration for this profile. Stop the process using that port, then restart ULMCode.`,
+    )
 
   const ensure = () =>
     client.Service.ensure({
-      file:
-        process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
-          ? path.join(
-              process.env.XDG_STATE_HOME ?? path.join(app.getPath("home"), ".local", "state"),
-              "opencode",
-              "service-local.json",
-            )
-          : undefined,
+      file: registration,
       version,
       // A fixed port makes a second contender fail to bind and back off; port 0 never collides, so two
       // services could boot against the same database.
@@ -58,7 +59,7 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
         ...cli.command,
         "serve",
         "--service",
-        ...(isolated ? ["--hostname", "0.0.0.0", "--port", String(0x0c0c)] : []),
+        ...(isolated ? ["--hostname", "127.0.0.1", "--port", String(isolatedPort)] : []),
       ],
       onStart: (reason, previousVersion) =>
         runFork(Effect.logInfo("v2 CLI background service starting", { reason, previousVersion })),
@@ -94,6 +95,19 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
 
   return ready
 })
+
+function isListening(port: number) {
+  return new Promise<boolean>((resolve) => {
+    const socket = createConnection({ host: "127.0.0.1", port })
+    const finish = (listening: boolean) => {
+      socket.destroy()
+      resolve(listening)
+    }
+    socket.once("connect", () => finish(true))
+    socket.once("error", () => finish(false))
+    socket.setTimeout(250, () => finish(false))
+  })
+}
 
 function endpoint(url: string | undefined) {
   if (!url || !URL.canParse(url)) return {}

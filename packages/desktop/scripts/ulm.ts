@@ -29,6 +29,7 @@ process.env.ULMCODE_PROFILE_TEMPLATE = fileURLToPath(new URL("../../../tools/ulm
 
 const repo = fileURLToPath(new URL("../../..", import.meta.url))
 const desktop = fileURLToPath(new URL("..", import.meta.url))
+process.env.ULMCODE_CLI_CHANNEL ??= "local"
 process.env.ULMCODE_COMMAND_CATALOG = fileURLToPath(new URL("../../../tools/ulmcode/command-catalog.json", import.meta.url))
 if (command === "build" || command === "package") {
   const platform = process.platform === "win32" ? "windows" : process.platform
@@ -36,7 +37,11 @@ if (command === "build" || command === "package") {
   if (!process.env.ULMCODE_CLI_BINARY) {
     const cliBuild = Bun.spawn(
       [process.execPath, "run", "script/build.ts", "--single", "--skip-install", "--skip-web-ui"],
-      { cwd: path.join(repo, "packages", "cli"), stdio: ["inherit", "inherit", "inherit"] },
+      {
+        cwd: path.join(repo, "packages", "cli"),
+        env: { ...process.env, OPENCODE_CHANNEL: process.env.ULMCODE_CLI_CHANNEL },
+        stdio: ["inherit", "inherit", "inherit"],
+      },
     )
     if (await cliBuild.exited !== 0) throw new Error("Failed to build the ULMCode CLI before desktop packaging")
     process.env.ULMCODE_CLI_BINARY = path.join(
@@ -53,6 +58,12 @@ if (command === "build" || command === "package") {
   if (!(await Bun.file(cli).exists())) {
     throw new Error(
       `The local ULMCode CLI binary is missing at ${cli}.`,
+    )
+  }
+  const cliVersion = Bun.spawnSync([cli, "--version"], { cwd: repo }).stdout.toString()
+  if (!cliVersion.includes(`0.0.0-${process.env.ULMCODE_CLI_CHANNEL}-`)) {
+    throw new Error(
+      `The local ULMCode CLI binary does not match source channel ${process.env.ULMCODE_CLI_CHANNEL}; set ULMCODE_CLI_BINARY to a matching source build.`,
     )
   }
   process.env.ULMCODE_CLI_BINARY = path.resolve(cli)
