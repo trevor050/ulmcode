@@ -39,6 +39,8 @@ The first run records intent and a durable execution receipt; the second reconci
 
 The HTTP host binds `127.0.0.1:4310`, the fake lab binds `127.0.0.1:4320`, and the integrated app runs at `http://localhost:4444` using `bun run ulm:app`. The app also needs a separately started, isolated OpenCode backend on 4096; use the upstream CLI server commands through `tools/ulmcode/launch.ts`, then pair through the app. The Operations entry is secondary to recent chats. Session headers explicitly attach operation context. The local execution adapter accepts only scoped loopback lab origins; external target dispatch is not enabled by this runbook.
 
+The operation host permits the web app origin `http://localhost:4444` and the packaged Electron renderer `oc://renderer`. For a different development origin, pass `--allowed-origin http://localhost:5173` to `ulm:serve`; repeat this flag for multiple exact origins, or set comma-separated `ULMCODE_ALLOWED_ORIGINS`. Explicit values replace the defaults. Unrelated origins and opaque `null` origins remain blocked.
+
 ## Checks and acceptance
 
 ```sh

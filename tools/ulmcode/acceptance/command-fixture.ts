@@ -12,11 +12,20 @@ if (mode === "observe") {
   process.stdout.write("Independent partial local evidence before exit 7\n")
   process.exitCode = 7
 } else if (mode === "secrets") {
-  const values = Object.entries(process.env).filter(([key]) => key.startsWith("ULMCODE_CREDENTIAL_")).flatMap((entry) => entry[1] ? [entry[1]] : [])
-  for (const value of values) { process.stdout.write(value.slice(0, 7)); await Bun.sleep(15); process.stdout.write(value.slice(7) + "\n"); process.stderr.write(value + "\n") }
+  const values = Object.entries(process.env)
+    .filter(([key]) => key.startsWith("ULMCODE_CREDENTIAL_"))
+    .flatMap((entry) => (entry[1] ? [entry[1]] : []))
+  for (const value of values) {
+    process.stdout.write(value.slice(0, 7))
+    await Bun.sleep(15)
+    process.stdout.write(value.slice(7) + "\n")
+    process.stderr.write(value + "\n")
+  }
   await Bun.sleep(100)
 } else if (mode === "orphan") {
-  const child = Bun.spawn([process.execPath, "-e", 'process.on("SIGTERM",()=>{});setTimeout(()=>{},30000)'], { stdio: ["ignore", "inherit", "inherit"] })
+  const child = Bun.spawn([process.execPath, "-e", 'process.on("SIGTERM",()=>{});setTimeout(()=>{},30000)'], {
+    stdio: ["ignore", "inherit", "inherit"],
+  })
   await writeFile(`${marker}.pid`, String(child.pid))
   child.unref()
   process.exit(0)
@@ -24,4 +33,11 @@ if (mode === "observe") {
   process.stdout.write("Independent long local command started\n")
   await Bun.sleep(Number(process.argv[5] ?? 2000))
   process.stdout.write("Independent long local command completed\n")
+} else if (mode === "watchdog") {
+  process.on("SIGTERM", () => {})
+  const child = Bun.spawn([process.execPath, "-e", 'process.on("SIGTERM",()=>{});setTimeout(()=>{},30000)'], {
+    stdio: ["ignore", "inherit", "inherit"],
+  })
+  await writeFile(`${marker}.pids.json`, JSON.stringify([process.pid, child.pid]))
+  await Bun.sleep(30000)
 } else throw new Error("Unknown independent fixture mode")

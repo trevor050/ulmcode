@@ -1,4 +1,5 @@
 import { realpath } from "node:fs/promises"
+import { createHash } from "node:crypto"
 import path from "node:path"
 import { z } from "zod"
 import { OperationEngine } from "./engine"
@@ -94,11 +95,12 @@ export function startServer(input: {
   port?: number
   chromiumPath?: string
   allowedOrigin?: string
+  allowedOrigins?: string[]
   credentialsDir?: string
   commandCatalogPath?: string
 }) {
   const host = createHost(input)
-  const allowedOrigin = input.allowedOrigin ?? "http://localhost:4444"
+  const allowedOrigins = new Set(input.allowedOrigins ?? (input.allowedOrigin ? [input.allowedOrigin] : ["http://localhost:4444", "oc://renderer"]))
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: input.port ?? 4310,
@@ -106,7 +108,7 @@ export function startServer(input: {
     async fetch(request) {
       const origin = request.headers.get("origin")
       const headers = new Headers({ "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" })
-      if (origin === allowedOrigin) {
+      if (origin && allowedOrigins.has(origin)) {
         headers.set("Access-Control-Allow-Origin", origin)
         headers.set("Vary", "Origin")
         headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
@@ -115,13 +117,16 @@ export function startServer(input: {
       const json = (value: unknown, status = 200) => Response.json(value, { status, headers })
       const url = new URL(request.url)
       if (!["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)) return json({ error: { code: "host", message: "Local host required" } }, 403)
-      if (origin && origin !== allowedOrigin && origin !== url.origin) return json({ error: { code: "origin", message: "Origin is not authorized" } }, 403)
+      if (origin && !allowedOrigins.has(origin) && origin !== url.origin) return json({ error: { code: "origin", message: "Origin is not authorized" } }, 403)
       if (request.method === "OPTIONS") return new Response(null, { status: 204, headers })
       if (request.method !== "GET" && request.method !== "POST") return json({ error: { code: "method", message: "Method not allowed" } }, 405)
       const vaultSubmission = /^\/api\/operations\/[a-z0-9][a-z0-9_-]{0,79}\/vault\/submit$/.test(url.pathname)
       if (request.method === "POST" && !vaultSubmission && !request.headers.get("content-type")?.startsWith("application/json")) return json({ error: { code: "content_type", message: "Use application/json" } }, 415)
       try {
-        if (request.method === "GET" && url.pathname === "/health") return json({ status: "ok", service: "ulmcode-operations", workspaceRoot: path.resolve(input.workspaceRoot), vaultEnabled: Boolean(host.vault) })
+        if (request.method === "GET" && url.pathname === "/health") return json({
+          status: "ok", service: "ulmcode-operations", workspaceRoot: path.resolve(input.workspaceRoot), vaultEnabled: Boolean(host.vault),
+          profileID: input.credentialsDir ? createHash("sha256").update(path.resolve(input.credentialsDir)).digest("hex") : null,
+        })
         if (url.pathname === "/api/operations") {
           if (request.method === "GET") return json({ operations: await host.store.list() })
           const parsed = createInput.parse(await request.json())

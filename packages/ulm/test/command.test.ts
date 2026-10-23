@@ -149,4 +149,64 @@ describe("supervised command adapter", () => {
     expect(result.status).toBe("failed")
     expect(result.summary).toContain("time limit")
   })
+
+  test("external watchdog bounds a command after its worker is killed", async () => {
+    const marker = path.join(os.tmpdir(), "ulm-command-crash-pid-" + crypto.randomUUID())
+    const data = await fixture("require('node:fs').writeFileSync(process.argv[2], String(process.pid)); setTimeout(()=>{},30000)", { timeoutMs: 500, variables: { marker } })
+    await data.adapter.launch(data.request)
+    const receipt = data.adapter.receipt(data.request)
+    const identityPath = path.join(data.root, ".ulmcode", "supervision", data.request.operationID, `${data.request.executionID}-attempt-1.worker.json`)
+    const commandPath = path.join(data.root, ".ulmcode", "supervision", data.request.operationID, `${data.request.executionID}-attempt-1.command.json`)
+    const deadline = Date.now() + 5000
+    while (Date.now() < deadline && !(await Bun.file(marker).exists())) await Bun.sleep(10)
+    const command = JSON.parse(await readFile(commandPath, "utf8")) as { pid: number; processStart: string; processGroupID: number; watchdogPID: number; watchdogStart: string; deadlineAt: string }
+    const worker = JSON.parse(await readFile(identityPath, "utf8")) as { pid: number; processStart: string }
+    process.kill(worker.pid, "SIGKILL")
+    const watchdogDeadline = Date.now() + 2500
+    let commandStillOwned = true
+    while (Date.now() < watchdogDeadline) {
+      try {
+        const stat = await readFile(`/proc/${command.pid}/stat`, "utf8")
+        const start = stat.slice(stat.lastIndexOf(")") + 2).trim().split(/\s+/)[19]
+        commandStillOwned = `${start}:` === command.processStart.slice(0, command.processStart.indexOf(":")) + ":"
+      } catch { commandStillOwned = false }
+      if (!commandStillOwned) break
+      await Bun.sleep(20)
+    }
+    expect(commandStillOwned).toBe(false)
+    let processGroupExists = true
+    try { process.kill(-command.processGroupID, 0) } catch (error) { processGroupExists = (error as NodeJS.ErrnoException).code !== "ESRCH" }
+    expect(processGroupExists).toBe(false)
+    expect(Date.now()).toBeLessThan(Date.parse(command.deadlineAt) + 1500)
+    const guardResult = path.join(data.root, ".ulmcode", "supervision", data.request.operationID, `${data.request.executionID}-attempt-1.guard.result.json`)
+    const guardResultDeadline = Date.now() + 2000
+    while (Date.now() < guardResultDeadline && !(await Bun.file(guardResult).exists())) await Bun.sleep(10)
+    const restarted = new SupervisedCommandAdapter({ catalogPath: data.catalogPath })
+    const workerResult = path.join(data.operationDirectory, "commands", `${data.request.executionID}-attempt-1.result.json`)
+    expect(await Bun.file(guardResult).exists(), JSON.stringify({ command, worker, workerResultExists: await Bun.file(workerResult).exists() })).toBe(true)
+    expect((await restarted.inspect(receipt)).status).toBe("failed")
+    const markerBefore = await readFile(marker, "utf8")
+    await restarted.launch(data.request)
+    expect(await readFile(marker, "utf8")).toBe(markerBefore)
+  })
+
+  test("interrupts the verified watchdog tree after its worker is gone", async () => {
+    const marker = path.join(os.tmpdir(), "ulm-command-interrupt-pid-" + crypto.randomUUID())
+    const data = await fixture("require('node:fs').writeFileSync(process.argv[2], String(process.pid)); setTimeout(()=>{},30000)", { timeoutMs: 5000, variables: { marker } })
+    await data.adapter.launch(data.request)
+    const receipt = data.adapter.receipt(data.request)
+    const identityPath = path.join(data.root, ".ulmcode", "supervision", data.request.operationID, `${data.request.executionID}-attempt-1.worker.json`)
+    const commandPath = path.join(data.root, ".ulmcode", "supervision", data.request.operationID, `${data.request.executionID}-attempt-1.command.json`)
+    const deadline = Date.now() + 5000
+    while (Date.now() < deadline && !(await Bun.file(marker).exists())) await Bun.sleep(10)
+    const command = JSON.parse(await readFile(commandPath, "utf8")) as { pid: number; processStart: string; processGroupID: number; watchdogPID: number; watchdogStart: string }
+    const worker = JSON.parse(await readFile(identityPath, "utf8")) as { pid: number; processStart: string }
+    process.kill(worker.pid, "SIGKILL")
+    await data.adapter.interrupt(receipt, data.request)
+    const result = await data.adapter.inspect(receipt)
+    expect(result.status, result.summary).toBe("interrupted")
+    let processGroupExists = true
+    try { process.kill(-command.processGroupID, 0) } catch (error) { processGroupExists = (error as NodeJS.ErrnoException).code !== "ESRCH" }
+    expect(processGroupExists).toBe(false)
+  })
 })

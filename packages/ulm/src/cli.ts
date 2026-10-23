@@ -16,6 +16,7 @@ const parsed = parseArgs({
     chromium: { type: "string" },
     "profile-root": { type: "string" },
     "command-catalog": { type: "string" },
+    "allowed-origin": { type: "string", multiple: true },
     detach: { type: "boolean" },
     resume: { type: "boolean" },
     id: { type: "string" },
@@ -60,6 +61,7 @@ Options:
   --chromium <path>   Real Chromium executable for PDF rendering
   --profile-root <p>  Explicit isolated profile root to enable private vault
   --command-catalog <p> Explicit trusted non-destructive command catalog
+  --allowed-origin <o> Exact renderer origin for serve; repeat for multiple origins
   --detach           Launch daemon in the background and verify its heartbeat
   --resume           Recover a scheduler shutdown; operator stops require recover
 
@@ -76,7 +78,8 @@ if (command === "serve" || command === "fake-lab") {
     process.on("SIGTERM", () => server.stop(true))
     process.on("SIGINT", () => server.stop(true))
   } else {
-    const host = startServer({ workspaceRoot, port, chromiumPath, credentialsDir, commandCatalogPath })
+    const allowedOrigins = parsed.values["allowed-origin"] ?? process.env.ULMCODE_ALLOWED_ORIGINS?.split(",").map((origin) => origin.trim()).filter(Boolean)
+    const host = startServer({ workspaceRoot, port, chromiumPath, credentialsDir, commandCatalogPath, allowedOrigins })
     print({ service: "ulmcode-operations", url: host.server.url.href, workspaceRoot })
     process.on("SIGTERM", () => void host.close())
     process.on("SIGINT", () => void host.close())

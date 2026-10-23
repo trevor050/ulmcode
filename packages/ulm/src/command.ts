@@ -21,9 +21,11 @@ type CommandProfile = {
 }
 
 type CommandCatalog = { schemaVersion: 1; profiles: CommandProfile[] }
-type WorkerSpec = { operationID: string; executionID: string; attempt: number; profileID: string; artifactDirectory: string; command: string; args: string[]; timeoutMs: number; maxOutputBytes: number; credentialKeys: string[] }
+type WorkerSpec = { operationID: string; executionID: string; attempt: number; profileID: string; artifactDirectory: string; privateDirectory: string; command: string; args: string[]; timeoutMs: number; maxOutputBytes: number; credentialKeys: string[] }
 type ReceiptState = { schemaVersion: 1; operationID: string; executionID: string; profileID: string; status: ExecutionObservation["status"]; summary?: string; pid?: number; processStart?: string; startedAt?: string; endedAt?: string; artifactRefs: ArtifactRef[] }
 type WorkerIdentity = { pid: number; processStart: string }
+type CommandIdentity = { pid: number; processStart: string; processGroupID: number; watchdogPID: number; watchdogStart: string; deadlineAt: string }
+type GuardResult = { status: "failed" | "interrupted"; summary: string; artifactRefs: ArtifactRef[] }
 
 const secretName = /(pass(word)?|secret|token|credential|auth(orization)?|api.?key|private.?key)/i
 const sensitiveValue = /(bearer\s+\S+|(?:password|secret|token|api[_-]?key)\s*[:=]\s*\S+)/i
@@ -141,7 +143,7 @@ export class SupervisedCommandAdapter implements ExecutionAdapter {
       child.unref()
       return { receipt }
     }
-    const processStart = await processIdentity(pid)
+    const processStart = await processIdentity(pid, "command-worker.ts")
     if (!processStart) {
       const final = await readState(stateFile)
       if (final?.status !== "running") {
@@ -152,7 +154,7 @@ export class SupervisedCommandAdapter implements ExecutionAdapter {
       await atomicWrite(stateFile, JSON.stringify({ schemaVersion: 1, operationID: request.operationID, executionID: request.executionID, profileID: prepared.profile.profileID, status: "unknown", summary: "worker identity could not be established", artifactRefs: [] } satisfies ReceiptState))
       throw new Error("supervised worker identity could not be established")
     }
-      await atomicWrite(this.#identityFile(request.artifactDirectory, request.operationID, request.executionID, request.attempt), JSON.stringify({ pid, processStart } satisfies WorkerIdentity))
+    await atomicWrite(this.#identityFile(request.artifactDirectory, request.operationID, request.executionID, request.attempt), JSON.stringify({ pid, processStart } satisfies WorkerIdentity))
     child.unref()
     return { receipt }
   }
@@ -166,11 +168,13 @@ export class SupervisedCommandAdapter implements ExecutionAdapter {
       await fs.rm(this.#identityFile(parsed.directory, parsed.operationID, parsed.executionID, parsed.attempt), { force: true })
       await fs.rm(this.#readyFile(parsed.directory, parsed.operationID, parsed.executionID, parsed.attempt), { force: true })
       await fs.rm(this.#claimFile(parsed.directory, parsed.operationID, parsed.executionID, parsed.attempt), { force: true })
+      await fs.rm(this.#commandIdentityFile(parsed.directory, parsed.operationID, parsed.executionID, parsed.attempt), { force: true })
+      await Promise.all(this.#guardFiles(parsed.directory, parsed.operationID, parsed.executionID, parsed.attempt).map((file) => fs.rm(file, { force: true })))
       return { status: saved.status, artifactRefs: saved.artifactRefs, summary: saved.summary, checkpointRef: this.#relativeState(parsed.executionID, parsed.attempt) }
     }
     const identity = await readIdentity(this.#identityFile(parsed.directory, parsed.operationID, parsed.executionID, parsed.attempt))
     if (!identity) return { status: "unknown", artifactRefs: [], summary: "running command has no durable process identity" }
-    if (await processIdentity(identity.pid) !== identity.processStart) {
+    if (await processIdentity(identity.pid, "command-worker.ts") !== identity.processStart) {
       const workerResult = await readWorkerResult(parsed.directory, parsed.executionID, parsed.attempt)
       if (workerResult) {
         const observation = { status: workerResult.status, artifactRefs: workerResult.artifactRefs, summary: workerResult.summary, checkpointRef: this.#relativeState(parsed.executionID, parsed.attempt) }
@@ -178,6 +182,14 @@ export class SupervisedCommandAdapter implements ExecutionAdapter {
         await fs.rm(this.#identityFile(parsed.directory, parsed.operationID, parsed.executionID, parsed.attempt), { force: true })
         return observation
       }
+      const command = await readCommandIdentity(this.#commandIdentityFile(parsed.directory, parsed.operationID, parsed.executionID, parsed.attempt))
+      const guardResult = await readGuardResult(this.#guardResultFile(parsed.directory, parsed.operationID, parsed.executionID, parsed.attempt))
+      if (guardResult && command && !await processGroupExists(command.processGroupID)) {
+        const observation = { status: guardResult.status, artifactRefs: guardResult.artifactRefs, summary: guardResult.summary, checkpointRef: this.#relativeState(parsed.executionID, parsed.attempt) }
+        await this.#finishState(parsed.directory, saved, observation, parsed.attempt)
+        return observation
+      }
+      if (command && await processIdentity(command.watchdogPID, "command-worker.ts") === command.watchdogStart) return { status: "unknown", artifactRefs: [], summary: "worker exited; independent guard retains command ownership until cleanup or deadline" }
       const observation: ExecutionObservation = { status: "unknown", artifactRefs: [], summary: "worker is absent and no durable exit record exists" }
       await this.#finishState(parsed.directory, saved, observation, parsed.attempt)
       return observation
@@ -191,17 +203,30 @@ export class SupervisedCommandAdapter implements ExecutionAdapter {
     if (!parsed) return
     const saved = await readState(this.#stateFile(parsed.directory, parsed.executionID, parsed.attempt))
     const identity = await readIdentity(this.#identityFile(parsed.directory, parsed.operationID, parsed.executionID, parsed.attempt))
-    if (!saved || saved.status !== "running" || !identity) return
-    if (await processIdentity(identity.pid) !== identity.processStart) return
-    process.kill(identity.pid, "SIGUSR1")
+    if (!saved || saved.status !== "running") return
+    const workerAlive = Boolean(identity && await processIdentity(identity.pid, "command-worker.ts") === identity.processStart)
+    const command = await readCommandIdentity(this.#commandIdentityFile(parsed.directory, parsed.operationID, parsed.executionID, parsed.attempt))
+    if (workerAlive && identity) process.kill(identity.pid, "SIGUSR1")
+    else {
+      if (!command || await processIdentity(command.watchdogPID, "command-worker.ts") !== command.watchdogStart) return
+      process.kill(command.watchdogPID, "SIGUSR1")
+    }
     const deadline = Date.now() + 3000
     while (Date.now() < deadline) {
       const current = await readState(this.#stateFile(parsed.directory, parsed.executionID, parsed.attempt))
       if (current?.status !== "running") return
+      const guardResult = await readGuardResult(this.#guardResultFile(parsed.directory, parsed.operationID, parsed.executionID, parsed.attempt))
+      if (!workerAlive && command && guardResult && !await processGroupExists(command.processGroupID) && await processIdentity(command.watchdogPID, "command-worker.ts") !== command.watchdogStart) {
+        await this.#finishState(parsed.directory, saved, guardResult, parsed.attempt)
+        await fs.rm(this.#identityFile(parsed.directory, parsed.operationID, parsed.executionID, parsed.attempt), { force: true })
+        await fs.rm(this.#commandIdentityFile(parsed.directory, parsed.operationID, parsed.executionID, parsed.attempt), { force: true })
+        await Promise.all(this.#guardFiles(parsed.directory, parsed.operationID, parsed.executionID, parsed.attempt).map((file) => fs.rm(file, { force: true })))
+        return
+      }
       await Bun.sleep(25)
     }
     const current = await readState(this.#stateFile(parsed.directory, parsed.executionID, parsed.attempt))
-    if (current?.status === "running" && await processIdentity(identity.pid) === identity.processStart) process.kill(identity.pid, "SIGUSR1")
+    if (current?.status === "running" && identity && await processIdentity(identity.pid, "command-worker.ts") === identity.processStart) process.kill(identity.pid, "SIGUSR1")
   }
 
   async recover(request: LaunchRequest, receipt?: string) {
@@ -240,7 +265,7 @@ export class SupervisedCommandAdapter implements ExecutionAdapter {
     const interpolatedArgs = profile.args.flatMap((arg, index) => arg.includes("{{") ? [args[index]!] : [])
     if ([...Object.values(command.variables), ...interpolatedArgs].some((value) => secretValues.some((secret) => value.includes(secret)))) throw new CommandCatalogError("credential values cannot appear in phase variables or command arguments")
     if (secretValues.some((value) => value.length > 4096)) throw new CommandCatalogError("credential values exceed the worker redaction bound")
-    return { profile, spec: { operationID: request.operationID, executionID: request.executionID, attempt: request.attempt, profileID: profile.profileID, artifactDirectory: request.artifactDirectory, command: profile.executable, args, timeoutMs: profile.timeoutMs, maxOutputBytes: profile.maxOutputBytes, credentialKeys: Object.keys(env) } satisfies WorkerSpec, env }
+    return { profile, spec: { operationID: request.operationID, executionID: request.executionID, attempt: request.attempt, profileID: profile.profileID, artifactDirectory: request.artifactDirectory, privateDirectory: this.#privateDirectory(request.artifactDirectory, request.operationID), command: profile.executable, args, timeoutMs: profile.timeoutMs, maxOutputBytes: profile.maxOutputBytes, credentialKeys: Object.keys(env) } satisfies WorkerSpec, env }
   }
 
   #stateFile(directory: string, executionID: string, attempt: number) { return path.join(directory, "commands", `${executionID}-attempt-${attempt}.json`) }
@@ -248,6 +273,9 @@ export class SupervisedCommandAdapter implements ExecutionAdapter {
   #identityFile(directory: string, operationID: string, executionID: string, attempt: number) { return path.join(this.#privateDirectory(directory, operationID), `${executionID}-attempt-${attempt}.worker.json`) }
   #readyFile(directory: string, operationID: string, executionID: string, attempt: number) { return path.join(this.#privateDirectory(directory, operationID), `${executionID}-attempt-${attempt}.ready`) }
   #claimFile(directory: string, operationID: string, executionID: string, attempt: number) { return path.join(this.#privateDirectory(directory, operationID), `${executionID}-attempt-${attempt}.claim`) }
+  #commandIdentityFile(directory: string, operationID: string, executionID: string, attempt: number) { return path.join(this.#privateDirectory(directory, operationID), `${executionID}-attempt-${attempt}.command.json`) }
+  #guardResultFile(directory: string, operationID: string, executionID: string, attempt: number) { return path.join(this.#privateDirectory(directory, operationID), `${executionID}-attempt-${attempt}.guard.result.json`) }
+  #guardFiles(directory: string, operationID: string, executionID: string, attempt: number) { return [path.join(this.#privateDirectory(directory, operationID), `${executionID}-attempt-${attempt}.guard.json`), path.join(this.#privateDirectory(directory, operationID), `${executionID}-attempt-${attempt}.guard.ready`), path.join(this.#privateDirectory(directory, operationID), `${executionID}-attempt-${attempt}.guard.ack`), this.#guardResultFile(directory, operationID, executionID, attempt)] }
   #relativeState(executionID: string, attempt: number) { return `commands/${executionID}-attempt-${attempt}.json` }
 
   async #finishState(directory: string, prior: ReceiptState, observation: ExecutionObservation, attempt: number) {
@@ -338,19 +366,42 @@ async function readIdentity(file: string): Promise<WorkerIdentity | undefined> {
   catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw error }
 }
 
+async function readCommandIdentity(file: string): Promise<CommandIdentity | undefined> {
+  try { return JSON.parse(await Bun.file(file).text()) as CommandIdentity }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT" || error instanceof SyntaxError) return undefined; throw error }
+}
+
+async function readGuardResult(file: string): Promise<GuardResult | undefined> {
+  try { return JSON.parse(await Bun.file(file).text()) as GuardResult }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT" || error instanceof SyntaxError) return undefined; throw error }
+}
+
 async function readWorkerResult(directory: string, executionID: string, attempt: number) {
   try {
     return JSON.parse(await Bun.file(path.join(directory, "commands", `${executionID}-attempt-${attempt}.result.json`)).text()) as ReceiptState
   } catch { return undefined }
 }
 
-async function processIdentity(pid: number) {
+async function processIdentity(pid: number, expectedCommand?: string) {
   try {
     const [stat, cmdline] = await Promise.all([Bun.file(`/proc/${pid}/stat`).text(), Bun.file(`/proc/${pid}/cmdline`).text()])
     const start = stat.slice(stat.lastIndexOf(")") + 2).trim().split(/\s+/)[19]
-    if (!cmdline.includes("command-worker.ts")) return undefined
+    if (expectedCommand && !cmdline.includes(expectedCommand)) return undefined
     return `${start}:${createHash("sha256").update(cmdline).digest("hex").slice(0, 12)}`
   } catch { return undefined }
+}
+
+async function processGroupExists(processGroupID: number) {
+  const entries = await fs.readdir("/proc").catch(() => [])
+  for (const entry of entries) {
+    if (!/^\d+$/.test(entry)) continue
+    try {
+      const stat = await Bun.file(`/proc/${entry}/stat`).text()
+      const fields = stat.slice(stat.lastIndexOf(")") + 2).trim().split(/\s+/)
+      if (fields[0] !== "Z" && Number(fields[2]) === processGroupID) return true
+    } catch {}
+  }
+  return false
 }
 
 async function atomicWrite(file: string, content: string) {

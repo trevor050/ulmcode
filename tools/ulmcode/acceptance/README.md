@@ -8,7 +8,22 @@ Use the repository's declared Bun version. Evidence defaults to `/tmp/ulmcode-ac
 bun tools/ulmcode/acceptance/environment.ts --checkout <pristine-or-rebuild-checkout> --output <inventory.json>
 bun tools/ulmcode/acceptance/upstream-baseline.ts --checkout <pristine-or-rebuild-checkout>
 bun tools/ulmcode/acceptance/operations-api.ts
+bun tools/ulmcode/acceptance/operation-restart.ts
+bun tools/ulmcode/acceptance/profile-isolation.ts
+PROFILE_ISOLATION_CONTROL=1 bun tools/ulmcode/acceptance/profile-isolation.ts
+bun tools/ulmcode/acceptance/supervised-daemon.ts
+bun tools/ulmcode/acceptance/worker-death.ts
+ACCEPTANCE_SUPERVISED_RESTART_ONLY=1 bun tools/ulmcode/acceptance/supervised-daemon.ts
+bun tools/ulmcode/acceptance/runtime-continuation.ts
+RUNTIME_FIXTURE_VERDICT=done bun tools/ulmcode/acceptance/runtime-continuation.ts
+RUNTIME_HOST_SCENARIO=approval-denial bun tools/ulmcode/acceptance/runtime-handoff.ts
+RUNTIME_HOST_SCENARIO=handoff-complete bun tools/ulmcode/acceptance/runtime-handoff.ts
+RUNTIME_HOST_SCENARIO=handoff-cancel-retry bun tools/ulmcode/acceptance/runtime-handoff.ts
+RUNTIME_HOST_SCENARIO=authorized-catalog bun tools/ulmcode/acceptance/runtime-handoff.ts
+RUNTIME_HOST_SCENARIO=authorized-no-catalog bun tools/ulmcode/acceptance/runtime-handoff.ts
+RUNTIME_HOST_SCENARIO=authorized-invalid-profile bun tools/ulmcode/acceptance/runtime-handoff.ts
 bun tools/ulmcode/acceptance/private-boundaries.ts
+bun tools/ulmcode/acceptance/migration-interrupt.ts
 bun tools/ulmcode/acceptance/report-integrity.ts <completed-synthetic-operation-directory>
 ```
 
@@ -23,3 +38,20 @@ Report integrity attacks copy a completed synthetic operation into disposable va
 `lab.ts --port 0 --ready <path>` is an independent optional loopback-only HTTP lab supporting malformed/slow/transient responses for manual runtime drills.
 
 Real web and Electron verification remains required separately. On this WSL machine headless Chrome screenshots stalled; headed Chrome under isolated `xvfb-run -a` produced actual screenshots. DOM/CDP alone does not certify Electron compositor or native input. See the independent acceptance report for the accepted/failed/blocked/unverified matrix.
+
+The native runtime fixtures start the actual profile launcher and plugin Host. Continuation covers tool registration, operation binding, stateless checker NO/YES, missing deterministic gates and the durable no-tool limit. Handoff scenarios exercise real HTTP permission rejection, child completion, cancellation and new-child retry. Catalog scenarios use only an explicitly trusted local executable and fail closed without the catalog/profile. Request evidence contains kind and tool names, not raw prompts or authentication values.
+
+The profile isolation probe creates synthetic home/config/project poison, warms the actual plugin registry and waits for the primary model request with native tools. The negative control bypasses the isolated launcher in the same disposable state and demonstrates that the poison is detectable. It never changes the operator's home or profile.
+
+The supervised daemon harness drives separate real CLI processes, command failure, credential environment/output redaction, concurrent dispatch, pipe-holder timeouts, daemon locking, signal restart, explicit operator-stop preservation and autonomous actual PDF/audit closeout. `ACCEPTANCE_SUPERVISED_RESTART_ONLY=1` selects just restart/stop cases. `worker-death.ts` kills the actual detached worker while its TERM-resistant command and pipe holder run, makes no product inspection until after the hard deadline, then checks OS process state and duplicate suppression. Check the acceptance report for its current result.
+
+Real headed browser vault checks require an installed Playwright and display:
+
+```bash
+xvfb-run -a bun tools/ulmcode/acceptance/vault-browser.ts
+xvfb-run -a bun tools/ulmcode/acceptance/app-vault-link.ts --password-file <private-0600-file> --operation <existing-synthetic-operation-id>
+```
+
+The standalone vault harness submits generated private values and records blank/success screenshots only; the success handle is masked. The app-link harness requires the documented dedicated app/backend/API ports and opens an empty form only. Do not supply a password value as a command argument or capture a filled credential form.
+
+`migration-interrupt.ts` creates only synthetic legacy data, SIGKILLs its own migrator after actual partial archive writes, checks source hashes, and starts new processes to recover and repeat the original plan. It verifies the imported operation and every evidence hash. This proves that exercised interruption boundary, not arbitrary machine power-loss durability.

@@ -62,6 +62,11 @@ test("HTTP host enforces request shape, origin and registered artifact boundarie
   expect((await fetch(url, { method: "POST", body: "{}" })).status).toBe(415)
   expect((await fetch(url, { headers: { Origin: "https://unrelated.example" } })).status).toBe(403)
   expect((await fetch(url, { headers: { Origin: "http://localhost:4444" } })).headers.get("Access-Control-Allow-Origin")).toBe("http://localhost:4444")
+  const desktop = await fetch(url, { method: "OPTIONS", headers: { Origin: "oc://renderer", "Access-Control-Request-Method": "POST" } })
+  expect(desktop.status).toBe(204)
+  expect(desktop.headers.get("Access-Control-Allow-Origin")).toBe("oc://renderer")
+  expect((await fetch(url, { headers: { Origin: "oc://extensions" } })).status).toBe(403)
+  expect((await fetch(url, { headers: { Origin: "null" } })).status).toBe(403)
   expect((await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{" })).status).toBe(400)
   expect((await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ objective: "invalid" }) })).status).toBe(400)
   const denied = await fetch(url, {
