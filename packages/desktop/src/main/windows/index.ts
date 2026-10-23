@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { app, BrowserWindow, screen } from "electron"
 import { Effect, FileSystem, Path } from "effect"
+import { APP_NAME } from "../constants"
 import { openExternalURL } from "../files"
 import { scoped } from "../native/logging"
 import { DesktopPaths } from "../paths"
@@ -159,6 +160,11 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
     // The early window was secured and loaded when it was created; only its external-URL policy is
     // upgraded to the logged one.
     if (early) early.openExternal = (url) => runFork(openExternalURL(url))
+
+    win.webContents.on("page-title-updated", (event) => {
+      event.preventDefault()
+      win.setTitle(APP_NAME)
+    })
 
     if (!early) {
       allowRendererPermissions(win)

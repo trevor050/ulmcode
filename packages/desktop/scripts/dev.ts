@@ -10,6 +10,10 @@ type ServerSource = { type: "build" } | { type: "download"; version: string }
 type DevOptions = { server: ServerSource; electron: string[] }
 
 async function main() {
+  process.env.ULMCODE_DESKTOP = "1"
+  process.env.ULMCODE_PROFILE_TEMPLATE = join(import.meta.dirname, "../../../tools/ulmcode/profile.json")
+  process.env.ULMCODE_BUN_PATH = process.execPath
+  console.log("ULMCode desktop Bun runtime:", process.env.ULMCODE_BUN_PATH)
   process.env.OPENCODE_CHANNEL = "local"
   process.env.OPENCODE_VERSION ??= `2.0.0-local-${Date.now()}`
   process.env.OPENCODE_DISABLE_CHANNEL_DB = "0"
@@ -24,8 +28,8 @@ async function main() {
 
 async function prepareDesktop() {
   await Promise.all([
-    $`bun run install-electron`,
-    $`bun ./scripts/copy-icons.ts ${process.env.OPENCODE_CHANNEL ?? "dev"}`,
+    $`${process.execPath} run install-electron`,
+    $`${process.execPath} ./scripts/copy-icons.ts ${process.env.OPENCODE_CHANNEL ?? "dev"}`,
   ])
 
   if (process.platform === "darwin") process.env.ELECTRON_EXEC_PATH = await prepareDevElectron()
@@ -66,7 +70,7 @@ async function prepareServer(source: ServerSource) {
 function buildWebUi() {
   const started = performance.now()
 
-  const build = Bun.spawn(["bun", "run", "build"], {
+  const build = Bun.spawn([process.execPath, "run", "build"], {
     cwd: join(import.meta.dirname, "../../app"),
     env: { ...process.env, VITE_OPENCODE_SERVER_MODE: "origin" },
     stdio: ["ignore", "ignore", "ignore"],

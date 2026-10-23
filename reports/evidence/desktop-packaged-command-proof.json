@@ -1,0 +1,24 @@
+{
+  "service": "ulmcode-operations",
+  "servicePort": 4311,
+  "workspaceRoot": "/tmp/ulmcode-desktop-command-proof/workspace",
+  "profileID": "d263c0b560ee98911c21775c1280c7f9d69b979bb847e875e4a65c02899f3f6b",
+  "packageResources": [
+    "resources/ulmcode/operations/server.js",
+    "resources/ulmcode/operations/command-worker.ts",
+    "resources/ulmcode/command-catalog.json",
+    "resources/ulmcode/plugin/bun"
+  ],
+  "pathContract": "<resources>/ulmcode/plugin:/usr/bin:/bin",
+  "systemPathHasBun": false,
+  "fixture": "local fake lab on 127.0.0.1:4320; no credentials or external requests",
+  "operationID": "desktop-catalog-proof",
+  "commandProfileID": "local-http-observe",
+  "executionStatus": "succeeded",
+  "executionSummary": "command completed with exit code 0",
+  "phaseStatus": "complete",
+  "remainingOperationGates": [
+    "normalized evidence is missing",
+    "final runtime summary and report artifacts are missing"
+  ]
+}

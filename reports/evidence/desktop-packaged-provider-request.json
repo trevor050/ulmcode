@@ -1,0 +1,43 @@
+{
+  "source": "synthetic local provider",
+  "requests": [
+    {
+      "turn": 1,
+      "requestMessageCount": 1,
+      "toolNames": [
+        "edit",
+        "evidence_normalize",
+        "glob",
+        "grep",
+        "operation_approve_plan",
+        "operation_audit",
+        "operation_create",
+        "operation_credentials",
+        "operation_goal_review",
+        "operation_handoff",
+        "operation_interrupt",
+        "operation_plan",
+        "operation_recover",
+        "operation_resume",
+        "operation_run",
+        "operation_status",
+        "question",
+        "read",
+        "report_lint",
+        "report_render",
+        "shell",
+        "skill",
+        "subagent",
+        "webfetch",
+        "websearch",
+        "write",
+        "execute"
+      ]
+    },
+    {
+      "turn": 2,
+      "requestMessageCount": 1,
+      "toolNames": []
+    }
+  ]
+}

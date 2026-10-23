@@ -1,4 +1,5 @@
 import http from "node:http"
+import path from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import { app } from "electron"
 import { Effect, Path } from "effect"
@@ -6,6 +7,7 @@ import { DesktopPaths } from "../paths"
 import { getUserShell, loadShellEnv } from "../service/shell-env"
 import { registerRendererProtocol, setDockIcon, setProtocolReporter } from "../windows"
 import { scoped } from "../native/logging"
+import { applyRuntimeEnv, resolveProfilePaths, runtimeEnv } from "../../../../ulm/src/profile"
 
 // electron-context-menu attaches to every existing and future window, so it can load once the first
 // window is up instead of holding up startup with its dependency tree.
@@ -22,10 +24,19 @@ export const prepareApplicationEnvironment = Effect.gen(function* () {
 export const preferApplicationEnvironment = Effect.gen(function* () {
   const shell = process.platform === "win32" ? null : getUserShell()
   const shellEnv = shell ? yield* loadShellEnv(shell) : null
+  const ulmBunPath = process.env.ULMCODE_BUN_PATH
+  const ulmBunDirectory = ulmBunPath ? path.dirname(ulmBunPath) : undefined
   yield* Effect.sync(() => {
     if (!shellEnv?.XDG_STATE_HOME) delete process.env.XDG_STATE_HOME
+    const inherited = { ...process.env, ...shellEnv }
+    const profile = inherited.ULMCODE_PROFILE_ROOT
+      ? runtimeEnv(inherited, resolveProfilePaths({ root: inherited.ULMCODE_PROFILE_ROOT }))
+      : undefined
+    if (profile) applyRuntimeEnv(process.env, profile)
+    else if (shellEnv) Object.assign(process.env, shellEnv)
     Object.assign(process.env, {
-      ...shellEnv,
+      ...(ulmBunPath ? { ULMCODE_BUN_PATH: ulmBunPath } : {}),
+      ...(ulmBunDirectory ? { PATH: `${ulmBunDirectory}${path.delimiter}${shellEnv?.PATH ?? process.env.PATH ?? ""}` } : {}),
       OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
       OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
       OPENCODE_CLIENT: "desktop",

@@ -16,9 +16,10 @@
     "noEmit": true,
     "emitDeclarationOnly": false,
     "outDir": "node_modules/.ts-dist",
+    "rootDir": "..",
     "types": ["vite/client", "node", "electron"]
   },
   "references": [{ "path": "../app" }],
-  "include": ["src", "package.json"],
+  "include": ["src", "package.json", "../ulm/src/profile.ts"],
   "exclude": ["src/**/*.test.ts"]
 }

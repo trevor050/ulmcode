@@ -1,0 +1,23 @@
+{
+  "launch": "fresh Linux unpacked package under Xvfb",
+  "profileRoot": "/tmp/ulmcode-desktop-env-proof3/profile",
+  "workspaceRoot": "/tmp/ulmcode-desktop-env-proof3/documents/Default Project",
+  "existingProfileConfig": {
+    "registryPluginTargetRewrittenToPackagedDirectory": true,
+    "upstreamUpdatesDisabled": true,
+    "otherConfigSettingPreserved": true
+  },
+  "testEnvironment": "four forbidden keys were populated with synthetic poison values before launch",
+  "childEnvironmentPresenceOnly": {
+    "packagedCliService": {
+      "checked": true,
+      "forbiddenVariablesPresent": []
+    },
+    "packagedOperationsSidehost": {
+      "checked": true,
+      "forbiddenVariablesPresent": []
+    }
+  },
+  "operationsHealthMatchedProfileAndWorkspace": true,
+  "profileID": "d3521044542b1e3f4186e954eff7b5c96c53be17a78d2fc6dc1b721eeff93961"
+}
