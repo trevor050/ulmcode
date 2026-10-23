@@ -4,7 +4,7 @@ import path from "node:path"
 import { operationID } from "./operation.js"
 import { OperationStore } from "./store.js"
 import type { OperationRecord, OperationPlan } from "./operation.js"
-import { requireReauthentication, storeCredential, type PrivateCredential } from "./credentials.js"
+import { listCredentials, requireReauthentication, storeCredential, type PrivateCredential } from "./credentials.js"
 
 export type MigrationInput = {
   sourceOperationsRoot: string
@@ -23,6 +23,14 @@ export type MigrationPlan = MigrationInput & {
   fileCount: number
   credentialCount: number
   reauthenticationCount: number
+  operations: Array<{
+    operationID: string
+    disposition: "import" | "quarantine"
+    reason?: string
+    credentialIndex?: { sha256: string; size: number }
+    files: Array<{ path: string; sha256: string; size: number; disposition: "public" | "quarantined"; reason?: string }>
+    credentials: Array<{ credentialID: string; handle: `cred_${string}`; status: "available" | "reauth_required"; sourceSecretSha256?: string }>
+  }>
 }
 
 type PlannedOperation = {
@@ -67,10 +75,7 @@ async function createPlan(input: MigrationInput) {
   if (path.resolve(targetOperationsRoot) !== path.join(targetWorkspaceRoot, ".ulmcode", "operations"))
     throw new Error("target operations root must belong to the explicit target workspace")
 
-  if ((await fs.lstat(sourceOperationsRoot).catch(() => undefined))?.isSymbolicLink())
-    throw new Error("migration does not follow symbolic links")
-  if ((await fs.lstat(sourceStorageRoot).catch(() => undefined))?.isSymbolicLink())
-    throw new Error("migration does not follow symbolic links")
+  await Promise.all([...sourceRoots, ...destinationRoots].map(assertNoSymlinkPath))
   const entries = await fs.readdir(sourceOperationsRoot, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
     if (error.code === "ENOENT") return []
     throw error
@@ -172,7 +177,7 @@ async function createPlan(input: MigrationInput) {
             : !isAllowedPublicFile(file.relativePath)
               ? { disposition: "quarantined" as const, quarantineReason: "file path is outside the public migration allowlist" }
               : containsCredentialMaterial(bytes.toString(), sensitiveValues)
-                ? { disposition: "quarantined" as const, quarantineReason: "file contains credential material or a synthetic sentinel" }
+                ? { disposition: "quarantined" as const, quarantineReason: "file contains credential material" }
                 : { disposition: "public" as const }),
         }
       }),
@@ -212,13 +217,33 @@ async function createPlan(input: MigrationInput) {
       (total, operation) => total + operation.credentials.filter((credential) => credential.status === "reauth_required").length,
       0,
     ),
+    operations: operations.map((operation) => ({
+      operationID: operation.id,
+      disposition: operation.record ? ("import" as const) : ("quarantine" as const),
+      ...(operation.quarantineReason ? { reason: operation.quarantineReason } : {}),
+      ...(operation.legacyCredentialIndex ? { credentialIndex: operation.legacyCredentialIndex } : {}),
+      files: operation.files.map((file) => ({
+        path: file.relativePath,
+        sha256: file.sha256,
+        size: file.size,
+        disposition: file.disposition,
+        ...(file.quarantineReason ? { reason: file.quarantineReason } : {}),
+      })),
+      credentials: operation.credentials.map(({ credentialID, handle, status, legacySecret }) => ({
+        credentialID,
+        handle,
+        status,
+        ...(legacySecret ? { sourceSecretSha256: legacySecret.sha256 } : {}),
+      })),
+    })),
   }
   return { summary: { ...summary, planID: sha256(JSON.stringify({ ...summary, operations })) }, operations }
 }
 
 export async function applyMigration(plan: MigrationPlan) {
   const current = await createPlan(plan)
-  if (current.summary.planID !== plan.planID) throw new Error("migration source changed after planning")
+  if (JSON.stringify(current.summary) !== JSON.stringify(plan)) throw new Error("migration source changed after planning")
+  await preflightCredentialDestinations(current.operations, plan)
   await preflightPublicDestinations(current.operations, plan)
   let copiedFiles = 0
   let copiedCredentials = 0
@@ -236,7 +261,7 @@ export async function applyMigration(plan: MigrationPlan) {
       const bytes = await fs.readFile(source)
       if (sha256(bytes) !== file.sha256) throw new Error("migration source changed after planning")
       const archivedPath = `${sha256(file.relativePath)}.bin`
-      await writeOnce(path.join(archiveDirectory, archivedPath), bytes, 0o600)
+      await writeOnce(path.join(archiveDirectory, archivedPath), bytes, 0o600, plan.targetCredentialsDir)
       archivedFiles.push({
         path: file.relativePath,
         sha256: file.sha256,
@@ -245,7 +270,7 @@ export async function applyMigration(plan: MigrationPlan) {
         ...(file.quarantineReason ? { reason: file.quarantineReason } : {}),
       })
       if (file.disposition === "public" && operation.record && file.relativePath !== "plans/operation-plan.json") {
-        await writeOnce(path.join(targetDirectory, file.relativePath), bytes, 0o600)
+        await writeOnce(path.join(targetDirectory, file.relativePath), bytes, 0o600, plan.targetOperationsRoot)
       }
       copiedFiles++
     }
@@ -253,6 +278,7 @@ export async function applyMigration(plan: MigrationPlan) {
       path.join(archiveDirectory, "manifest.json"),
       Buffer.from(JSON.stringify({ schemaVersion: 1, operationID: operation.id, reason: operation.quarantineReason, files: archivedFiles }, null, 2) + "\n"),
       0o600,
+      plan.targetCredentialsDir,
     )
     if (operation.record) {
       const planArtifact = operation.record.plan
@@ -262,6 +288,7 @@ export async function applyMigration(plan: MigrationPlan) {
           path.join(targetDirectory, "plans", "operation-plan.json"),
           Buffer.from(JSON.stringify(safePlan, null, 2) + "\n"),
           0o600,
+          plan.targetOperationsRoot,
         )
       }
       const existing = await store.get(operation.id)
@@ -280,7 +307,7 @@ export async function applyMigration(plan: MigrationPlan) {
     if (sha256(legacyIndexBytes) !== operation.legacyCredentialIndex.sha256)
       throw new Error("migration source changed after planning")
     const quarantineDir = path.join(plan.targetCredentialsDir, operation.id, "quarantine")
-    await writeOnce(path.join(quarantineDir, "legacy-index.json"), legacyIndexBytes, 0o600)
+    await writeOnce(path.join(quarantineDir, "legacy-index.json"), legacyIndexBytes, 0o600, plan.targetCredentialsDir)
     if (operation.legacyCredentialsMalformed) continue
     const records = decodeLegacyIndex(legacyIndexBytes, operation.id)
     const grouped = groupBy(records, (record) => legacySlug(record.credentialID))
@@ -309,7 +336,7 @@ export async function applyMigration(plan: MigrationPlan) {
       )
         throw new Error("migration source changed after planning")
       if (legacySecretBytes) {
-        await writeOnce(path.join(quarantineDir, `${hashID(operation.id, legacySecretPath)}.json`), legacySecretBytes, 0o600)
+        await writeOnce(path.join(quarantineDir, `${hashID(operation.id, legacySecretPath)}.json`), legacySecretBytes, 0o600, plan.targetCredentialsDir)
       }
       const secretValue = legacySecretBytes ? parseLegacySecret(legacySecretBytes) : undefined
       const privateValue = {
@@ -363,11 +390,12 @@ async function preflightPublicDestinations(operations: PlannedOperation[], plan:
     for (const operation of operations) {
       if (!operation.record) continue
       const targetDirectory = path.join(plan.targetOperationsRoot, operation.id)
+      const operationDatabase = path.join(targetDirectory, "operation.db")
+      await assertNoSymlinkPath(operationDatabase)
       const existing = await store.get(operation.id)
       if (existing && JSON.stringify(existing) !== JSON.stringify(operation.record))
         throw new Error("migration destination contains a different operation")
 
-      const operationDatabase = path.join(targetDirectory, "operation.db")
       if (!existing && (await pathExists(operationDatabase))) throw new Error("migration destination has an unreadable operation database")
       if (!existing) {
         const projected = Buffer.from(`${JSON.stringify(operation.record, null, 2)}\n`)
@@ -393,10 +421,75 @@ async function preflightPublicDestinations(operations: PlannedOperation[], plan:
   }
 }
 
+async function preflightCredentialDestinations(operations: PlannedOperation[], plan: MigrationPlan) {
+  for (const operation of operations) {
+    if (!operation.legacyCredentialIndex || operation.legacyCredentialsMalformed) continue
+    const operationRoot = path.join(plan.targetOperationsRoot, operation.id)
+    const indexFile = path.join(operationRoot, "credentials", "index.json")
+    await assertNoSymlinkPath(indexFile)
+    const existingCredentials = await listCredentials(operationRoot, operation.id)
+    const legacyIndexBytes = await fs.readFile(path.join(plan.sourceOperationsRoot, operation.id, "credentials", "index.json"))
+    if (sha256(legacyIndexBytes) !== operation.legacyCredentialIndex.sha256)
+      throw new Error("migration source changed after planning")
+    const records = decodeLegacyIndex(legacyIndexBytes, operation.id)
+    const grouped = groupBy(records, (record) => legacySlug(record.credentialID))
+    for (const record of records) {
+      const plannedCredential = operation.credentials.find((item) => item.credentialID === record.credentialID)
+      if (!plannedCredential) throw new Error("migration plan is invalid")
+      const legacySecretPath = path.join(
+        plan.sourceStorageRoot,
+        "storage",
+        "ulm",
+        "credential",
+        legacySlug(operation.id),
+        `${legacySlug(record.credentialID)}.json`,
+      )
+      const legacySecretBytes = await readSourceStorageFile(
+        plan.sourceStorageRoot,
+        path.relative(plan.sourceStorageRoot, legacySecretPath),
+      )
+      if (
+        (plannedCredential.legacySecret &&
+          (!legacySecretBytes || sha256(legacySecretBytes) !== plannedCredential.legacySecret.sha256)) ||
+        (!plannedCredential.legacySecret && legacySecretBytes)
+      )
+        throw new Error("migration source changed after planning")
+      const targetPrivateFile = path.join(plan.targetCredentialsDir, operation.id, `${plannedCredential.handle}.json`)
+      await assertNoSymlinkPath(targetPrivateFile)
+      const existingPrivateFile = await fs.lstat(targetPrivateFile).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return undefined
+        throw error
+      })
+      if (existingPrivateFile && (!existingPrivateFile.isFile() || existingPrivateFile.isSymbolicLink()))
+        throw new Error("migration credential destination is not a regular file")
+      const ambiguous = (grouped.get(legacySlug(record.credentialID))?.length ?? 0) > 1
+      const privateValue = {
+        label: stringValue(record.label),
+        type: stringValue(record.type),
+        username: stringValue(record.username),
+        url: stringValue(record.url),
+        target: stringValue(record.target),
+        tags: stringArray(record.tags),
+        notes: stringValue(record.notes),
+        rules: stringValue(record.rules),
+        source: record,
+        ...(legacySecretBytes ? parseLegacySecret(legacySecretBytes) : {}),
+      } satisfies PrivateCredential
+      const expectedPrivateBytes = Buffer.from(`${JSON.stringify(privateValue, null, 2)}\n`)
+      if (existingPrivateFile && sha256(await fs.readFile(targetPrivateFile)) !== sha256(expectedPrivateBytes))
+        throw new Error("migration destination contains different private credential data")
+      if (existingCredentials.some((item) => item.credentialID === plannedCredential.handle) && !existingPrivateFile)
+        throw new Error("migration destination credential handle has no private record")
+      if (ambiguous && plannedCredential.status !== "reauth_required") throw new Error("migration plan is invalid")
+    }
+  }
+}
+
 async function preflightWrite(file: string, bytes: Uint8Array, root: string) {
   const relative = path.relative(root, file)
   if (!relative || relative.startsWith(`..${path.sep}`) || relative === ".." || path.isAbsolute(relative))
     throw new Error("migration destination path is invalid")
+  await assertNoSymlinkPath(file)
   let current = root
   for (const part of relative.split(path.sep).slice(0, -1)) {
     current = path.join(current, part)
@@ -416,6 +509,21 @@ async function preflightWrite(file: string, bytes: Uint8Array, root: string) {
   if (!info) return
   if (info.isSymbolicLink() || !info.isFile()) throw new Error("migration destination file is not a regular file")
   if (sha256(await fs.readFile(file)) !== sha256(bytes)) throw new Error("migration destination contains different data")
+}
+
+async function assertNoSymlinkPath(target: string) {
+  const resolved = path.resolve(target)
+  const root = path.parse(resolved).root
+  let current = root
+  for (const part of path.relative(root, resolved).split(path.sep).filter(Boolean)) {
+    current = path.join(current, part)
+    const info = await fs.lstat(current).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return undefined
+      throw error
+    })
+    if (!info) return
+    if (info.isSymbolicLink()) throw new Error("migration does not follow symbolic links")
+  }
 }
 
 async function pathExists(target: string) {
@@ -723,17 +831,36 @@ function overlaps(first: string, second: string) {
   return first === second || isWithin(first, second) || isWithin(second, first)
 }
 
-async function writeOnce(file: string, bytes: Uint8Array, mode: number) {
+async function writeOnce(file: string, bytes: Uint8Array, mode: number, root: string) {
+  const relative = path.relative(root, file)
+  if (!relative || relative.startsWith(`..${path.sep}`) || relative === ".." || path.isAbsolute(relative))
+    throw new Error("migration destination path is invalid")
+  await assertNoSymlinkPath(path.dirname(file))
   await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 })
+  await assertNoSymlinkPath(path.dirname(file))
   await fs.chmod(path.dirname(file), 0o700)
-  if (await Bun.file(file).exists()) {
+  const existing = await fs.lstat(file).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return undefined
+    throw error
+  })
+  if (existing) {
+    if (existing.isSymbolicLink() || !existing.isFile()) throw new Error("migration destination file is not a regular file")
     if (sha256(await fs.readFile(file)) !== sha256(bytes)) throw new Error("migration destination contains different data")
     return
   }
   const temporary = `${file}.${randomUUID()}.tmp`
   await fs.writeFile(temporary, bytes, { mode, flag: "wx" })
   await fs.chmod(temporary, mode)
-  await fs.rename(temporary, file)
+  try {
+    await fs.link(temporary, file)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error
+    const raced = await fs.lstat(file)
+    if (raced.isSymbolicLink() || !raced.isFile() || sha256(await fs.readFile(file)) !== sha256(bytes))
+      throw new Error("migration destination contains different data")
+  } finally {
+    await fs.rm(temporary, { force: true })
+  }
 }
 
 export * as Migration from "./migration.js"

@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from "node:crypto"
-import { readFileSync, realpathSync } from "node:fs"
+import { closeSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { normalizeEvidence } from "./evidence"
+import { findingDocumentSchema, recordFindingsInputSchema, type RecordFindingsInput } from "./findings"
 import { applyCompletionGate, completionBlockers, DEFAULT_COMPLETION_GATES, recordGoalReview } from "./goal"
 import {
   operationID,
@@ -29,6 +30,7 @@ function fileRef(root: string, reference: ArtifactRef) {
   const file = path.resolve(root, reference.path)
   const relative = path.relative(root, file)
   if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) throw new Error(`artifact path escapes operation: ${reference.path}`)
+  if (lstatSync(file).isSymbolicLink()) throw new Error(`artifact path cannot be a symbolic link: ${reference.path}`)
   const realRoot = realpathSync(root)
   const realFile = realpathSync(file)
   const realRelative = path.relative(realRoot, realFile)
@@ -135,6 +137,97 @@ function planIdentity(plan: NonNullable<OperationRecord["plan"]>) {
 
 function operationReady(record: OperationRecord) {
   return record.plan?.phases.filter((phase) => phase.required).every((phase) => phase.status === "complete") ?? false
+}
+
+function processIsAlive(pid: number) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function errorCode(error: unknown) {
+  return error && typeof error === "object" && "code" in error ? (error as { code?: unknown }).code : undefined
+}
+
+async function withArtifactLock<T>(directory: string, operationID: string, action: () => Promise<T>) {
+  const lockFile = path.join(directory, ".artifact-mutation.lock")
+  const token = randomUUID()
+  let acquired = false
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const descriptor = openSync(lockFile, "wx", 0o600)
+      try {
+        writeFileSync(descriptor, JSON.stringify({ operationID, pid: process.pid, token }))
+        fsyncSync(descriptor)
+      } finally {
+        closeSync(descriptor)
+      }
+      acquired = true
+      break
+    } catch (error) {
+      if (errorCode(error) !== "EEXIST") throw error
+      let owner: { pid?: unknown }
+      try {
+        owner = JSON.parse(readFileSync(lockFile, "utf8")) as { pid?: unknown }
+      } catch {
+        throw new OperationConflictError(`artifact mutation lock exists but is unreadable for ${operationID}`)
+      }
+      if (typeof owner.pid !== "number" || processIsAlive(owner.pid)) {
+        throw new OperationConflictError(`operation ${operationID} already has an artifact mutation in progress`)
+      }
+      unlinkSync(lockFile)
+    }
+  }
+  if (!acquired) throw new OperationConflictError(`could not acquire artifact mutation lock for ${operationID}`)
+  try {
+    return await action()
+  } finally {
+    try {
+      const owner = JSON.parse(readFileSync(lockFile, "utf8")) as { token?: unknown }
+      if (owner.token === token) unlinkSync(lockFile)
+    } catch {
+      // A stale-lock recovery may already have removed the lock.
+    }
+  }
+}
+
+function writeAtomic(file: string, contents: string) {
+  const temporary = `${file}.${randomUUID()}.tmp`
+  writeFileSync(temporary, contents, { mode: 0o600 })
+  renameSync(temporary, file)
+}
+
+function restoreFile(file: string, previous: Buffer | undefined, writtenHash: string) {
+  if (!existsSync(file) || createHash("sha256").update(readFileSync(file)).digest("hex") !== writtenHash) return
+  if (previous) writeAtomic(file, previous.toString())
+  else unlinkSync(file)
+}
+
+function ensureRealOperationDirectory(root: string, directory: string) {
+  if (existsSync(directory) && lstatSync(directory).isSymbolicLink()) throw new Error("artifact directories cannot be symbolic links")
+  mkdirSync(directory, { recursive: true })
+  const realRoot = realpathSync(root)
+  const realDirectory = realpathSync(directory)
+  const relative = path.relative(realRoot, realDirectory)
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) throw new Error("artifact directory resolves outside the operation")
+}
+
+function assertPublicArtifactPath(reference: ArtifactRef) {
+  const normalized = reference.path
+  if (normalized.includes("\\") || path.posix.normalize(normalized) !== normalized || path.posix.isAbsolute(normalized)) {
+    throw new Error("public artifact paths must be normalized relative paths using forward slashes")
+  }
+  if (
+    normalized === "evidence/normalized.json" ||
+    normalized.startsWith("findings/") ||
+    normalized.startsWith("deliverables/final/")
+  ) throw new Error("derived findings, normalized evidence, and final report files have dedicated engine methods")
+  if (!["evidence/", "lab/", "commands/", "subagents/"].some((prefix) => normalized.startsWith(prefix))) {
+    throw new Error("public artifacts must be under evidence/, lab/, commands/, or subagents/")
+  }
 }
 
 export class OperationEngine {
@@ -402,18 +495,119 @@ export class OperationEngine {
   }
 
   async recordArtifacts(id: string, artifacts: ArtifactRef[], now = new Date()) {
-    const record = await this.#require(id)
-    const validated = artifacts.map((artifact) => fileRef(this.#store.directory(record.id), artifact))
-    const updated: OperationRecord = { ...record, revision: record.revision + 1, updatedAt: now.toISOString(), artifacts: uniqueArtifacts([...record.artifacts, ...validated]) }
-    return (await this.#store.commit({
-      operationID: record.id,
-      expectedRevision: record.revision,
-      type: "artifacts.recorded",
-      idempotencyKey: `artifacts.recorded:${record.revision}:${createHash("sha256").update(JSON.stringify(validated)).digest("hex")}`,
-      actor: { kind: "engine" },
-      data: { artifacts: validated },
-      operation: updated,
-    })).operation
+    const normalizedID = operationID(id)
+    const directory = this.#store.directory(normalizedID)
+    return withArtifactLock(directory, normalizedID, async () => {
+      const record = await this.#require(normalizedID)
+      const seen = new Set<string>()
+      const validated = artifacts.map((artifact) => {
+        assertPublicArtifactPath(artifact)
+        if (seen.has(artifact.path)) throw new Error(`duplicate artifact path: ${artifact.path}`)
+        seen.add(artifact.path)
+        return fileRef(directory, artifact)
+      })
+      for (const item of validated) {
+        const prior = record.artifacts.find((artifact) => artifact.path === item.path)
+        if (prior?.sha256 && prior.sha256 !== item.sha256) {
+          throw new OperationConflictError(`registered source artifact is immutable; use a new path instead of changing ${item.path}`)
+        }
+      }
+      const nextArtifacts = uniqueArtifacts([...record.artifacts, ...validated])
+      const identity = (items: ArtifactRef[]) => JSON.stringify(items.toSorted((left, right) => left.path.localeCompare(right.path)))
+      if (identity(record.artifacts) === identity(nextArtifacts)) return record
+      const updated: OperationRecord = {
+        ...record,
+        revision: record.revision + 1,
+        updatedAt: now.toISOString(),
+        artifacts: nextArtifacts,
+        reportSourceRevision: undefined,
+        reportSourceDigest: undefined,
+        audit: undefined,
+      }
+      return (await this.#store.commit({
+        operationID: record.id,
+        expectedRevision: record.revision,
+        type: "artifacts.recorded",
+        idempotencyKey: `artifacts.recorded:${record.revision}:${createHash("sha256").update(JSON.stringify(validated)).digest("hex")}`,
+        actor: { kind: "engine" },
+        data: { artifacts: validated },
+        operation: updated,
+      })).operation
+    })
+  }
+
+  async recordFindings(id: string, input: RecordFindingsInput, now = new Date()) {
+    const parsed = recordFindingsInputSchema.parse(input)
+    const normalizedID = operationID(id)
+    const directory = this.#store.directory(normalizedID)
+    return withArtifactLock(directory, normalizedID, async () => {
+      const record = await this.#require(normalizedID)
+      const knownEvidence = new Set(record.evidence?.claims.map((claim) => claim.id) ?? [])
+      for (const finding of parsed.findings) {
+        for (const evidenceID of finding.evidenceIDs) {
+          if (!knownEvidence.has(evidenceID)) throw new Error(`finding ${finding.id} references unknown evidence ID: ${evidenceID}`)
+        }
+      }
+      const file = path.join(directory, "findings", "findings.json")
+      ensureRealOperationDirectory(directory, path.dirname(file))
+      const previous = existsSync(file) ? readFileSync(file) : undefined
+      const priorDocument = previous
+        ? findingDocumentSchema.parse(JSON.parse(previous.toString("utf8")))
+        : undefined
+      if (priorDocument && priorDocument.operationID !== record.id) throw new OperationConflictError("findings artifact belongs to a different operation")
+      const submittedIDs = new Set(parsed.findings.map((finding) => finding.id))
+      const retainedRejected = priorDocument?.findings.filter((finding) => !submittedIDs.has(finding.id)) ?? []
+      for (const prior of priorDocument?.findings ?? []) {
+        const submitted = parsed.findings.find((finding) => finding.id === prior.id)
+        if (!submitted && prior.state !== "rejected") {
+          throw new OperationConflictError(`finding ${prior.id} must remain in canonical history until explicitly rejected`)
+        }
+        if (submitted && prior.state === "rejected" && submitted.state !== "rejected") {
+          throw new OperationConflictError(`rejected finding ${prior.id} cannot be reopened`)
+        }
+      }
+      const findings = [
+        ...parsed.findings.map((finding) => ({
+        ...finding,
+        ...(parsed.reviewedBy ? { reviewedBy: parsed.reviewedBy } : {}),
+        })),
+        ...retainedRejected,
+      ]
+      const document = findingDocumentSchema.parse({ operationID: record.id, findings })
+      const serialized = `${JSON.stringify(document, null, 2)}\n`
+      const writtenHash = createHash("sha256").update(serialized).digest("hex")
+      try {
+        writeAtomic(file, serialized)
+        const artifact = fileRef(directory, { path: "findings/findings.json", mediaType: "application/json" })
+        const existing = record.artifacts.find((item) => item.path === artifact.path)
+        if (existing?.sha256 === artifact.sha256) return record
+        const updated: OperationRecord = {
+          ...record,
+          revision: record.revision + 1,
+          updatedAt: now.toISOString(),
+          artifacts: uniqueArtifacts([...record.artifacts, artifact]),
+          reportSourceRevision: undefined,
+          reportSourceDigest: undefined,
+          audit: undefined,
+        }
+        return (await this.#store.commit({
+          operationID: record.id,
+          expectedRevision: record.revision,
+          type: "findings.recorded",
+          idempotencyKey: `findings.recorded:${record.revision}:${artifact.sha256}`,
+          actor: { kind: "operator", id: parsed.reviewedBy },
+          data: { artifact, findings: findings.map(({ id: findingID, state }) => ({ id: findingID, state })) },
+          operation: updated,
+        })).operation
+      } catch (error) {
+        try {
+          restoreFile(file, previous, writtenHash)
+        } catch (restoreError) {
+          throw new AggregateError([error, restoreError], "findings write conflicted and its prior artifact could not be restored")
+        }
+        throw error
+      }
+    })
   }
 
   async recordReport(id: string, input: { sourceRevision: number; sourceDigest: string; artifacts: ArtifactRef[] }, now = new Date()) {

@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import { createHash, randomBytes } from "node:crypto"
 import { spawn } from "node:child_process"
-import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises"
+import { mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { applyMigration, planMigration } from "../src/migration.js"
+import { applyMigration, planMigration, type MigrationPlan } from "../src/migration.js"
 import {
   listCredentials,
   materializeCredential,
@@ -375,6 +375,121 @@ describe("ULMCode profile", () => {
     }
   })
 
+  test("operator migration CLI writes a private redacted plan and resumable receipt", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "ulmcode-migration-cli-"))
+    const sourceOperationsRoot = path.join(root, "source", "operations")
+    const sourceStorageRoot = path.join(root, "source", "data")
+    const targetWorkspaceRoot = path.join(root, "target", "workspace")
+    const targetCredentialsDir = path.join(root, "target", "private", "credentials")
+    const privateOutput = path.join(root, "private", "migration")
+    const sourceOperationRoot = path.join(sourceOperationsRoot, "cli-lab")
+    const username = `account-${randomBytes(12).toString("hex")}`
+    const note = `operator note ${randomBytes(16).toString("hex")}`
+    const password = randomBytes(24).toString("base64url")
+    const now = "2026-04-01T00:00:00.000Z"
+    const operationBytes = Buffer.from(JSON.stringify({
+      operationID: "cli-lab",
+      objective: "Synthetic operator migration CLI review",
+      status: "running",
+      scope: { targets: ["fixture.invalid"], mode: "authorized" },
+      time: { created: now, updated: now },
+    }) + "\n")
+    const indexBytes = Buffer.from(JSON.stringify({ operationID: "cli-lab", credentials: [{ credentialID: "fixture-login", label: "Synthetic fixture", username, notes: note }] }) + "\n")
+    const secretBytes = Buffer.from(JSON.stringify({ operationID: "cli-lab", credentialID: "fixture-login", username, password, notes: note }) + "\n")
+    const operationFile = path.join(sourceOperationRoot, "operation.json")
+    const indexFile = path.join(sourceOperationRoot, "credentials", "index.json")
+    const secretFile = path.join(sourceStorageRoot, "storage", "ulm", "credential", "cli-lab", "fixture-login.json")
+    const planFile = path.join(privateOutput, "plan.json")
+    const tamperedPlanFile = path.join(privateOutput, "tampered-plan.json")
+    const receiptFile = path.join(privateOutput, "receipt.json")
+    const cli = path.resolve(import.meta.dir, "../../../tools/ulmcode/migrate.ts")
+    async function invoke(args: string[]) {
+      const child = spawn(process.execPath, [cli, ...args], { cwd: path.resolve(import.meta.dir, "../../..") })
+      let stdout = ""
+      let stderr = ""
+      child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString()))
+      child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()))
+      return await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
+        child.once("error", reject)
+        child.once("exit", (code) => resolve({ code, stdout, stderr }))
+      })
+    }
+    try {
+      await mkdir(path.join(sourceOperationRoot, "credentials"), { recursive: true })
+      await mkdir(path.dirname(secretFile), { recursive: true, mode: 0o700 })
+      await writeFile(operationFile, operationBytes)
+      await writeFile(indexFile, indexBytes)
+      await writeFile(secretFile, secretBytes, { mode: 0o600 })
+
+      const planned = await invoke([
+        "plan",
+        "--source-operations", sourceOperationsRoot,
+        "--source-storage", sourceStorageRoot,
+        "--target-workspace", targetWorkspaceRoot,
+        "--target-credentials", targetCredentialsDir,
+        "--plan-file", planFile,
+      ])
+      expect(planned.code, planned.stderr).toBe(0)
+      const planText = await readFile(planFile, "utf8")
+      const plan = JSON.parse(planText) as MigrationPlan
+      const plannedOperation = plan.operations[0]
+      if (!plannedOperation) throw new Error("expected planned operation metadata")
+      const plannedCredential = plannedOperation.credentials[0]
+      if (!plannedCredential) throw new Error("expected planned credential metadata")
+      expect(plan.operationCount).toBe(1)
+      expect(plannedOperation.disposition).toBe("import")
+      expect(plannedCredential.status).toBe("available")
+      expect(planText).not.toContain(username)
+      expect(planText).not.toContain(note)
+      expect(planText).not.toContain(password)
+      expect((await stat(privateOutput)).mode & 0o777).toBe(0o700)
+      expect((await stat(planFile)).mode & 0o777).toBe(0o600)
+      await expect(readFile(path.join(targetWorkspaceRoot, ".ulmcode", "operations", "cli-lab", "operation.db"))).rejects.toThrow()
+
+      const unconfirmed = await invoke(["apply", "--plan-file", planFile, "--receipt-file", receiptFile])
+      expect(unconfirmed.code).not.toBe(0)
+      await expect(readFile(path.join(targetWorkspaceRoot, ".ulmcode", "operations", "cli-lab", "operation.db"))).rejects.toThrow()
+
+      await writeFile(tamperedPlanFile, JSON.stringify({ ...plan, operations: [] }) + "\n", { mode: 0o600 })
+      const tampered = await invoke(["apply", "--plan-file", tamperedPlanFile, "--receipt-file", receiptFile, "--confirm"])
+      expect(tampered.code).not.toBe(0)
+      await expect(readFile(path.join(targetWorkspaceRoot, ".ulmcode", "operations", "cli-lab", "operation.db"))).rejects.toThrow()
+
+      const applied = await invoke(["apply", "--plan-file", planFile, "--receipt-file", receiptFile, "--confirm"])
+      expect(applied.code, applied.stderr).toBe(0)
+      const receiptText = await readFile(receiptFile, "utf8")
+      const receipt = JSON.parse(receiptText)
+      expect(receipt.status).toBe("complete")
+      expect(receipt.importedOperations).toBe(1)
+      expect(receiptText).not.toContain(username)
+      expect(receiptText).not.toContain(note)
+      expect(receiptText).not.toContain(password)
+      expect((await stat(receiptFile)).mode & 0o777).toBe(0o600)
+      const credential = (await listCredentials(path.join(targetWorkspaceRoot, ".ulmcode", "operations", "cli-lab"), "cli-lab"))[0]
+      expect(credential?.status).toBe("needs_review")
+      if (!credential) throw new Error("expected migrated private credential handle")
+      expect((await Bun.file(path.join(targetWorkspaceRoot, ".ulmcode", "operations", "cli-lab", "credentials", "index.json")).text())).not.toContain(password)
+      await expect(materializeCredential({
+        operationRoot: path.join(targetWorkspaceRoot, ".ulmcode", "operations", "cli-lab"),
+        credentialsDir: targetCredentialsDir,
+        operationID: "cli-lab",
+        credentialID: credential.credentialID,
+        target: "fixture.invalid",
+        executionID: "migration-check",
+      })).rejects.toThrow("credential is not reviewed for this target")
+
+      const repeated = await invoke(["apply", "--plan-file", planFile, "--receipt-file", receiptFile, "--confirm"])
+      expect(repeated.code, repeated.stderr).toBe(0)
+      expect(await readFile(receiptFile, "utf8")).toBe(receiptText)
+      expect(await readFile(operationFile)).toEqual(operationBytes)
+      expect(await readFile(indexFile)).toEqual(indexBytes)
+      expect(await readFile(secretFile)).toEqual(secretBytes)
+      expect(await listCredentials(path.join(targetWorkspaceRoot, ".ulmcode", "operations", "cli-lab"), "cli-lab")).toHaveLength(1)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test("preflights canonical operation conflicts before copying any public artifacts", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "ulmcode-migration-conflict-"))
     const sourceOperationsRoot = path.join(root, "source", "operations")
@@ -439,6 +554,61 @@ describe("ULMCode profile", () => {
       await writeFile(matchingArtifact, existingArtifact)
       await expect(applyMigration(matchingPlan)).rejects.toThrow("migration destination contains different data")
       expect(await readFile(matchingArtifact)).toEqual(existingArtifact)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test("rejects private vault conflicts and symlinked destination roots before migration writes", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "ulmcode-migration-private-conflict-"))
+    const sourceOperationsRoot = path.join(root, "source", "operations")
+    const sourceStorageRoot = path.join(root, "source", "storage")
+    const targetWorkspaceRoot = path.join(root, "target", "workspace")
+    const targetOperationsRoot = path.join(targetWorkspaceRoot, ".ulmcode", "operations")
+    const targetCredentialsDir = path.join(root, "target", "private", "credentials")
+    const sourceOperationRoot = path.join(sourceOperationsRoot, "private-conflict")
+    const now = "2026-05-01T00:00:00.000Z"
+    const sourceIndex = Buffer.from(JSON.stringify({ operationID: "private-conflict", credentials: [{ credentialID: "router", username: "fixture-user", notes: "private fixture note" }] }) + "\n")
+    const sourceSecret = Buffer.from(JSON.stringify({ operationID: "private-conflict", credentialID: "router", username: "fixture-user", password: "fixture-password" }) + "\n")
+    const artifactPath = path.join(targetOperationsRoot, "private-conflict", "evidence", "new.txt")
+    const archiveManifest = path.join(targetCredentialsDir, "private-conflict", "quarantine", "legacy-operation", "manifest.json")
+    const existingPrivate = Buffer.from('{"password":"different synthetic private data"}\n')
+    try {
+      await mkdir(path.join(sourceOperationRoot, "credentials"), { recursive: true })
+      await mkdir(path.join(sourceOperationRoot, "evidence"), { recursive: true })
+      await mkdir(path.join(sourceStorageRoot, "storage", "ulm", "credential", "private-conflict"), { recursive: true })
+      await writeFile(path.join(sourceOperationRoot, "operation.json"), JSON.stringify({
+        operationID: "private-conflict",
+        objective: "Synthetic private vault conflict",
+        status: "running",
+        time: { created: now, updated: now },
+      }) + "\n")
+      await writeFile(path.join(sourceOperationRoot, "evidence", "new.txt"), "Synthetic evidence is not copied on conflict.\n")
+      await writeFile(path.join(sourceOperationRoot, "credentials", "index.json"), sourceIndex)
+      await writeFile(path.join(sourceStorageRoot, "storage", "ulm", "credential", "private-conflict", "router.json"), sourceSecret, { mode: 0o600 })
+      const input = { sourceOperationsRoot, sourceStorageRoot, targetOperationsRoot, targetWorkspaceRoot, targetCredentialsDir }
+      const plan = await planMigration(input)
+      const plannedCredential = plan.operations[0]?.credentials[0]
+      if (!plannedCredential) throw new Error("expected private credential migration plan")
+      const privateFile = path.join(targetCredentialsDir, "private-conflict", `${plannedCredential.handle}.json`)
+      await mkdir(path.dirname(privateFile), { recursive: true, mode: 0o700 })
+      await writeFile(privateFile, existingPrivate, { mode: 0o600 })
+
+      await expect(applyMigration(plan)).rejects.toThrow("migration destination contains different private credential data")
+      expect(await readFile(privateFile)).toEqual(existingPrivate)
+      await expect(readFile(artifactPath)).rejects.toThrow()
+      await expect(readFile(archiveManifest)).rejects.toThrow()
+
+      const aliasedTargetWorkspace = path.join(root, "workspace-alias", "imported")
+      await symlink(path.join(root, "target"), path.join(root, "workspace-alias"))
+      const aliasedInput = {
+        ...input,
+        targetWorkspaceRoot: aliasedTargetWorkspace,
+        targetOperationsRoot: path.join(aliasedTargetWorkspace, ".ulmcode", "operations"),
+        targetCredentialsDir: path.join(root, "other-private", "credentials"),
+      }
+      await expect(planMigration(aliasedInput)).rejects.toThrow("migration does not follow symbolic links")
+      await expect(readFile(path.join(root, "target", "imported", ".ulmcode", "operations", "private-conflict", "operation.db"))).rejects.toThrow()
     } finally {
       await rm(root, { recursive: true, force: true })
     }

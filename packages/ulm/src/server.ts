@@ -9,6 +9,14 @@ import { renderReport, lintReport } from "./report"
 import { createVault } from "./vault"
 import { listCredentials } from "./credentials"
 import { CompositeExecutionAdapter, SupervisedCommandAdapter } from "./command"
+import { recordFindingsInputSchema } from "./findings"
+
+export const artifactsInput = z.object({
+  artifacts: z.array(z.object({
+    path: z.string().min(1).max(1024),
+    mediaType: z.string().min(1).max(120).optional(),
+  }).strict()).min(1).max(100),
+}).strict()
 
 const phase = z.object({
   id: z.string().min(1).max(80),
@@ -201,6 +209,12 @@ export function startServer(input: {
         if (action === "normalize") {
           z.object({}).strict().parse(body)
           return json({ operation: await host.engine.normalizeEvidence(id) })
+        }
+        if (action === "artifacts") {
+          return json({ operation: await host.engine.recordArtifacts(id, artifactsInput.parse(body).artifacts) })
+        }
+        if (action === "findings") {
+          return json({ operation: await host.engine.recordFindings(id, recordFindingsInputSchema.parse(body)) })
         }
         if (action === "review-goal") {
           const parsed = z.object({ verdict: z.enum(["continue", "done", "needs_operator"]), reason: z.string().max(1000).optional() }).strict().parse(body)

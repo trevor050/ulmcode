@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test"
-import { mkdtemp, rm, readdir } from "node:fs/promises"
+import { mkdtemp, rm, readdir, mkdir, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { startServer } from "../src/server"
@@ -39,8 +39,27 @@ test("HTTP host drives approved local evidence collection and refuses premature 
   expect(first.decision.action).toBe("launch")
   const settled = await (await post(action("run"), {})).json() as { operation: OperationRecord }
   expect(settled.operation.plan?.phases[0]?.status).toBe("complete")
+  await mkdir(path.join(host.store.directory("http-flow"), "evidence"), { recursive: true })
+  await writeFile(path.join(host.store.directory("http-flow"), "evidence/operator-observation.json"), JSON.stringify({
+    observations: [{ summary: "Synthetic operator evidence registration through the public host." }],
+  }))
+  const registered = await (await post(action("artifacts"), { artifacts: [{ path: "evidence/operator-observation.json", mediaType: "application/json" }] })).json() as { operation: OperationRecord }
+  expect(registered.operation.artifacts.find((item) => item.path === "evidence/operator-observation.json")?.sha256).toHaveLength(64)
+  const retried = await (await post(action("artifacts"), { artifacts: [{ path: "evidence/operator-observation.json", mediaType: "application/json" }] })).json() as { operation: OperationRecord }
+  expect(retried.operation.revision).toBe(registered.operation.revision)
+  expect((await post(action("artifacts"), { artifacts: [{ path: "operation.db" }] })).status).toBe(400)
   const normalized = await (await post(action("normalize"), {})).json() as { operation: OperationRecord }
   expect(normalized.operation.evidence?.claims.length).toBeGreaterThan(0)
+  const finding = {
+    id: "synthetic-finding", title: "Explicit synthetic test finding", state: "candidate", severity: "informational",
+    description: "This observation belongs only to the synthetic local host test and is not a real vulnerability.",
+    affectedAssets: [lab.url.origin], evidenceIDs: [normalized.operation.evidence!.claims[0]!.id],
+  }
+  expect((await post(action("findings"), { findings: [finding] })).status).toBe(200)
+  expect((await post(action("findings"), { findings: [{ ...finding, state: "validated" }] })).status).toBe(400)
+  expect((await post(action("findings"), {
+    reviewedBy: "synthetic-reviewer", findings: [{ ...finding, state: "validated", validationRationale: "The cited synthetic observation was reproduced against the local lab." }],
+  })).status).toBe(200)
   const premature = await (await post(action("review-goal"), { verdict: "done" })).json() as { operation: OperationRecord }
   expect(premature.operation.goal.status).toBe("active")
   expect(premature.operation.goal.completion?.blockers.length).toBeGreaterThan(0)

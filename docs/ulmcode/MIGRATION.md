@@ -2,22 +2,22 @@
 
 The new foundation is official OpenCode `v2.1.3` at `bb25a2f4a3f3f04d7c344bec0c0574ea3510b3b1`. The legacy ULM reference is `6a3df0d8bd64b3f9ab0fac0bba524887e08773f5`. Keep the original checkout/history intact. Rebuild behavior against the new [architecture](ARCHITECTURE.md); do not copy the old runtime monolith or overwrite upstream session behavior.
 
-During rebuild, migration uses explicit synthetic source/target roots only. No launch should automatically discover/import a live home profile. Real user migration requires a separate operator-invoked dry run with a concrete manifest and supported private credential adapter.
+Migration is an explicit operator command. It never discovers a source under the home directory and never runs during launch. The current importer is verified against synthetic legacy trees; real profile/provider-auth migration remains unsupported and requires a separately reviewed adapter. Do not point the command at a live source until that support is explicitly accepted.
 
 ## Portable-state rules
 
-1. Inspect a selected source read-only. Inventory versioned operation files, raw evidence/attachments, plans, goals, findings, report source, credential dependencies and profile configuration. Record checksums and unsupported files without dumping potentially sensitive content.
-2. Produce a deterministic redacted plan with exact source/target, identity mapping, conflicts, unsupported records and missing-secret/re-auth requirements. Destination must be outside source. Dry-run changes neither source nor target.
-3. Stage each operation at the target. Convert through named version transforms; preserve raw evidence bytes/hashes; resolve internal refs; use canonical SQLite transaction/consistent backup semantics. Transfer private credentials only through the private adapter.
-4. Import historical running jobs as needing inspection. Old PIDs/session receipts are provenance, not proof of current execution on the new machine. Preserve incomplete goals and gates; do not mark an imported operation complete because historical reports exist.
-5. Validate hashes, IDs, references, private permissions, source preservation and target completeness before atomic operation-level commit. Keep an import checkpoint/result for safe retry after interruption.
-6. Reapplying identical source is a no-op. Changed source or conflicting target needs an explicit new plan, never silent overwrite. Rollback removes only target files owned by this import manifest; source remains intact.
+1. `plan` reads the explicitly selected source roots and does not write to source or destination. Its private plan records exact roots, operation/file hashes, allowlist/quarantine decisions, credential handles, and re-authentication requirements without raw credential fields.
+2. Review the saved plan and choose an explicit destination workspace and private vault outside the sources. Source/destination roots and private plan/receipt paths reject symlinked ancestors. `apply` requires `--confirm`, re-plans and compares the full saved plan, then preflights canonical operation identity, public files, credential indexes, and private-vault conflicts before writing.
+3. Apply writes are individually atomic and create-only. The importer writes the private byte-preserving quarantine archive, allowlisted public artifacts, blocked canonical operation records, and private credential state in sequence. This is resumable application, not an atomic operation-directory switch: an interruption may leave some of those destination writes present.
+4. Re-run `apply` with the same private plan and receipt path after an interruption. Existing matching writes are verified and reused; the run converges without overwriting different destination data. A changed source fails the plan check and requires a new dry run. A conflicting target stops before that operation's writes.
+5. Imported operations remain blocked with continuation disabled and no old work resumed. Imported credentials start as `needs_review`; missing or ambiguous secrets stay `reauth_required`. No imported credential is approved by migration.
+6. The tool does not implement rollback. Do not delete partial destination files by hand; retry the same plan to converge, or preserve the target for manual review if a conflict prevents retry. The source is never modified.
 
 | Legacy input | Treatment and rationale |
 | --- | --- |
-| Operation state, approved plans/charters, goals, raw evidence, findings and report source | Explicit schema conversion, original checksum provenance, no loss of portable work. |
-| Graph/lane proofs, queue records, execution/task metadata | Map to phases, durable launch intent/receipts, attempts, scope, work units and hashed proof. Retain useful history without a second engine. |
-| Session binding JSON | Import associations only; validate selected workspace/exact session identity. Missing historical session is unresolved, never replaced by newest chat. |
+| `operation.json`, supported `plans/operation-plan.json`, `goals/operation-goal.json` (and compatibility `goals/goal.json`), evidence references | Convert the supported subset into a canonical blocked operation; clear approval and disable continuation. Preserve every original operation file in the private hash-addressed archive. Unsupported or malformed records are quarantined with a reason. |
+| Evidence, findings, and `deliverables/final/` files | Copy only allowlisted paths that pass credential-pattern and known-value screening. Preserve bytes and hashes; quarantine other files. This does not imply that report manifests or historical completion gates are valid in the new operation. |
+| Graph/lane proofs, queue records, execution/task metadata, session binding JSON | Not converted by the current importer. Preserve privately in the source-byte archive with quarantine reasons; they are not imported as active jobs, session bindings, phases, or receipts. |
 | Credential metadata/private files | Map original `(operationID, credentialID)` before normalization. Preserve usernames/notes/rules/labels privately; public records use opaque handles and safe usage policy. |
 | Legacy slug collisions | Reject/quarantine ambiguous original identities; deterministic collision-safe mapping manifest. Never overwrite one operation credential with another. |
 | Missing/incompatible secret store | Preserve identity/metadata and report re-entry/re-authentication required. Copying an index alone is not successful credential migration. |
@@ -28,6 +28,26 @@ During rebuild, migration uses explicit synthetic source/target roots only. No l
 | Old test totals/accelerated burn-in | Historical/readiness only. Rerun current named acceptance; never imply wall-clock or UI proof. |
 
 Provider login and engagement credentials are separate. Provider tokens stay in upstream-supported auth storage; operation credentials stay in the private ULM vault. Validate portability and refresh using synthetic shaped data until the operator explicitly provides an authorized subscription login flow. Never use paid API keys or silent API fallback.
+
+## Operator-invoked synthetic migration command
+
+The command accepts only explicit roots and never looks up the current home profile. Its plan and receipt files must live in a directory with mode `0700`; files are created with mode `0600`. The saved plan includes exact roots, per-operation decisions, hashes, and opaque credential handles, but no raw credential fields. Review it as private data because names and paths may be sensitive.
+
+```sh
+bun tools/ulmcode/migrate.ts plan \
+  --source-operations /disposable/legacy/operations \
+  --source-storage /disposable/legacy/data \
+  --target-workspace /disposable/new-workspace \
+  --target-credentials /disposable/private/credentials \
+  --plan-file /disposable/private/migration/plan.json
+
+bun tools/ulmcode/migrate.ts apply \
+  --plan-file /disposable/private/migration/plan.json \
+  --receipt-file /disposable/private/migration/receipt.json \
+  --confirm
+```
+
+The first command is read-only. Inspect the plan's operation/file dispositions, quarantine reasons, and re-authentication count before applying. Apply prints only aggregate counts and a plan ID; its private receipt contains operation IDs and quarantine reasons. If interrupted, rerun the same apply command with the same plan and receipt. Existing matching writes are verified and reused; the receipt is written only after completion. A partial destination may be visible until retry finishes. Rollback is not implemented. This command is currently for synthetic validation, not an accepted live-profile migration path.
 
 One profile resolver supplies config, XDG data/state/cache, private directory and DB identity to CLI/server/desktop. New isolated paths may differ from legacy defaults; record the mapping instead of changing live directories. Do not copy inherited auth override/API-key/base-URL values into launch metadata. Verify actual upstream configuration suppression instead of relying solely on historical environment variable names.
 
@@ -48,7 +68,7 @@ Use disposable roots, real local fixture processes and loopback servers only. Th
 | A9 | Reviewer NO, YES with missing/stale artifacts, malformed/failed review, then valid completion. | Useful continuation, strict gates, visible blocker/backoff/no-tool cap; planning/child exempt; user pause/stop wins. |
 | A10 | Finish finite graph before synthetic target window. | Gap audit/bounded work or justified wait; no empty runtime padding; finalization preserved; accelerated run labeled readiness. |
 | A11 | Explicit synthetic vault Submit to agent, reviewed target-bound handle consumption. | Missing/revoked/wrong-operation/wrong-target blocked; secret/account sentinel absent from artifacts, logs, command text and UI. |
-| A12 | Synthetic dry-run/apply/retry/rollback and collision cases. | Source byte/hashes preserved; consistent target after interruption; ambiguous slugs, corrupt/unknown files, escaped symlink, missing secret and conflicting target reported. |
+| A12 | Synthetic dry-run/apply/SIGKILL/retry and collision cases. | Source byte/hashes preserved; same-plan retry converges after partial destination writes; ambiguous slugs, corrupt/unknown files, escaped symlink, missing secret and conflicting target reported. Rollback is unsupported. |
 | A13 | Real report HTML/PDF, summary, strict lint/audit/goal. | One shared current manifest/source digest, actual PDF render, usable pages; stale source/summary, wrong operation, bad JSON/PDF, missing citations or template files block. |
 | A14 | Official app create/select/approve/progress/stop/resume/report and actual desktop restart. | Real state and second submissions; chat rows open sessions; folders open bound operation/final root; screenshots and Computer Use evidence. DOM/CDP alone is secondary evidence when compositor access is blocked. |
 | A15 | CLI/package/server/desktop profile and managed update isolation. | Same intended paths/DB; unrelated project/general plugins/agents/MCPs absent; unknown user files retained; missing auth never falls back to paid API. |
@@ -65,7 +85,7 @@ The native approval leaf also preserves plain permission-decline defects in a sy
 
 Further independent rechecks pass: a bound child cannot invoke `operation_run` (typed rejection, zero executions); a `needs_validation` finding blocks actual report completion; duplicate report-ready IDs reject the report request. These use actual native leaves with upstream-shaped synthetic Context or actual HTTP/Chromium flows.
 
-Independent migration rechecks now pass the genuine legacy `goals/operation-goal.json` path (48-hour duration preserved as 172,800,000ms, operation blocked), conflicting canonical target rejection before public evidence/archive writes, and generic password/Authorization data without a vault index being excluded publicly while exact source bytes are preserved privately. The latter test uses ordinary credential syntax rather than special fixture prefixes. These focused checks do not establish atomicity for every multi-operation interruption or private-vault conflict.
+Independent migration rechecks pass the genuine legacy `goals/operation-goal.json` path (48-hour duration preserved as 172,800,000ms, operation blocked), conflicting canonical target rejection before public evidence/archive writes, and generic password/Authorization data without a vault index being excluded publicly while exact source bytes are preserved privately. The external SIGKILL harness interrupted after partial private archive writes, verified source hashes unchanged, then resumed with the same plan in a new process and verified all imported evidence and idempotence. This establishes retry convergence for that tested file boundary; it does not establish all-or-nothing atomicity or rollback. The credential-shaped fixture uses ordinary syntax, not marker-specific detection.
 
 Initial source review also identified binding uniqueness, report manifest/digest compatibility and active legacy database conversion gaps; owners have been changing those surfaces. Do not retain an old failure allegation or declare it accepted without its exact new regression evidence. General/stakeholder report parity remains larger than the current local-lab bundle.
 

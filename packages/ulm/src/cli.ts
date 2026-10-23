@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 import path from "node:path"
 import { parseArgs } from "node:util"
-import { createHost, createInput, localLabPlan, planInput, renderFinal, startServer } from "./server"
+import { artifactsInput, createHost, createInput, localLabPlan, planInput, renderFinal, startServer } from "./server"
+import { recordFindingsInputSchema } from "./findings"
 import { startFakeLab } from "./fake-lab"
 import { resolveProfilePaths } from "./profile"
 import { OperationScheduler } from "./scheduler"
@@ -46,7 +47,7 @@ if (!command || parsed.values.help) {
 Usage: bun packages/ulm/src/cli.ts <command> [operation-id] [options]
 
 Commands: serve, fake-lab, create, list, status, plan, approve, run, daemon, interrupt,
-          recover, normalize, review-goal, report, events
+          recover, artifacts, normalize, findings, review-goal, report, events
 
 Options:
   --workspace <path>   Explicit operation workspace (default: this source worktree)
@@ -153,6 +154,14 @@ if (command === "serve" || command === "fake-lab") {
       else if (command === "interrupt") print({ operation: await host.engine.interrupt(id, parsed.values.reason ?? "Operator interrupted") })
       else if (command === "recover") print({ recovery: await host.engine.recover(id) })
       else if (command === "normalize") print({ operation: await host.engine.normalizeEvidence(id) })
+      else if (command === "artifacts") {
+        if (!parsed.values.input) throw new Error("artifacts requires --input with operation-relative artifact paths")
+        print({ operation: await host.engine.recordArtifacts(id, artifactsInput.parse(await Bun.file(parsed.values.input).json()).artifacts) })
+      }
+      else if (command === "findings") {
+        if (!parsed.values.input) throw new Error("findings requires --input with the canonical finding collection and review metadata")
+        print({ operation: await host.engine.recordFindings(id, recordFindingsInputSchema.parse(await Bun.file(parsed.values.input).json())) })
+      }
       else if (command === "report") print(await renderFinal(host, id))
       else if (command === "review-goal") {
         const verdict = parsed.values.verdict

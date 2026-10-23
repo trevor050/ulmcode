@@ -11,6 +11,7 @@
     "./engine": "./src/engine.ts",
     "./evidence": "./src/evidence.ts",
     "./goal": "./src/goal.ts",
+    "./findings": "./src/findings.ts",
     "./lab": "./src/lab.ts",
     "./runtime": "./src/runtime.ts",
     "./report": "./src/report.ts",

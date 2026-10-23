@@ -11,6 +11,7 @@ import { LoopbackLabAdapter } from "@ulmcode/operations/lab"
 import { CompositeExecutionAdapter, SupervisedCommandAdapter } from "@ulmcode/operations/command"
 import { lintReport, renderReport } from "@ulmcode/operations/report"
 import { listCredentials } from "@ulmcode/operations/credentials"
+import type { RecordFindingsInput } from "@ulmcode/operations/findings"
 import { Effect, Schema, Stream } from "effect"
 
 const PlanInput = Schema.Struct({
@@ -76,6 +77,28 @@ const CredentialInput = Schema.Struct({
   operationID: Schema.String,
   action: Schema.Literals(["open_vault", "list", "get", "review_status"]),
   credentialID: Schema.String.pipe(Schema.optional),
+})
+const ArtifactRegistrationInput = Schema.Struct({
+  operationID: Schema.String,
+  artifacts: Schema.Array(Schema.Struct({ path: Schema.String, mediaType: Schema.String.pipe(Schema.optional) })).check(Schema.isMinLength(1), Schema.isMaxLength(500)),
+})
+// This is the model-facing wire shape only. `OperationEngine.recordFindings` validates every semantic rule.
+const FindingInput = Schema.Struct({
+  id: Schema.String,
+  title: Schema.String,
+  state: Schema.Literals(["candidate", "validated", "report_ready", "rejected"]),
+  severity: Schema.Literals(["informational", "low", "medium", "high", "critical"]),
+  description: Schema.String,
+  impact: Schema.String.pipe(Schema.optional),
+  remediation: Schema.String.pipe(Schema.optional),
+  affectedAssets: Schema.Array(Schema.String),
+  evidenceIDs: Schema.Array(Schema.String),
+  validationRationale: Schema.String.pipe(Schema.optional),
+})
+const FindingsInput = Schema.Struct({
+  operationID: Schema.String,
+  findings: Schema.Array(FindingInput).check(Schema.isMaxLength(500)),
+  reviewedBy: Schema.String.pipe(Schema.optional),
 })
 
 const NO_TOOL_LIMIT = "No-tool continuation limit reached; operator input is required"
@@ -336,6 +359,47 @@ export const RuntimePlugin = define({
           if (!record || !(yield* isBoundOwner(record, invocation.sessionID))) return yield* new ToolFailure({ message: "goal review requires a bound top-level owner session" })
           const result = yield* Effect.tryPromise({ try: () => engine.reviewGoal(record.id, input.verdict, { reason: input.reason, toolUsed: true, idempotencyKey: `runtime.manual-goal:${invocation.messageID}:${invocation.id}` }), catch: (error) => new ToolFailure({ message: message(error), error }) })
           return { output: result, content: JSON.stringify(result, null, 2) }
+        }),
+      })
+      editor.add({
+        name: "operation_artifacts",
+        options: { codemode: false },
+        description: "Register files already written inside this operation root by relative path. The engine verifies containment and hashes; this tool never accepts file contents or external paths.",
+        input: ArtifactRegistrationInput,
+        output: Schema.Unknown,
+        execute: (input, invocation) => Effect.gen(function* () {
+          const record = yield* Effect.tryPromise({ try: () => store.get(input.operationID), catch: (error) => new ToolFailure({ message: message(error), error }) })
+          if (!record || !(yield* isBoundOwner(record, invocation.sessionID))) return yield* new ToolFailure({ message: "artifact registration requires a bound top-level owner session" })
+          const updated = yield* Effect.tryPromise({
+            try: () => engine.recordArtifacts(record.id, input.artifacts.map((artifact) => ({ path: artifact.path, mediaType: artifact.mediaType }))),
+            catch: (error) => new ToolFailure({ message: message(error), error }),
+          })
+          return { output: updated.artifacts, content: JSON.stringify(updated.artifacts, null, 2) }
+        }),
+      })
+      editor.add({
+        name: "operation_findings",
+        options: { codemode: false },
+        description: "Record or replace the canonical operation finding collection. Candidates may have no evidence links; validated, report-ready, and rejected states are accepted only when the domain engine verifies reviewer, rationale, and known normalized evidence requirements.",
+        input: FindingsInput,
+        output: Schema.Unknown,
+        execute: (input, invocation) => Effect.gen(function* () {
+          const record = yield* Effect.tryPromise({ try: () => store.get(input.operationID), catch: (error) => new ToolFailure({ message: message(error), error }) })
+          if (!record || !(yield* isBoundOwner(record, invocation.sessionID))) return yield* new ToolFailure({ message: "finding registration requires a bound top-level owner session" })
+          const payload: RecordFindingsInput = {
+            findings: input.findings.map((finding) => ({
+              ...finding,
+              affectedAssets: [...finding.affectedAssets],
+              evidenceIDs: [...finding.evidenceIDs],
+            })),
+            reviewedBy: input.reviewedBy,
+          }
+          const updated = yield* Effect.tryPromise({
+            try: () => engine.recordFindings(record.id, payload),
+            catch: (error) => new ToolFailure({ message: message(error), error }),
+          })
+          const summary = { operationID: updated.id, revision: updated.revision, findingCount: input.findings.length, reviewedBy: input.reviewedBy }
+          return { output: summary, content: JSON.stringify(summary) }
         }),
       })
       editor.add({
