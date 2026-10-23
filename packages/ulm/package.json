@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@ulmcode/operations",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/operation.ts",
+    "./operation": "./src/operation.ts",
+    "./store": "./src/store.ts",
+    "./engine": "./src/engine.ts",
+    "./evidence": "./src/evidence.ts",
+    "./goal": "./src/goal.ts",
+    "./lab": "./src/lab.ts",
+    "./runtime": "./src/runtime.ts",
+    "./report": "./src/report.ts",
+    "./profile": "./src/profile.ts",
+    "./credentials": "./src/credentials.ts",
+    "./migration": "./src/migration.ts",
+    "./server": "./src/runtime.ts",
+    "./http": "./src/server.ts",
+    "./cli": "./src/cli.ts",
+    "./vault": "./src/vault.ts",
+    "./command": "./src/command.ts",
+    "./scheduler": "./src/scheduler.ts"
+  },
+  "scripts": {
+    "test": "bun test --timeout 30000",
+    "typecheck": "tsc --noEmit --project tsconfig.json && tsc --noEmit --project tsconfig.domain.json"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  },
+  "dependencies": {
+    "@opencode/ai": "workspace:*",
+    "@opencode/plugin": "workspace:*",
+    "@opencode/schema": "workspace:*",
+    "effect": "catalog:",
+    "zod": "catalog:"
+  }
+}

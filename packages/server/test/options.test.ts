@@ -34,3 +34,9 @@ test("accepts an optional CORS allowlist", () => {
   ])
   expect(Option.isNone(decode({ cors: "http://192.168.1.10:3001" }))).toBe(true)
 })
+
+test("accepts explicit global config isolation while preserving an explicit config directory", () => {
+  expect(
+    Option.getOrThrow(decode({ config: { directory: "/isolated/config", project: false, global: false } })).config,
+  ).toEqual({ directory: "/isolated/config", project: false, global: false })
+})

@@ -28,6 +28,7 @@ import { useCommand } from "@/shell/commands/command"
 import { SessionAncestorTrail, SessionProjectMenu, SessionTitleHeader } from "../session-identity-header"
 import { SessionHeaderSpacer } from "@/session/header/session-header"
 import { SessionRunningMenu } from "@/session/header/session-running-menu"
+import { OperationSessionContext } from "@/operations/session-context"
 
 type BlockingTask = { type: "shell" | "subagent"; partID: string; id?: string; label?: string }
 
@@ -592,6 +593,7 @@ function MessageTimelineView(
                 {(_id) => (
                   <div class="shrink-0 flex items-center gap-2">
                     {props.search}
+                    <OperationSessionContext sessionID={sessionID() ?? ""} />
                     <ExtensionSlot
                       at="session.header"
                       input={{

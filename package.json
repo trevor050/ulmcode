@@ -33,7 +33,13 @@
     "prepare": "husky",
     "random": "echo 'Random script'",
     "sso": "aws sso login --sso-session=opencode --no-browser",
-    "test": "echo 'do not run tests from root' && exit 1"
+    "test": "echo 'do not run tests from root' && exit 1",
+    "ulm": "bun packages/ulm/src/cli.ts",
+    "ulm:serve": "bun packages/ulm/src/cli.ts serve",
+    "ulm:lab": "bun packages/ulm/src/cli.ts fake-lab",
+    "ulm:chat": "bun tools/ulmcode/launch.ts",
+    "ulm:app": "bun --cwd packages/app dev --host localhost --port 4444",
+    "ulm:daemon": "bun packages/ulm/src/cli.ts daemon"
   },
   "workspaces": {
     "packages": [

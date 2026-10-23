@@ -1,0 +1,22 @@
+{
+  "$schema": "https://ulmcode.dev/schemas/command-catalog-v1.json",
+  "schemaVersion": 1,
+  "profiles": [
+    {
+      "profileID": "local-http-observe",
+      "safety": "non_destructive",
+      "scopes": ["synthetic_lab"],
+      "executable": "bun",
+      "args": [
+        "-e",
+        "const u=new URL('/api/lab',process.argv[1]); const r=await fetch(u,{redirect:'error',signal:AbortSignal.timeout(4000)}); const body=await r.json(); process.stdout.write(JSON.stringify(body)); if(!r.ok) process.exitCode=1",
+        "{{target}}"
+      ],
+      "variables": { "target": "target" },
+      "targetPolicy": "loopback",
+      "timeoutMs": 10000,
+      "maxOutputBytes": 20000,
+      "restart": "inspect_first"
+    }
+  ]
+}

@@ -19,6 +19,8 @@ const DraftRoute = lazy(() => import("@/new-session/route").then((module) => ({ 
 
 const SettingsScreen = lazy(() => import("@/settings/shell").then((module) => ({ default: module.SettingsScreen })))
 
+const OperationsScreen = lazy(() => import("@/operations/route").then((module) => ({ default: module.OperationsRoute })))
+
 const ConnectServerScreen = lazy(() =>
   import("@/servers/connect/screen").then((module) => ({ default: module.ConnectServerScreen })),
 )
@@ -45,6 +47,7 @@ export function AppRoutes() {
     <Route component={AppLayout}>
       <Route path="/" component={Home} />
       <Route path="/settings" component={SettingsScreen} />
+      <Route path="/operations/:operationID?" component={OperationsScreen} />
       <Route
         path="/server/:serverKey/session/:id"
         component={() => (

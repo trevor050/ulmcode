@@ -42,6 +42,7 @@ export type TabRegions = {
 export type LayoutRoute =
   | { type: "home" }
   | { type: "settings" }
+  | { type: "operations"; operationID?: string }
   | { type: "connect" }
   | { type: "draft"; draftID: string }
   | { type: "session"; sessionId: string; server: ServerConnection.Key }
@@ -52,6 +53,8 @@ export const currentRoute = (pathname: string, search: string): LayoutRoute => {
   if (parts.length === 0) return { type: "home" }
 
   if (parts[0] === "settings") return { type: "settings" }
+
+  if (parts[0] === "operations") return { type: "operations", operationID: parts[1] }
 
   if (parts[0] === "connect") return { type: "connect" }
 

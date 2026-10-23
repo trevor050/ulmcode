@@ -28,6 +28,7 @@ import { showToast } from "@/shell/notifications/toast"
 import { sessionTitle } from "./title"
 import { SessionWorkingIndicator } from "./header/session-working-indicator"
 import "./session-identity-header.css"
+import { OperationSessionContext } from "@/operations/session-context"
 
 export function SessionTitleHeader(props: ParentProps) {
   return (
@@ -385,6 +386,7 @@ export function SessionIdentityHeader(props: ParentProps<{ sessionID: string; se
           <div class="flex min-w-0 flex-1 items-center gap-1">
             <div class="flex min-w-0 w-full flex-1 items-center gap-0.5">
               <SessionProjectMenu project={project()} directory={directory()} workspace={workspaceSession()} />
+              <OperationSessionContext sessionID={props.sessionID} />
               <Show when={parentID()}>
                 {(id) => (
                   <SessionAncestorTrail
